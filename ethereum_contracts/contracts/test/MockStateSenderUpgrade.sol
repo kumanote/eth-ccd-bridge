@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.16;
 
-import {StateSender} from "../StateSender/StateSender.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IStateSender} from "../StateSender/IStateSender.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 contract MockStateSenderUpgrade is Initializable, AccessControl {
