@@ -24,7 +24,7 @@ export declare namespace IRootChainManager {
     ccdSubIndex: BigNumberish;
     amount: BigNumberish;
     userWallet: string;
-    ccdTxHash: string;
+    ccdTxHash: BytesLike;
     ccdEventIndex: BigNumberish;
     tokenId: BigNumberish;
   };
@@ -57,7 +57,7 @@ export interface IRootChainManagerInterface extends utils.Interface {
     "mapToken(address,uint64,uint64,bytes32)": FunctionFragment;
     "registerVault(bytes32,address)": FunctionFragment;
     "remapToken(address,uint64,uint64,bytes32)": FunctionFragment;
-    "withdraw((uint64,uint64,uint256,address,string,uint64,uint64),bytes32[])": FunctionFragment;
+    "withdraw((uint64,uint64,uint256,address,bytes32,uint64,uint64),bytes32[])": FunctionFragment;
   };
 
   encodeFunctionData(

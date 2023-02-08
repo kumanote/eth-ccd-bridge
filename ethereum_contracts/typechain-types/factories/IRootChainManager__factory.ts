@@ -178,9 +178,9 @@ const _abi = [
             type: "address",
           },
           {
-            internalType: "string",
+            internalType: "bytes32",
             name: "ccdTxHash",
-            type: "string",
+            type: "bytes32",
           },
           {
             internalType: "uint64",

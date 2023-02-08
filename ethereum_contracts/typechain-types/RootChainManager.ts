@@ -24,7 +24,7 @@ export declare namespace IRootChainManager {
     ccdSubIndex: BigNumberish;
     amount: BigNumberish;
     userWallet: string;
-    ccdTxHash: string;
+    ccdTxHash: BytesLike;
     ccdEventIndex: BigNumberish;
     tokenId: BigNumberish;
   };
@@ -87,7 +87,7 @@ export interface RootChainManagerInterface extends utils.Interface {
     "tokenToType(address)": FunctionFragment;
     "treasurer()": FunctionFragment;
     "typeToVault(bytes32)": FunctionFragment;
-    "withdraw((uint64,uint64,uint256,address,string,uint64,uint64),bytes32[])": FunctionFragment;
+    "withdraw((uint64,uint64,uint256,address,bytes32,uint64,uint64),bytes32[])": FunctionFragment;
     "withdrawFee()": FunctionFragment;
   };
 

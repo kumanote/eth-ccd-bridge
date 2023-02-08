@@ -38,7 +38,7 @@ interface IRootChainManager {
         uint64 ccdSubIndex;
         uint256 amount;
         address payable userWallet;
-        string ccdTxHash;
+        bytes32 ccdTxHash;
         uint64 ccdEventIndex;
         uint64 tokenId;
     }

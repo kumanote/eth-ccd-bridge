@@ -24,7 +24,7 @@ const ccdSubIndex = mockChildSubIndex
 const ccdIndexEth = mockETHChildIndex
 const ccdSubIndexEth = mockETHChildSubIndex
 function encode(withdrawTx: IRootChainManager.WithdrawParamsStruct): string {
-  return ethers.utils.keccak256(abi.encode(['uint64', 'uint64', 'uint64', 'address', 'string', 'uint64', 'uint64'],
+  return ethers.utils.keccak256(abi.encode(['uint64', 'uint64', 'uint64', 'address', 'bytes32', 'uint64', 'uint64'],
     [
       withdrawTx.ccdIndex,
       withdrawTx.ccdSubIndex,
@@ -124,7 +124,10 @@ describe('RootChainManager', () => {
         ccdSubIndex,
         amount: depositAmount,
         userWallet: depositReceiver.address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 1,
         tokenId: 0
       },
@@ -133,7 +136,10 @@ describe('RootChainManager', () => {
         ccdSubIndex: ccdSubIndexEth,
         amount: depositAmount3,
         userWallet: depositReceiverEth.address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 1,
         tokenId: 0
       }, {
@@ -141,7 +147,10 @@ describe('RootChainManager', () => {
         ccdSubIndex,
         amount: depositAmount,
         userWallet: accounts[2].address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 1,
         tokenId: 0
       }, {
@@ -149,7 +158,10 @@ describe('RootChainManager', () => {
         ccdSubIndex,
         amount: depositAmount,
         userWallet: accounts[2].address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 2,
         tokenId: 0
       }, {
@@ -157,14 +169,16 @@ describe('RootChainManager', () => {
         ccdSubIndex,
         amount: depositAmount,
         userWallet: accounts[2].address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 3,
         tokenId: 0
       }]
       const hashes = withdrawTxs.map(encode)
       withdrawTxHash = hashes[0]
       merkletree = new MerkleTree(hashes, ethers.utils.keccak256, { sortPairs: true })
-
       const tx = await contracts.rootChainManager.setMerkleRoot(merkletree.getHexRoot())
       should.exist(tx)
       const receipt = await tx.wait()
@@ -183,7 +197,10 @@ describe('RootChainManager', () => {
         ccdSubIndex,
         amount: depositAmount,
         userWallet: depositReceiver.address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 1,
         tokenId: 0
       }
@@ -197,7 +214,10 @@ describe('RootChainManager', () => {
         ccdSubIndex,
         amount: depositAmount.mul(10),
         userWallet: depositReceiver.address,
-        ccdTxHash: 'b06d77ec9c2253ffd6a5f1969c66f039ec2033c281ab14993efa34662cb7bf3c',
+        ccdTxHash: [
+          55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+        ],
         ccdEventIndex: 1,
         tokenId: 0
       }
@@ -301,7 +321,7 @@ describe('RootChainManager', () => {
           {
             value: withdrawFee.div(2)
           }),
-        'Not enough ether for withdraw fee')
+          'Not enough ether for withdraw fee')
       })
       it('transaction should work', async () => {
         await contracts.rootChainManager.withdraw(
