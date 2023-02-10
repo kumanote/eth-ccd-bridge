@@ -71,7 +71,7 @@ contract StateSender is Initializable, IStateSender, AccessControl {
         uint64 ccdSubIndex,
         uint256 amount,
         address userWallet,
-        string calldata ccdTxHash,
+        bytes32 ccdTxHash,
         uint64 ccdEventIndex,
         uint64 tokenId
     ) external onlyRole(EMITTER_ROLE) {

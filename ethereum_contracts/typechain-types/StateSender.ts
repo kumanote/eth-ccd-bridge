@@ -27,7 +27,7 @@ export interface StateSenderInterface extends utils.Interface {
     "emitTokenMapAdd(address,uint64,uint64,bytes32)": FunctionFragment;
     "emitTokenMapRemove(address,uint64,uint64,bytes32)": FunctionFragment;
     "emitVaultRegistered(bytes32,address)": FunctionFragment;
-    "emitWithdraw(uint64,uint64,uint256,address,string,uint64,uint64)": FunctionFragment;
+    "emitWithdraw(uint64,uint64,uint256,address,bytes32,uint64,uint64)": FunctionFragment;
     "getRoleAdmin(bytes32)": FunctionFragment;
     "grantRole(bytes32,address)": FunctionFragment;
     "hasRole(bytes32,address)": FunctionFragment;
@@ -72,7 +72,7 @@ export interface StateSenderInterface extends utils.Interface {
       BigNumberish,
       BigNumberish,
       string,
-      string,
+      BytesLike,
       BigNumberish,
       BigNumberish
     ]
@@ -161,7 +161,7 @@ export interface StateSenderInterface extends utils.Interface {
     "TokenMapAdded(uint256,address,uint64,uint64,bytes32)": EventFragment;
     "TokenMapRemoved(uint256,address,uint64,uint64,bytes32)": EventFragment;
     "VaultRegistered(uint256,bytes32,address)": EventFragment;
-    "WithdrawEvent(uint256,uint64,uint64,uint256,address,string,uint64,uint64)": EventFragment;
+    "WithdrawEvent(uint256,uint64,uint64,uint256,address,bytes32,uint64,uint64)": EventFragment;
   };
 
   getEvent(nameOrSignatureOrTopic: "LockedToken"): EventFragment;
@@ -349,7 +349,7 @@ export interface StateSender extends BaseContract {
       ccdSubIndex: BigNumberish,
       amount: BigNumberish,
       userWallet: string,
-      ccdTxHash: string,
+      ccdTxHash: BytesLike,
       ccdEventIndex: BigNumberish,
       tokenId: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
@@ -437,7 +437,7 @@ export interface StateSender extends BaseContract {
     ccdSubIndex: BigNumberish,
     amount: BigNumberish,
     userWallet: string,
-    ccdTxHash: string,
+    ccdTxHash: BytesLike,
     ccdEventIndex: BigNumberish,
     tokenId: BigNumberish,
     overrides?: Overrides & { from?: string | Promise<string> }
@@ -525,7 +525,7 @@ export interface StateSender extends BaseContract {
       ccdSubIndex: BigNumberish,
       amount: BigNumberish,
       userWallet: string,
-      ccdTxHash: string,
+      ccdTxHash: BytesLike,
       ccdEventIndex: BigNumberish,
       tokenId: BigNumberish,
       overrides?: CallOverrides
@@ -663,7 +663,7 @@ export interface StateSender extends BaseContract {
       vaultAddress?: string | null
     ): VaultRegisteredEventFilter;
 
-    "WithdrawEvent(uint256,uint64,uint64,uint256,address,string,uint64,uint64)"(
+    "WithdrawEvent(uint256,uint64,uint64,uint256,address,bytes32,uint64,uint64)"(
       id?: null,
       ccdIndex?: BigNumberish | null,
       ccdSubIndex?: BigNumberish | null,
@@ -731,7 +731,7 @@ export interface StateSender extends BaseContract {
       ccdSubIndex: BigNumberish,
       amount: BigNumberish,
       userWallet: string,
-      ccdTxHash: string,
+      ccdTxHash: BytesLike,
       ccdEventIndex: BigNumberish,
       tokenId: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
@@ -825,7 +825,7 @@ export interface StateSender extends BaseContract {
       ccdSubIndex: BigNumberish,
       amount: BigNumberish,
       userWallet: string,
-      ccdTxHash: string,
+      ccdTxHash: BytesLike,
       ccdEventIndex: BigNumberish,
       tokenId: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }

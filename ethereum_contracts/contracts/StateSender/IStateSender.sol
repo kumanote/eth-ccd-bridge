@@ -37,7 +37,7 @@ interface IStateSender {
         uint64 indexed ccdSubIndex,
         uint256 amount,
         address indexed userWallet,
-        string ccdTxHash,
+        bytes32 ccdTxHash,
         uint64 ccdEventIndex,
         uint64 tokenId
     );
@@ -73,7 +73,7 @@ interface IStateSender {
         uint64 ccdSubIndex,
         uint256 amount,
         address userWallet,
-        string calldata ccdTxHash,
+        bytes32 ccdTxHash,
         uint64 ccdEventIndex,
         uint64 tokenId
     ) external;
