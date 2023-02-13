@@ -1,0 +1,636 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Concordium Bridge API",
+    "description": "in progress",
+    "version": "v0.1.0"
+  },
+  "paths": {
+    "/api/v1/deposit/{tx_hash}": {
+      "get": {
+        "operationId": "watch_deposit_tx",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tx_hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchTxResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/ethereum/proof/{tx_hash}/{event_id}": {
+      "get": {
+        "operationId": "eth_merkle_proof",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "style": "simple"
+          },
+          {
+            "in": "path",
+            "name": "tx_hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EthMerkleProofResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/tokens": {
+      "get": {
+        "operationId": "list_tokens",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTokensResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/wallet/{wallet}": {
+      "get": {
+        "operationId": "wallet_txs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wallet",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletTxResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/withdraw/{tx_hash}": {
+      "get": {
+        "operationId": "watch_withdraw_tx",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tx_hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchTxResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "docs",
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "*/*": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/redoc": {
+      "get": {
+        "operationId": "redoc",
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "*/*": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/token/metadata/{symbol}": {
+      "get": {
+        "operationId": "token_metadata",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenMetadataResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "Error": {
+        "description": "Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "CcdToken": {
+        "type": "object",
+        "properties": {
+          "contract_index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "contract_subindex": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "decimals": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_index",
+          "contract_subindex",
+          "decimals",
+          "name"
+        ]
+      },
+      "Error": {
+        "description": "Error information from a response.",
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "request_id"
+        ]
+      },
+      "EthMerkleProofResponse": {
+        "type": "object",
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/WithdrawParams"
+          },
+          "proof": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "params",
+          "proof"
+        ]
+      },
+      "EthToken": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "decimals",
+          "name"
+        ]
+      },
+      "ListTokensResponse": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TokenMapItem"
+            }
+          }
+        },
+        "required": [
+          "tokens"
+        ]
+      },
+      "TokenMapItem": {
+        "type": "object",
+        "properties": {
+          "ccd_token": {
+            "$ref": "#/components/schemas/CcdToken"
+          },
+          "eth_token": {
+            "$ref": "#/components/schemas/EthToken"
+          }
+        },
+        "required": [
+          "ccd_token",
+          "eth_token"
+        ]
+      },
+      "TokenMetadataLocalizationResponse": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hash",
+          "url"
+        ]
+      },
+      "TokenMetadataResponse": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0
+          },
+          "description": {
+            "type": "string"
+          },
+          "display": {
+            "type": "string"
+          },
+          "localization": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TokenMetadataLocalizationResponse"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact",
+          "decimals",
+          "description",
+          "display",
+          "localization",
+          "name",
+          "symbol",
+          "thumbnail"
+        ]
+      },
+      "WalletDepositTx": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "ccd_event_id": {
+            "nullable": true,
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "ccd_token": {
+            "$ref": "#/components/schemas/CcdToken"
+          },
+          "ccd_tx_hash": {
+            "nullable": true,
+            "type": "string"
+          },
+          "eth_event_id": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "eth_token": {
+            "$ref": "#/components/schemas/EthToken"
+          },
+          "eth_tx_hash": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "amount",
+          "ccd_token",
+          "eth_event_id",
+          "eth_token",
+          "eth_tx_hash",
+          "status",
+          "timestamp"
+        ]
+      },
+      "WalletTx": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "Deposit": {
+                "$ref": "#/components/schemas/WalletDepositTx"
+              }
+            },
+            "required": [
+              "Deposit"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "Withdraw": {
+                "$ref": "#/components/schemas/WalletWithdrawTx"
+              }
+            },
+            "required": [
+              "Withdraw"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "WalletTxResponse": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletTx"
+            }
+          }
+        },
+        "required": [
+          "count",
+          "transactions"
+        ]
+      },
+      "WalletWithdrawTx": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "ccd_event_id": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "ccd_token": {
+            "$ref": "#/components/schemas/CcdToken"
+          },
+          "ccd_tx_hash": {
+            "type": "string"
+          },
+          "eth_event_id": {
+            "nullable": true,
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "eth_token": {
+            "$ref": "#/components/schemas/EthToken"
+          },
+          "eth_tx_hash": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "amount",
+          "ccd_event_id",
+          "ccd_token",
+          "ccd_tx_hash",
+          "eth_token",
+          "status",
+          "timestamp"
+        ]
+      },
+      "WatchTxResponse": {
+        "type": "object",
+        "properties": {
+          "concordium_tx_hash": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "WithdrawParams": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "ccd_event_index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "ccd_index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "ccd_sub_index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "ccd_tx_hash": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "user_wallet": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "ccd_event_index",
+          "ccd_index",
+          "ccd_sub_index",
+          "ccd_tx_hash",
+          "token_id",
+          "user_wallet"
+        ]
+      }
+    }
+  }
+}
