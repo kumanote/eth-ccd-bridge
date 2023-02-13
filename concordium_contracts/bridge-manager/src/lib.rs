@@ -111,6 +111,136 @@ struct State<S> {
     processed_operations: StateSet<u64, S>,
 }
 
+/// Return paramter of the `viewProcessedOperations` function.
+#[derive(Serialize, SchemaType)]
+struct ViewProcessedOperationsState {
+    processed_operations: Vec<u64>,
+}
+
+/// View function that returns the entire `processed_operations` content of the state. Meant for
+/// testing.
+#[receive(
+    contract = "bridge-manager",
+    name = "viewProcessedOperations",
+    return_value = "ViewProcessedOperationsState"
+)]
+fn contract_view_processed_operations<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    host: &impl HasHost<State<S>, StateApiType = S>,
+) -> ReceiveResult<ViewProcessedOperationsState> {
+    let state = host.state();
+
+    let mut processed_operations = Vec::new();
+    for index in state.processed_operations.iter() {
+        processed_operations.push(*index);
+    }
+
+    Ok(ViewProcessedOperationsState {
+        processed_operations,
+    })
+}
+
+/// Part of the return paramter of the `viewRoles` function.
+#[derive(Serialize, SchemaType)]
+struct ViewVecRolesState {
+    roles: Vec<Roles>,
+}
+
+/// Return paramter of the `viewRoles` function.
+#[derive(Serialize, SchemaType)]
+struct ViewRolesState {
+    roles: Vec<(Address, ViewVecRolesState)>,
+}
+
+/// View function that returns the entire `roles` content of the state. Meant for
+/// testing.
+#[receive(
+    contract = "bridge-manager",
+    name = "viewRoles",
+    return_value = "ViewRolesState"
+)]
+fn contract_view_roles<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    host: &impl HasHost<State<S>, StateApiType = S>,
+) -> ReceiveResult<ViewRolesState> {
+    let state = host.state();
+
+    let mut roles = Vec::new();
+    for (address, a_state) in state.roles.iter() {
+        let vec_roles: Vec<Roles> = a_state.roles.iter().map(|x| *x).collect();
+
+        roles.push((*address, ViewVecRolesState { roles: vec_roles }));
+    }
+
+    Ok(ViewRolesState { roles })
+}
+
+/// Return paramter of the `viewTokenMappings` function.
+#[derive(Serialize, SchemaType)]
+struct ViewTokenMappings {
+    root_mappings: Vec<(EthAddress, ContractAddress)>,
+    child_mappings: Vec<(ContractAddress, EthAddress)>,
+}
+
+/// View function that returns the entire `tokenMappings` content of the state. Meant for
+/// testing.
+#[receive(
+    contract = "bridge-manager",
+    name = "viewTokenMappings",
+    return_value = "ViewTokenMappings"
+)]
+fn contract_view_token_mappings<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    host: &impl HasHost<State<S>, StateApiType = S>,
+) -> ReceiveResult<ViewTokenMappings> {
+    let state = host.state();
+
+    let mut root_mappings = Vec::new();
+    for (eth_address, contract_address) in state.root_mapping.iter() {
+        root_mappings.push((*eth_address, *contract_address));
+    }
+
+    let mut child_mappings = Vec::new();
+    for (contract_address, eth_address) in state.child_mapping.iter() {
+        child_mappings.push((*contract_address, *eth_address));
+    }
+
+    Ok(ViewTokenMappings {
+        root_mappings,
+        child_mappings,
+    })
+}
+
+/// Return paramter of the `viewFixedSizedValues` function.
+#[derive(Serialize, SchemaType)]
+struct ViewFixedSizedValuesState {
+    paused: bool,
+    emit_event_index: u64,
+    withdraw_fee: Amount,
+    treasurer_address: AccountAddress,
+}
+
+/// View function that returns fixed-sized values of the state. Meant for
+/// testing.
+#[receive(
+    contract = "bridge-manager",
+    name = "viewFixedSizedValues",
+    return_value = "ViewFixedSizedValuesState"
+)]
+fn contract_view_fixed_sized_values<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    host: &impl HasHost<State<S>, StateApiType = S>,
+) -> ReceiveResult<ViewFixedSizedValuesState> {
+    let state = host.state();
+
+    Ok(ViewFixedSizedValuesState {
+        paused: state.paused,
+        emit_event_index: state.emit_event_index,
+        withdraw_fee: state.withdraw_fee,
+        treasurer_address: state.treasurer_address,
+    })
+}
+
 #[derive(Serialize, Debug, PartialEq, Eq, Reject, SchemaType, Clone, Copy)]
 pub enum Roles {
     Admin,
@@ -182,12 +312,13 @@ impl<S: HasStateApi> State<S> {
 
     fn map_token(&mut self, root: &EthAddress, child: &ContractAddress) {
         let old_root = self.child_mapping.get(child);
-        if old_root.is_some() {
-            self.root_mapping.remove(old_root.unwrap().deref());
+        if let Some(old_root) = old_root {
+            self.root_mapping.remove(old_root.deref());
         }
+
         let old_child = self.root_mapping.get(root);
-        if old_child.is_some() {
-            self.child_mapping.remove(old_child.unwrap().deref())
+        if let Some(old_child) = old_child {
+            self.child_mapping.remove(old_child.deref())
         }
 
         self.root_mapping.remove(root);
@@ -204,8 +335,8 @@ impl<S: HasStateApi> State<S> {
     }
 
     fn increment_emit_event_index(&mut self) -> &mut Self {
-        self.emit_event_index = self.emit_event_index + 1;
-        return self;
+        self.emit_event_index += 1;
+        self
     }
 
     fn set_withdraw_fee(&mut self, fee: Amount) {
@@ -217,7 +348,6 @@ impl<S: HasStateApi> State<S> {
     }
     fn set_operation(&mut self, op: u64) {
         self.processed_operations.insert(op);
-        ();
     }
     fn has_operation(&self, op: u64) -> bool {
         self.processed_operations.contains(&op)
@@ -318,6 +448,8 @@ impl Deserial for BridgeEvent {
             TOKEN_MAP_EVENT_TAG => TokenMapEvent::deserial(source).map(BridgeEvent::TokenMap),
             DEPOSIT_EVENT_TAG => DepositEvent::deserial(source).map(BridgeEvent::Deposit),
             WITHDRAW_EVENT_TAG => WithdrawEvent::deserial(source).map(BridgeEvent::Withdraw),
+            GRANT_ROLE_EVENT_TAG => GrantRoleEvent::deserial(source).map(BridgeEvent::GrantRole),
+            REVOKE_ROLE_EVENT_TAG => RevokeRoleEvent::deserial(source).map(BridgeEvent::RevokeRole),
             _ => Err(ParseError::default()),
         }
     }
@@ -349,14 +481,14 @@ pub struct WithdrawEvent {
 }
 
 // A GrantRoleEvent introduced by this smart contract.
-#[derive(Debug, Serial, SchemaType)]
+#[derive(Debug, Serialize, SchemaType)]
 pub struct GrantRoleEvent {
     /// Address that has been given the role
     address: Address,
     role: Roles,
 }
 // A RevokeRoleEvent introduced by this smart contract.
-#[derive(Debug, Serial, SchemaType)]
+#[derive(Debug, Serialize, SchemaType)]
 pub struct RevokeRoleEvent {
     /// Address that has been revoked the role
     address: Address,
@@ -382,7 +514,7 @@ fn contract_has_role<S: HasStateApi>(
     let address = query.address;
     let role = query.role;
     let has_role = _host.state().has_role(&address, role);
-    return Ok(HasRoleQueryResponse::from(has_role));
+    Ok(HasRoleQueryResponse::from(has_role))
 }
 
 /// The parameter type for the contract function `grantRole`.
@@ -467,7 +599,7 @@ fn contract_remove_role<S: HasStateApi>(
     );
 
     ensure!(
-        state.has_role(&params.address, params.role.clone()),
+        state.has_role(&params.address, params.role),
         ContractError::Custom(CustomContractError::RoleNotAssigned)
     );
 
@@ -713,7 +845,7 @@ fn contract_receive_state_update<S: HasStateApi>(
 
             let child_token = match state.root_mapping.get(&op.root) {
                 None => return Err(ContractError::Custom(CustomContractError::TokenNotMapped)),
-                Some(child) => child.deref().clone(),
+                Some(child) => *child.deref(),
             };
             host.invoke_contract(
                 &child_token,
@@ -782,7 +914,7 @@ fn contract_withdraw<S: HasStateApi>(
         amount >= fee,
         ContractError::Custom(CustomContractError::WithdrawFeeTooLow)
     );
-    let treasurer = host.state().treasurer_address.clone();
+    let treasurer = host.state().treasurer_address;
     host.invoke_transfer(&treasurer, amount)?;
 
     let params = Cis2WithdrawParams {
