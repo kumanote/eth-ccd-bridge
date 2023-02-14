@@ -111,45 +111,32 @@ struct State<S> {
     processed_operations: StateSet<u64, S>,
 }
 
-/// Return paramter of the `viewProcessedOperations` function.
-#[derive(Serialize, SchemaType)]
-struct ViewProcessedOperationsState {
-    processed_operations: Vec<u64>,
-}
-
-/// View function that returns the entire `processed_operations` content of the state. Meant for
-/// testing.
+/// View function to check if an event index has been processed.
 #[receive(
     contract = "bridge-manager",
-    name = "viewProcessedOperations",
-    return_value = "ViewProcessedOperationsState"
+    name = "getProcessed",
+    parameter = "u64",
+    return_value = "bool"
 )]
-fn contract_view_processed_operations<S: HasStateApi>(
-    _ctx: &impl HasReceiveContext,
+fn contract_get_processed<S: HasStateApi>(
+    ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>,
-) -> ReceiveResult<ViewProcessedOperationsState> {
-    let state = host.state();
+) -> ReceiveResult<bool> {
+    let index = ctx.parameter_cursor().get()?;
 
-    let mut processed_operations = Vec::new();
-    for index in state.processed_operations.iter() {
-        processed_operations.push(*index);
-    }
-
-    Ok(ViewProcessedOperationsState {
-        processed_operations,
-    })
+    Ok(host.state().has_operation(index))
 }
 
-/// Part of the return paramter of the `viewRoles` function.
-#[derive(Serialize, SchemaType)]
-struct ViewVecRolesState {
+/// Part of the return parameter of the `viewRoles` function.
+#[derive(Serialize, SchemaType, PartialEq)]
+struct ViewRolesState {
     roles: Vec<Roles>,
 }
 
-/// Return paramter of the `viewRoles` function.
+/// Return parameter of the `viewRoles` function.
 #[derive(Serialize, SchemaType)]
-struct ViewRolesState {
-    roles: Vec<(Address, ViewVecRolesState)>,
+struct ViewAllRolesState {
+    all_roles: Vec<(Address, ViewRolesState)>,
 }
 
 /// View function that returns the entire `roles` content of the state. Meant for
@@ -157,26 +144,26 @@ struct ViewRolesState {
 #[receive(
     contract = "bridge-manager",
     name = "viewRoles",
-    return_value = "ViewRolesState"
+    return_value = "ViewAllRolesState"
 )]
 fn contract_view_roles<S: HasStateApi>(
     _ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>,
-) -> ReceiveResult<ViewRolesState> {
+) -> ReceiveResult<ViewAllRolesState> {
     let state = host.state();
 
-    let mut roles = Vec::new();
+    let mut all_roles = Vec::new();
     for (address, a_state) in state.roles.iter() {
-        let vec_roles: Vec<Roles> = a_state.roles.iter().map(|x| *x).collect();
+        let roles: Vec<Roles> = a_state.roles.iter().map(|x| *x).collect();
 
-        roles.push((*address, ViewVecRolesState { roles: vec_roles }));
+        all_roles.push((*address, ViewRolesState { roles }));
     }
 
-    Ok(ViewRolesState { roles })
+    Ok(ViewAllRolesState { all_roles })
 }
 
-/// Return paramter of the `viewTokenMappings` function.
-#[derive(Serialize, SchemaType)]
+/// Return parameter of the `viewTokenMappings` function.
+#[derive(Serialize, SchemaType, PartialEq)]
 struct ViewTokenMappings {
     root_mappings: Vec<(EthAddress, ContractAddress)>,
     child_mappings: Vec<(ContractAddress, EthAddress)>,
@@ -211,29 +198,29 @@ fn contract_view_token_mappings<S: HasStateApi>(
     })
 }
 
-/// Return paramter of the `viewFixedSizedValues` function.
-#[derive(Serialize, SchemaType)]
-struct ViewFixedSizedValuesState {
+/// Return parameter of the `viewConfiguration` function.
+#[derive(Serialize, SchemaType, PartialEq)]
+struct ViewConfigurationState {
     paused: bool,
     emit_event_index: u64,
     withdraw_fee: Amount,
     treasurer_address: AccountAddress,
 }
 
-/// View function that returns fixed-sized values of the state. Meant for
+/// View function that returns configuration values of the state. Meant for
 /// testing.
 #[receive(
     contract = "bridge-manager",
-    name = "viewFixedSizedValues",
-    return_value = "ViewFixedSizedValuesState"
+    name = "viewConfiguration",
+    return_value = "ViewConfigurationState"
 )]
-fn contract_view_fixed_sized_values<S: HasStateApi>(
+fn contract_view_configuration<S: HasStateApi>(
     _ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>,
-) -> ReceiveResult<ViewFixedSizedValuesState> {
+) -> ReceiveResult<ViewConfigurationState> {
     let state = host.state();
 
-    Ok(ViewFixedSizedValuesState {
+    Ok(ViewConfigurationState {
         paused: state.paused,
         emit_event_index: state.emit_event_index,
         withdraw_fee: state.withdraw_fee,
@@ -956,6 +943,7 @@ mod tests {
     const ADDRESS_1: Address = Address::Account(ACCOUNT_1);
     const ACCOUNT_2: AccountAddress = AccountAddress([2u8; 32]);
     const ADDRESS_2: Address = Address::Account(ACCOUNT_2);
+    const TREASURY_ACCOUNT: AccountAddress = AccountAddress([3u8; 32]);
 
     const ETH_ADDRESS: EthAddress = [1u8; 20];
     const ETH_WALLET_ADDRESS: EthAddress = [2u8; 20];
@@ -1010,6 +998,46 @@ mod tests {
             "Missing event for the new admin"
         );
     }
+
+    /// Test the `viewConfiguration` function.
+    #[concordium_test]
+    fn test_view_configuration() {
+        let emit_event_index = 9;
+        let withdraw_fee = Amount::from_micro_ccd(4);
+
+        let builder = TestStateBuilder::new();
+        let mut state_builder = TestStateBuilder::new();
+
+        let state = State {
+            paused: true,
+            roles: state_builder.new_map(),
+            root_mapping: state_builder.new_map(),
+            child_mapping: state_builder.new_map(),
+            emit_event_index,
+            withdraw_fee,
+            treasurer_address: TREASURY_ACCOUNT,
+            processed_operations: state_builder.new_set(),
+        };
+
+        let mut host = TestHost::new(state, builder);
+
+        let ctx = TestReceiveContext::empty();
+
+        // Check state configuration
+        let configuration_result = contract_view_configuration(&ctx, &mut host);
+
+        claim_eq!(
+            configuration_result,
+            Ok(ViewConfigurationState {
+                paused: true,
+                emit_event_index,
+                withdraw_fee,
+                treasurer_address: TREASURY_ACCOUNT,
+            }),
+            "Configuration state should be correct"
+        );
+    }
+
     /// Test adding an operator succeeds and the appropriate event is logged.
     #[concordium_test]
     fn test_roles() {
@@ -1123,6 +1151,85 @@ mod tests {
         claim!(result.is_err(), "ADDRESS_2 does not have role");
     }
 
+    /// Test `view_roles` function displays the `roles` content of the state.
+    #[concordium_test]
+    fn test_view_roles() {
+        let mut ctx = TestInitContext::empty();
+        ctx.set_init_origin(ACCOUNT_0);
+        let mut logger = TestLogger::init();
+
+        let mut builder = TestStateBuilder::new();
+
+        // Call the contract function.
+        let result = contract_init(&ctx, &mut builder, &mut logger);
+
+        // Check the result
+        let state = result.expect_report("Contract initialization failed");
+
+        let mut host = TestHost::new(state, builder);
+        let parameter = GrantRoleParams {
+            address: ADDRESS_1,
+            role: Roles::Mapper,
+        };
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_0);
+        ctx.set_parameter(&parameter_bytes);
+        let grant_role_result = contract_grant_role(&ctx, &mut host, &mut logger);
+        claim!(
+            grant_role_result.is_ok(),
+            "ADDRESS_0  is allowed to grant role"
+        );
+
+        let parameter = GrantRoleParams {
+            address: ADDRESS_0,
+            role: Roles::Mapper,
+        };
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_0);
+        ctx.set_parameter(&parameter_bytes);
+        let grant_role_result2 = contract_grant_role(&ctx, &mut host, &mut logger);
+        claim!(
+            grant_role_result2.is_ok(),
+            "ADDRESS_0  is allowed to grant role"
+        );
+
+        // Testing the `viewRoles` function
+        let roles_result = contract_view_roles(&ctx, &mut host);
+
+        let roles = roles_result.unwrap();
+
+        // Check the roles_result
+        claim_eq!(
+            roles.all_roles.len(),
+            2,
+            "Exactly 2 accounts should have roles"
+        );
+        claim_eq!(
+            roles.all_roles[0],
+            (
+                concordium_std::Address::Account(ACCOUNT_0),
+                ViewRolesState {
+                    roles: vec![Roles::Admin, Roles::Mapper]
+                }
+            ),
+            "ACCOUNT_0 should have the roles Admin and Mapper"
+        );
+        claim_eq!(
+            roles.all_roles[1],
+            (
+                concordium_std::Address::Account(ACCOUNT_1),
+                ViewRolesState {
+                    roles: vec![Roles::Mapper]
+                }
+            ),
+            "ACCOUNT_1 should have the role Mapper"
+        );
+    }
+
     /// Test adding an operator succeeds and the appropriate event is logged.
     #[concordium_test]
     fn test_deposit_flow() {
@@ -1183,6 +1290,23 @@ mod tests {
                 == CIS2_ADDRESS,
             "Mapping must be succesfull"
         );
+
+        // Check `viewTokenMappings` function
+        let token_mappings_result = contract_view_token_mappings(&ctx, &mut host);
+
+        let token_mappings = token_mappings_result.unwrap();
+
+        claim_eq!(
+            token_mappings.root_mappings,
+            vec![(ETH_ADDRESS, CIS2_ADDRESS)],
+            "Initiator does not have admin"
+        );
+        claim_eq!(
+            token_mappings.child_mappings,
+            vec![(CIS2_ADDRESS, ETH_ADDRESS)],
+            "Initiator does not have admin"
+        );
+
         let entrypoint_deposit = OwnedEntrypointName::new_unchecked("deposit".into());
         // We are simulating reentrancy with this mock because we mutate the state.
         host.setup_mock_entrypoint(
@@ -1222,6 +1346,19 @@ mod tests {
             contract_receive_state_update(&ctx, &mut host, &mut logger);
 
         claim!(result.is_ok(), "ADDRESS_2  is allowed to state update");
+
+        let index = 1u64;
+        let parameter_bytes = to_bytes(&index);
+
+        ctx.set_parameter(&parameter_bytes);
+        // Check `getProcessed` function
+        let get_processed_result = contract_get_processed(&ctx, &mut host);
+
+        claim_eq!(
+            get_processed_result,
+            Ok(true),
+            "Event index should be processed"
+        );
     }
 
     #[concordium_test]
