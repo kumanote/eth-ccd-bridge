@@ -1,0 +1,86 @@
+name: Build, lint and test
+
+on:
+    # Triggers the workflow on push or pull request events but only for the main branch and release branches
+    push:
+        branches: [main, release**, frontend/ci]
+    pull_request:
+        branches: [main, release**]
+
+    # Allows us to run the workflow manually from the Actions tab
+    workflow_dispatch:
+
+env:
+    dummy: 1 # change to force cache invalidation
+    node_version: 18.12
+
+jobs:
+    frontend_dependencies:
+        runs-on: ubuntu-20.04
+
+        steps:
+            - uses: actions/checkout@v2
+
+            - name: Cache dependencies
+              id: fetch-dependencies
+              uses: actions/cache@v2
+              with:
+                  path: |
+                      frontend/node_modules
+                  key: ${{ runner.os }}-${{ env.dummy }}-${{ hashFiles('frontend/package.json', 'frontend/yarn.lock') }}
+
+            - uses: actions/setup-node@v2
+              if: steps.fetch-dependencies.outputs.cache-hit != 'true'
+              with:
+                  node-version: '${{ env.node_version }}'
+
+            - name: Download dependencies
+              if: steps.fetch-dependencies.outputs.cache-hit != 'true'
+              working-directory: ./frontend
+              run: yarn install
+
+    frontend_build:
+        runs-on: ubuntu-20.04
+        needs: [frontend_dependencies]
+
+        steps:
+            - uses: actions/checkout@v2
+            - uses: actions/setup-node@v2
+              with:
+                  node-version: '${{ env.node_version }}'
+
+            - name: Get cached dependencies
+              uses: actions/cache@v2
+              with:
+                  path: |
+                      frontend/node_modules
+                  key: ${{ runner.os }}-${{ env.dummy }}-${{ hashFiles('frontend/package.json', 'frontend/yarn.lock') }}
+
+            - name: Build
+              working-directory: ./frontend
+              run: yarn build
+
+            - name: TypeCheck
+              working-directory: ./frontend
+              run: yarn ts-check
+
+    frontend_lint:
+        runs-on: ubuntu-20.04
+        needs: [frontend_build]
+
+        steps:
+            - uses: actions/checkout@v2
+            - uses: actions/setup-node@v2
+              with:
+                  node-version: '${{ env.node_version }}'
+
+            - name: Get cached dependencies
+              uses: actions/cache@v2
+              with:
+                  path: |
+                      frontend/node_modules
+                  key: ${{ runner.os }}-${{ env.dummy }}-${{ hashFiles('frontend/package.json', 'frontend/yarn.lock') }}
+
+            - name: Lint
+              working-directory: ./frontend
+              run: yarn lint
