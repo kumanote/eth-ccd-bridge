@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 
 ## Dependencies
 
-- NodeJS stable v18.12.1 (easiest to manage this through [NVM](https://github.com/nvm-sh/nvm))
+- NodeJS stable v18.12 (easiest to manage this through [NVM](https://github.com/nvm-sh/nvm))
 - [Yarn classic stable](https://classic.yarnpkg.com/en/docs/install)
   - If using NVM to manage node versions, it might be best to NOT use node to install yarn but instead go with an alternative solution.
 
