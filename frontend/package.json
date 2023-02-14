@@ -7,8 +7,7 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "fmt": "yarn lint --fix",
-        "ts-check": "tsc --noEmit"
+        "fmt": "yarn lint --fix"
     },
     "dependencies": {
         "@concordium/browser-wallet-api-helpers": "^2.0.0",

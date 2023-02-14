@@ -58,11 +58,7 @@ jobs:
 
             - name: Build
               working-directory: ./frontend
-              run: yarn build
-
-            - name: TypeCheck
-              working-directory: ./frontend
-              run: yarn ts-check
+              run: NEXT_PUBLIC_BRIDGE_MANAGER_INDEX=0 yarn build
 
     frontend_lint:
         runs-on: ubuntu-20.04
