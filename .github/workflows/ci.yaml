@@ -3,7 +3,7 @@ name: Build, lint and test
 on:
     # Triggers the workflow on push or pull request events but only for the main branch and release branches
     push:
-        branches: [main, release**, frontend/ci]
+        branches: [main, release**]
     pull_request:
         branches: [main, release**]
 
