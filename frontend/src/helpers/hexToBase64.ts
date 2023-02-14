@@ -15,7 +15,7 @@ const hexToBase64 = (hexString: string): string => {
     }
 
     // Use the Buffer.from function to convert the byte array to a base64 string
-    return Buffer.from(bytes).toString('base64');
-}
+    return Buffer.from(bytes).toString("base64");
+};
 
-export default hexToBase64
+export default hexToBase64;

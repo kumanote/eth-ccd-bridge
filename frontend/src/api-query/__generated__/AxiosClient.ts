@@ -1,10 +1,10 @@
 import type {
-  OpenAPIClient,
-  Parameters,
-  UnknownParamsObject,
-  OperationResponse,
-  AxiosRequestConfig,
-} from 'openapi-client-axios'; 
+    OpenAPIClient,
+    Parameters,
+    UnknownParamsObject,
+    OperationResponse,
+    AxiosRequestConfig,
+} from "openapi-client-axios";
 
 export declare namespace Components {
     namespace Responses {
@@ -68,11 +68,13 @@ export declare namespace Components {
             status: string;
             timestamp: number; // uint64
         }
-        export type WalletTx = {
-            Deposit: WalletDepositTx;
-        } | {
-            Withdraw: WalletWithdrawTx;
-        };
+        export type WalletTx =
+            | {
+                  Deposit: WalletDepositTx;
+              }
+            | {
+                  Withdraw: WalletWithdrawTx;
+              };
         export interface WalletTxResponse {
             count: number; // uint
             transactions: WalletTx[];
@@ -181,153 +183,153 @@ export declare namespace Paths {
 }
 
 export interface OperationMethods {
-  /**
-   * watch_deposit_tx
-   */
-  'watch_deposit_tx'(
-    parameters?: Parameters<Paths.WatchDepositTx.PathParameters> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<Paths.WatchDepositTx.Responses.$200>
-  /**
-   * eth_merkle_proof
-   */
-  'eth_merkle_proof'(
-    parameters?: Parameters<Paths.EthMerkleProof.PathParameters> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<Paths.EthMerkleProof.Responses.$200>
-  /**
-   * list_tokens
-   */
-  'list_tokens'(
-    parameters?: Parameters<UnknownParamsObject> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<Paths.ListTokens.Responses.$200>
-  /**
-   * wallet_txs
-   */
-  'wallet_txs'(
-    parameters?: Parameters<Paths.WalletTxs.PathParameters> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<Paths.WalletTxs.Responses.$200>
-  /**
-   * watch_withdraw_tx
-   */
-  'watch_withdraw_tx'(
-    parameters?: Parameters<Paths.WatchWithdrawTx.PathParameters> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<Paths.WatchWithdrawTx.Responses.$200>
-  /**
-   * docs
-   */
-  'docs'(
-    parameters?: Parameters<UnknownParamsObject> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<any>
-  /**
-   * redoc
-   */
-  'redoc'(
-    parameters?: Parameters<UnknownParamsObject> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<any>
-  /**
-   * token_metadata
-   */
-  'token_metadata'(
-    parameters?: Parameters<Paths.TokenMetadata.PathParameters> | null,
-    data?: any,
-    config?: AxiosRequestConfig  
-  ): OperationResponse<Paths.TokenMetadata.Responses.$200>
-}
-
-export interface PathsDictionary {
-  ['/api/v1/deposit/{tx_hash}']: {
     /**
      * watch_deposit_tx
      */
-    'get'(
-      parameters?: Parameters<Paths.WatchDepositTx.PathParameters> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<Paths.WatchDepositTx.Responses.$200>
-  }
-  ['/api/v1/ethereum/proof/{tx_hash}/{event_id}']: {
+    "watch_deposit_tx"(
+        parameters?: Parameters<Paths.WatchDepositTx.PathParameters> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<Paths.WatchDepositTx.Responses.$200>;
     /**
      * eth_merkle_proof
      */
-    'get'(
-      parameters?: Parameters<Paths.EthMerkleProof.PathParameters> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<Paths.EthMerkleProof.Responses.$200>
-  }
-  ['/api/v1/tokens']: {
+    "eth_merkle_proof"(
+        parameters?: Parameters<Paths.EthMerkleProof.PathParameters> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<Paths.EthMerkleProof.Responses.$200>;
     /**
      * list_tokens
      */
-    'get'(
-      parameters?: Parameters<UnknownParamsObject> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<Paths.ListTokens.Responses.$200>
-  }
-  ['/api/v1/wallet/{wallet}']: {
+    "list_tokens"(
+        parameters?: Parameters<UnknownParamsObject> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<Paths.ListTokens.Responses.$200>;
     /**
      * wallet_txs
      */
-    'get'(
-      parameters?: Parameters<Paths.WalletTxs.PathParameters> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<Paths.WalletTxs.Responses.$200>
-  }
-  ['/api/v1/withdraw/{tx_hash}']: {
+    "wallet_txs"(
+        parameters?: Parameters<Paths.WalletTxs.PathParameters> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<Paths.WalletTxs.Responses.$200>;
     /**
      * watch_withdraw_tx
      */
-    'get'(
-      parameters?: Parameters<Paths.WatchWithdrawTx.PathParameters> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<Paths.WatchWithdrawTx.Responses.$200>
-  }
-  ['/openapi.json']: {
+    "watch_withdraw_tx"(
+        parameters?: Parameters<Paths.WatchWithdrawTx.PathParameters> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<Paths.WatchWithdrawTx.Responses.$200>;
     /**
      * docs
      */
-    'get'(
-      parameters?: Parameters<UnknownParamsObject> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<any>
-  }
-  ['/redoc']: {
+    "docs"(
+        parameters?: Parameters<UnknownParamsObject> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<any>;
     /**
      * redoc
      */
-    'get'(
-      parameters?: Parameters<UnknownParamsObject> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<any>
-  }
-  ['/token/metadata/{symbol}']: {
+    "redoc"(
+        parameters?: Parameters<UnknownParamsObject> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<any>;
     /**
      * token_metadata
      */
-    'get'(
-      parameters?: Parameters<Paths.TokenMetadata.PathParameters> | null,
-      data?: any,
-      config?: AxiosRequestConfig  
-    ): OperationResponse<Paths.TokenMetadata.Responses.$200>
-  }
+    "token_metadata"(
+        parameters?: Parameters<Paths.TokenMetadata.PathParameters> | null,
+        data?: any,
+        config?: AxiosRequestConfig
+    ): OperationResponse<Paths.TokenMetadata.Responses.$200>;
 }
 
-export type Client = OpenAPIClient<OperationMethods, PathsDictionary>
+export interface PathsDictionary {
+    ["/api/v1/deposit/{tx_hash}"]: {
+        /**
+         * watch_deposit_tx
+         */
+        "get"(
+            parameters?: Parameters<Paths.WatchDepositTx.PathParameters> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<Paths.WatchDepositTx.Responses.$200>;
+    };
+    ["/api/v1/ethereum/proof/{tx_hash}/{event_id}"]: {
+        /**
+         * eth_merkle_proof
+         */
+        "get"(
+            parameters?: Parameters<Paths.EthMerkleProof.PathParameters> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<Paths.EthMerkleProof.Responses.$200>;
+    };
+    ["/api/v1/tokens"]: {
+        /**
+         * list_tokens
+         */
+        "get"(
+            parameters?: Parameters<UnknownParamsObject> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<Paths.ListTokens.Responses.$200>;
+    };
+    ["/api/v1/wallet/{wallet}"]: {
+        /**
+         * wallet_txs
+         */
+        "get"(
+            parameters?: Parameters<Paths.WalletTxs.PathParameters> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<Paths.WalletTxs.Responses.$200>;
+    };
+    ["/api/v1/withdraw/{tx_hash}"]: {
+        /**
+         * watch_withdraw_tx
+         */
+        "get"(
+            parameters?: Parameters<Paths.WatchWithdrawTx.PathParameters> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<Paths.WatchWithdrawTx.Responses.$200>;
+    };
+    ["/openapi.json"]: {
+        /**
+         * docs
+         */
+        "get"(
+            parameters?: Parameters<UnknownParamsObject> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<any>;
+    };
+    ["/redoc"]: {
+        /**
+         * redoc
+         */
+        "get"(
+            parameters?: Parameters<UnknownParamsObject> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<any>;
+    };
+    ["/token/metadata/{symbol}"]: {
+        /**
+         * token_metadata
+         */
+        "get"(
+            parameters?: Parameters<Paths.TokenMetadata.PathParameters> | null,
+            data?: any,
+            config?: AxiosRequestConfig
+        ): OperationResponse<Paths.TokenMetadata.Responses.$200>;
+    };
+}
+
+export type Client = OpenAPIClient<OperationMethods, PathsDictionary>;

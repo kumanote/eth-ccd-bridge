@@ -6,15 +6,18 @@ import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
 // Cornucopia_${chainName}_state
 
 const useCCDWallet = () => {
-
-    const ccdContext = useCCDWalletStore(state => state.ccdContext)
-    const setCCDWallet = useCCDWalletStore(state => state.setCCDWallet)
-    const deleteCCDWallet = useCCDWalletStore(state => state.deleteCCDWallet)
+    const ccdContext = useCCDWalletStore((state) => state.ccdContext);
+    const setCCDWallet = useCCDWalletStore((state) => state.setCCDWallet);
+    const deleteCCDWallet = useCCDWalletStore((state) => state.deleteCCDWallet);
 
     const connectCCD = useCallback(async () => {
         detectCcdProvider()
             .then((provider) => provider.connect())
-            .then((accAddress) => { if (accAddress) { setCCDWallet(accAddress) } })
+            .then((accAddress) => {
+                if (accAddress) {
+                    setCCDWallet(accAddress);
+                }
+            })
             .then(() => {
                 detectCcdProvider()
                     // Check if the user is connected to testnet by checking if the testnet genesisBlock exists.
@@ -26,9 +29,9 @@ const useCCDWallet = () => {
                             .getCryptographicParameters(process.env.NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH.toString())
                             .then((result) => {
                                 if (result === undefined || result?.value === null) {
-                                    deleteCCDWallet()
+                                    deleteCCDWallet();
                                     console.error(
-                                        'Your JsonRpcClient in the Concordium browser wallet cannot connect. Check if your Concordium browser wallet is connected to testnet!'
+                                        "Your JsonRpcClient in the Concordium browser wallet cannot connect. Check if your Concordium browser wallet is connected to testnet!"
                                     );
                                 }
                             })
@@ -36,16 +39,16 @@ const useCCDWallet = () => {
             })
             .catch(() => {
                 console.error(
-                    'Your JsonRpcClient in the Concordium browser wallet cannot connect. Check if your Concordium browser wallet is connected to testnet!'
+                    "Your JsonRpcClient in the Concordium browser wallet cannot connect. Check if your Concordium browser wallet is connected to testnet!"
                 );
-                deleteCCDWallet()
+                deleteCCDWallet();
             });
 
         localStorage["CCP_CCD_connected"] = true;
-    }, [])
+    }, []);
 
     const disconnectCCD = async () => {
-        deleteCCDWallet()
+        deleteCCDWallet();
         delete localStorage["CCP_CCD_connected"];
     };
 
