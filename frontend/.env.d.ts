@@ -1,34 +1,53 @@
 declare global {
     namespace NodeJS {
         interface ProcessEnv {
-            //CONTRACT ADDRESSES ETHEREUM
-            NEXT_PUBLIC_WETH: string;
+            // Ethereum contract addresses
+            NEXT_PUBLIC_WETH: string; // TODO: Doesn't seem like this is used? Can this be removed?
+            /**
+             * Address of the bridge root manager contract on Ethereum.
+             */
             NEXT_PUBLIC_ROOT_MANAGER_ADDRESS: string;
-            NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS: string;
-            NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS: string;
-            NEXT_PUBLIC_STATE_SENDER_ADDRESS: string;
-            NEXT_PUBLIC_PROXY_ADMIN_ADDRESS: string;
+            NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS: string; // TODO: What's this? Add documentation
+            NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
+            NEXT_PUBLIC_STATE_SENDER_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
+            NEXT_PUBLIC_PROXY_ADMIN_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
 
-            // BRIDGE MANAGER CCD ADDRESS
-            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: number;
+            // Concordium contract addresses
+            /**
+             * Bridge manager contract index. For now, the accompanying subindex is assumed to be 0. 
+             */
+            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: number; // TODO: Don't assume the subindex is 0, as sometime it might not be...
 
-            //TOKEN CONTRACTS ETHEREUM
-            NEXT_PUBLIC_ETH_TOKEN_ADDRESS: string;
+            // Ethereum token contract addresses
+            /**
+             * Address of the wETH ethereum contract
+             */
             NEXT_PUBLIC_WETH_TOKEN_ADDRESS: string;
 
-            //PROVIDERS
-            NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string;
-            NEXT_PUBLIC_ETHEREUM_PROVIDER_KEY: string;
-            NEXT_PUBLIC_INFURA_PROJECT_ID: string;
+            // Providers
+            NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string; // TODO: What's this? Document...
+            NEXT_PUBLIC_ETHEREUM_PROVIDER_KEY: string; // TODO: What's this? Document...
+            NEXT_PUBLIC_INFURA_PROJECT_ID: string; // TODO: What's this? Document...
 
-            //The TESTNET_GENESIS_BLOCK_HASH is used to check that the user has its browser wallet connected to testnet and not to mainnet.
-            NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH: string;
+            /**
+             * Block hash of testnet genesis block.
+             * Is used to check that the user has its browser wallet connected to testnet and not to mainnet.
+             */
+            NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH: string; // TODO: Remove this and hardcode instead.
 
-            //API
+            /**
+             * URL of the bridge API.
+             */
             NEXT_PUBLIC_API_URL: string;
 
-            //SCHEMAS
+            // CCD contract schemas
+            /**
+             * Hex encoded schema of the bridge manager contract.
+             */
             NEXT_PUBLIC_BRIDGE_MANAGER: string;
+            /**
+             * Hex encoded schema of the cis2-bridgeable contract.
+             */
             NEXT_PUBLIC_CIS2_BRIDGEABLE: string;
         }
     }

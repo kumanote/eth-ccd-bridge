@@ -12,7 +12,7 @@ const addresses = {
     /**
      * ETH Address
      */
-    eth: process.env.NEXT_PUBLIC_ETH_TOKEN_ADDRESS || "",
+    eth: "__ETH__",
 
     /**
      * Root Manager Address
