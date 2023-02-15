@@ -13,11 +13,11 @@ use concordium_rust_sdk::{
         hashes::TransactionHash,
         queries::BlockInfo,
         transactions::{BlockItem, EncodedPayload, PayloadLike},
-        AbsoluteBlockHeight, Nonce,
+        AbsoluteBlockHeight, ContractAddress, Nonce,
     },
     v2,
 };
-use ethabi::ethereum_types::{H256, U256};
+use ethabi::ethereum_types::{H160, H256, U256};
 use num_bigint::BigUint;
 use tokio::task::JoinHandle;
 use tokio_postgres::{NoTls, Statement, Transaction};
@@ -46,16 +46,23 @@ pub enum EthTransactionStatus {
     Missing,
 }
 
-#[derive(Debug, Copy, Clone, tokio_postgres::types::ToSql, tokio_postgres::types::FromSql)]
+#[derive(Debug, Copy, Clone, tokio_postgres::types::ToSql, tokio_postgres::types::FromSql, serde::Serialize)]
 #[postgres(name = "concordium_transaction_status")]
 pub enum TransactionStatus {
     /// Transaction was added to the database and not yet finalized.
     #[postgres(name = "pending")]
+    #[serde(rename = "pending")]
     Pending,
+    /// Transaction was finalized, but failed.
+    #[postgres(name = "failed")]
+    #[serde(rename = "failed")]
+    Failed,
     /// Transaction was finalized.
     #[postgres(name = "finalized")]
+    #[serde(rename = "finalized")]
     Finalized,
     #[postgres(name = "missing")]
+    #[serde(rename = "missing")]
     Missing,
 }
 
@@ -75,6 +82,8 @@ impl PreparedStatements {
         &'a self,
         db_tx: &Transaction<'b>,
         origin_tx: &H256,
+        origin_depositor: &Option<H160>,
+        origin_event_index: u64,
         bi: &BlockItem<Payload>,
     ) -> anyhow::Result<i64> {
         let hash = bi.hash();
@@ -84,6 +93,8 @@ impl PreparedStatements {
             .query_one(&self.insert_concordium_tx, &[
                 &&hash.as_ref()[..],
                 &origin_tx.as_bytes(),
+                &origin_depositor.as_ref().map(|x| x.as_bytes()),
+                &(origin_event_index as i64),
                 &tx_bytes,
                 &timestamp,
                 &TransactionStatus::Pending,
@@ -97,6 +108,7 @@ impl PreparedStatements {
         db_tx: &Transaction<'b>,
         tx_hash: &TransactionHash,
         event: &BridgeEvent,
+        merkle_event_hash: Option<[u8; 32]>,
     ) -> anyhow::Result<i64> {
         let (event_type, data) = match event {
             BridgeEvent::TokenMap(tm) => (
@@ -125,7 +137,8 @@ impl PreparedStatements {
                 &event.event_index().map(|x| x as i64),
                 &event_type,
                 &data,
-                &false,
+                &None::<Vec<u8>>,
+                &merkle_event_hash.map(|x| x.to_vec()),
             ])
             .await?;
         Ok(res.get::<_, i64>(0))
@@ -162,8 +175,9 @@ impl Database {
         client.batch_execute(SCHEMA).await?;
         let insert_concordium_tx = client
             .prepare(
-                "INSERT INTO concordium_transactions (tx_hash, origin_tx_hash, tx, timestamp, status) VALUES ($1, \
-                 $2, $3, $4, $5) RETURNING id",
+                "INSERT INTO concordium_transactions (tx_hash, origin_tx_hash, \
+                 origin_tx_depositor, origin_event_index, tx, timestamp, status)
+ VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
             )
             .await?;
         let get_pending_concordium_txs = client
@@ -192,21 +206,20 @@ impl Database {
         let insert_concordium_event = client
             .prepare(
                 "INSERT INTO concordium_events (tx_hash, event_index, event_type, event_data, \
-                 processed) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                 processed, event_merkle_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
             )
             .await?;
 
         let mark_withdrawal_as_completed = client
             .prepare(
-                "UPDATE concordium_events SET processed = TRUE WHERE event_index = $1 RETURNING \
-                 id;",
+                "UPDATE concordium_events SET processed = $1 WHERE event_index = $2 RETURNING id;",
             )
             .await?;
 
         let get_pending_withdrawals = client
             .prepare(
-                "SELECT tx_hash, event_index, event_data FROM concordium_events WHERE (NOT \
-                 processed) AND event_type = 'withdraw' ORDER BY id ASC;",
+                "SELECT tx_hash, event_index, event_data FROM concordium_events WHERE (processed \
+                 IS NULL) AND event_type = 'withdraw' ORDER BY id ASC;",
             )
             .await?;
         let ethereum_checkpoint = client
@@ -473,19 +486,26 @@ impl Database {
     pub async fn insert_transactions<P: PayloadLike>(
         &mut self,
         last_block_number: u64,
-        txs: &[(H256, BlockItem<P>)],
+        txs: &[(H256, Option<H160>, u64, BlockItem<P>)],
         // List of event indexes to mark as "done"
-        wes: &[u64],
+        wes: &[(H256, u64, U256, TransactionHash, u64, H160, u64)],
+        // New token maps.
+        maps: &[(H160, ContractAddress, String, u8)],
+        // Removed token maps.
+        unmaps: &[(H160, ContractAddress)],
     ) -> anyhow::Result<()> {
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
-        for (origin_tx, tx) in txs {
-            statements.insert_concordium_tx(&db_tx, origin_tx, tx).await?;
+        for (origin_tx, origin_sender, origin_event_index, tx) in txs {
+            statements
+                .insert_concordium_tx(&db_tx, origin_tx, origin_sender, *origin_event_index, tx)
+                .await?;
         }
-        for &event_index in wes {
+        for (tx_hash, id, amount, origin_tx_hash, origin_event_id, receiver, event_index) in wes {
             let rv = db_tx
                 .query_opt(&statements.mark_withdrawal_as_completed, &[
-                    &(event_index as i64)
+                    &receiver.as_bytes(),
+                    &(*event_index as i64),
                 ])
                 .await?;
             if rv.is_none() {
@@ -494,6 +514,49 @@ impl Database {
                     event_index
                 );
             }
+            db_tx
+                .query_opt(
+                    "INSERT INTO ethereum_withdraw_events (tx_hash, event_index, amount, \
+                     receiver, origin_tx_hash, origin_event_index) VALUES ($1, $2, $3, $4, $5, \
+                     $6);",
+                    &[
+                        &&tx_hash.as_ref()[..],
+                        &(*id as i64),
+                        &amount.to_string(),
+                        &receiver.as_bytes(),
+                        &&origin_tx_hash.as_ref()[..],
+                        &(*origin_event_id as i64),
+                    ],
+                )
+                .await?;
+        }
+        for (root, child, eth_name, decimals) in maps {
+            db_tx
+                .query(
+                    "INSERT INTO token_maps (root, child_index, child_subindex, eth_name, \
+                     decimals) VALUES ($1 , $2, $3, $4, $5);",
+                    &[
+                        &root.as_bytes(),
+                        &(child.index as i64),
+                        &(child.subindex as i64),
+                        &eth_name,
+                        &(*decimals as i16),
+                    ],
+                )
+                .await?;
+        }
+        for (root, child) in unmaps {
+            db_tx
+                .query(
+                    "DELETE FROM token_maps WHERE root = $1 AND child_index = $2 AND \
+                     child_subindex = $3;",
+                    &[
+                        &root.as_bytes(),
+                        &(child.index as i64),
+                        &(child.subindex as i64),
+                    ],
+                )
+                .await?;
         }
         db_tx
             .query_opt(
@@ -511,18 +574,22 @@ impl Database {
         &mut self,
         block: BlockInfo,
         events: Vec<(TransactionHash, Vec<BridgeEvent>)>,
-    ) -> anyhow::Result<Vec<(TransactionHash, WithdrawEvent)>> {
+    ) -> anyhow::Result<Vec<(u64, [u8; 32])>> {
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
         let mut withdraws = Vec::new();
         for (tx_hash, events) in events {
             for event in events {
+                let merkle_event_hash = if let BridgeEvent::Withdraw(we) = &event {
+                    let hash = crate::merkle::make_event_leaf_hash(tx_hash, we)?;
+                    withdraws.push((we.event_index, hash));
+                    Some(hash)
+                } else {
+                    None
+                };
                 statements
-                    .insert_concordium_event(&db_tx, &tx_hash, &event)
+                    .insert_concordium_event(&db_tx, &tx_hash, &event, merkle_event_hash)
                     .await?;
-                if let BridgeEvent::Withdraw(we) = event {
-                    withdraws.push((tx_hash, we));
-                }
             }
         }
         db_tx
@@ -613,7 +680,7 @@ pub async fn mark_concordium_txs(
                             db_actions
                                 .send(DatabaseOperation::MarkConcordiumTransaction {
                                     tx_hash,
-                                    state: TransactionStatus::Finalized,
+                                    state: TransactionStatus::Failed,
                                 })
                                 .await?;
                         }
@@ -644,9 +711,10 @@ fn convert_to_token_amount(a: U256) -> cis2::TokenAmount {
 #[derive(Debug)]
 pub enum MerkleUpdate {
     NewWithdraws {
-        withdraws: Vec<(TransactionHash, WithdrawEvent)>,
+        withdraws: Vec<(u64, [u8; 32])>,
     },
     WithdrawalCompleted {
+        receiver:             H160,
         original_event_index: u64,
     },
 }
@@ -676,11 +744,13 @@ pub async fn handle_database(
             DatabaseOperation::EthereumEvents { events } => {
                 let mut wes = Vec::new();
                 let mut txs = Vec::with_capacity(events.events.len());
+                let mut maps = Vec::new();
+                let mut unmaps = Vec::new();
                 for event in events.events {
                     match event.event {
                         ethereum::EthEvent::TokenLocked {
                             id,
-                            depositor: _,
+                            depositor,
                             deposit_receiver,
                             root_token,
                             vault: _,
@@ -699,13 +769,15 @@ pub async fn handle_database(
                             let update = concordium_contracts::StateUpdate::Deposit(deposit);
                             // TODO estimate execution energy.
                             let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push((event.tx_hash, tx));
+                            txs.push((event.tx_hash, Some(depositor), id.low_u64(), tx));
                         }
                         ethereum::EthEvent::TokenMapped {
                             id,
                             root_token,
                             child_token,
                             token_type: _,
+                            name,
+                            decimals,
                         } => {
                             // Send transaction to Concordium.
                             let map = concordium_contracts::TokenMapOperation {
@@ -715,44 +787,55 @@ pub async fn handle_database(
                             };
                             let update = concordium_contracts::StateUpdate::TokenMap(map);
                             let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push((event.tx_hash, tx))
+                            txs.push((event.tx_hash, None, id.low_u64(), tx));
+                            maps.push((root_token, child_token, name, decimals));
                         }
                         ethereum::EthEvent::TokenUnmapped {
                             id,
-                            root_token: _,
-                            child_token: _,
+                            root_token,
+                            child_token,
                             token_type: _,
                         } => {
                             // Do nothing at present. Manual intervention needed.
-                            log::warn!("Token {} unmapped.", id);
+                            log::warn!("Token {id} ({root_token} -> {child_token}) unmapped.");
+                            unmaps.push((root_token, child_token));
                         }
                         ethereum::EthEvent::Withdraw {
-                            id: _,
+                            id,
                             child_token: _,
-                            amount: _,
-                            receiver: _,
-                            origin_tx_hash: _,
+                            amount,
+                            receiver,
+                            origin_tx_hash,
                             origin_event_index,
                             child_token_id: _,
                         } => {
-                            wes.push(origin_event_index);
+                            wes.push((
+                                event.tx_hash,
+                                id.low_u64(),
+                                amount,
+                                origin_tx_hash,
+                                origin_event_index,
+                                receiver,
+                                origin_event_index,
+                            ));
                         }
                     }
                 }
 
-                db.insert_transactions(events.last_number, &txs, &wes)
+                db.insert_transactions(events.last_number, &txs, &wes, &maps, &unmaps)
                     .await?;
-                for we in wes {
+                for (_, _, _, _, _, receiver, we) in wes {
                     merkle_setter_sender
                         .send(MerkleUpdate::WithdrawalCompleted {
                             original_event_index: we,
+                            receiver,
                         })
                         .await?;
                 }
 
                 // We have now written all the transactions to the database. Now send them to
                 // the Concordium node.
-                for (_, tx) in txs {
+                for (_, _, _, tx) in txs {
                     let hash = tx.hash();
                     ccd_transaction_sender.send(tx).await?;
                     log::info!("Enqueued transaction {}.", hash);

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use ccdeth_relayer2::{
+use ccdeth_relayer::{
     concordium_contracts::{self, BridgeManagerClient},
     db::{self, Database},
     ethereum,
@@ -228,13 +228,22 @@ async fn main() -> anyhow::Result<()> {
     //     .write_to_file(format!("src/state_sender.rs"))
     //     .unwrap();
 
+    // ethers::prelude::Abigen::new("Erc20", "abis/erc20.json")
+    //     .unwrap()
+    //     .generate()
+    //     .unwrap()
+    //     .write_to_file(format!("src/erc20.rs"))
+    //     .unwrap();
+
     // return Ok(());
 
-    // "0xEAC1bAA422dc3aa4E7B33b34d08d444150650bE4".parse::<H160>()?,
+    // let erc20 = ccdeth_relayer::erc20::Erc20::new(app.state_sender, ethereum_client.clone());
+    // let name = erc20.name().call().await;
+    // let decimals = erc20.decimals().call().await?;
 
     let state_sender_contract = StateSender::new(app.state_sender, ethereum_client.clone());
 
-    let root_chain_manager_contract = ccdeth_relayer2::root_chain_manager::BridgeManager::new(
+    let root_chain_manager_contract = ccdeth_relayer::root_chain_manager::BridgeManager::new(
         app.root_chain_manager,
         Arc::new(ethereum_client.clone()),
     );

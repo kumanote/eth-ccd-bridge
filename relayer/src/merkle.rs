@@ -8,10 +8,10 @@ use ethabi::{
     RawLog, Token,
 };
 use ethers::{
-    prelude::{Middleware, Signer, TransactionRequest},
+    prelude::{Middleware, Signer},
     utils::rlp::Rlp,
 };
-use rs_merkle::{Hasher, MerkleTree};
+use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
@@ -20,6 +20,26 @@ use crate::{
     root_chain_manager::BridgeManager,
     state_sender,
 };
+
+pub fn make_proof<A: PartialEq + Eq>(
+    leaves: impl IntoIterator<Item = (A, [u8; 32])>,
+    elem: A,
+) -> Option<MerkleProof<Keccak256Algorithm>> {
+    let mut tree = MerkleTree::<Keccak256Algorithm>::new();
+    let mut index = Vec::new();
+    for (i, (v, leaf)) in leaves.into_iter().enumerate() {
+        tree.insert(leaf);
+        if v == elem {
+            index.push(i)
+        }
+    }
+    if !index.is_empty() {
+        tree.commit();
+        Some(tree.proof(&index))
+    } else {
+        None
+    }
+}
 
 pub struct MerkleData {
     /// The child token address that is being withdrawn.
@@ -92,7 +112,7 @@ impl rs_merkle::Hasher for Keccak256Algorithm {
     fn hash_size() -> usize { std::mem::size_of::<Self::Hash>() }
 }
 
-fn convert_from_token_amount(a: &cis2::TokenAmount) -> U256 {
+pub fn convert_from_token_amount(a: &cis2::TokenAmount) -> U256 {
     let le_bytes = a.0.to_bytes_le();
     U256::from_little_endian(&le_bytes)
 }
@@ -135,6 +155,25 @@ pub struct MerkleSetterClient<M, S> {
     pub max_marked_event_index: Option<u64>,
 }
 
+pub fn make_event_leaf_hash(
+    transaction_hash: TransactionHash,
+    we: &WithdrawEvent,
+) -> anyhow::Result<[u8; 32]> {
+    let data = MerkleData {
+        child_token: we.contract,
+        amount: convert_from_token_amount(&we.amount),
+        user_wallet: we.eth_address.into(),
+        transaction_hash,
+        transaction_event_id: we.event_index,
+        token_id: u64::from_le_bytes(
+            Vec::from(we.token_id.clone())
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid token id."))?,
+        ),
+    };
+    Ok(Keccak256Algorithm::hash(&data.encode()))
+}
+
 impl<M, S> MerkleSetterClient<M, S> {
     pub fn new(
         root_manager: BridgeManager<M>,
@@ -169,8 +208,10 @@ impl<M, S> MerkleSetterClient<M, S> {
             current_leaves: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             max_marked_event_index,
         };
-        for (th, we) in pending_withdrawals {
-            add_withdraw_event(&msc.current_leaves, th, we)?;
+        for (tx_hash, we) in pending_withdrawals {
+            let event_index = we.event_index;
+            let merkle_event_hash = make_event_leaf_hash(tx_hash, &we)?;
+            add_withdraw_event(&msc.current_leaves, event_index, merkle_event_hash)?;
         }
         Ok(msc)
     }
@@ -178,26 +219,13 @@ impl<M, S> MerkleSetterClient<M, S> {
 
 fn add_withdraw_event(
     leaves: &Arc<std::sync::Mutex<BTreeMap<u64, [u8; 32]>>>,
-    transaction_hash: TransactionHash,
-    we: WithdrawEvent,
+    event_index: u64,
+    hash: [u8; 32],
 ) -> anyhow::Result<()> {
-    let data = MerkleData {
-        child_token: we.contract,
-        amount: convert_from_token_amount(&we.amount),
-        user_wallet: we.eth_address.into(),
-        transaction_hash,
-        transaction_event_id: we.event_index,
-        token_id: u64::from_le_bytes(
-            Vec::from(we.token_id.clone())
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid token id."))?,
-        ),
-    };
-    let hash = Keccak256Algorithm::hash(&data.encode());
     let mut lock = leaves
         .lock()
         .map_err(|_| anyhow::anyhow!("Unable to acquire lock."))?;
-    lock.insert(we.event_index, hash);
+    lock.insert(event_index, hash);
     Ok(())
 }
 
@@ -309,12 +337,13 @@ where
     while let Some(mu) = receiver.recv().await {
         match mu {
             MerkleUpdate::NewWithdraws { withdraws } => {
-                for (tx_hash, event) in withdraws {
-                    log::debug!("New withdraw event from transaction {tx_hash}.");
-                    add_withdraw_event(&leaves, tx_hash, event)?;
+                for (event_index, merkle_hash) in withdraws {
+                    log::debug!("New withdraw event with index {event_index}.");
+                    add_withdraw_event(&leaves, event_index, merkle_hash)?;
                 }
             }
             MerkleUpdate::WithdrawalCompleted {
+                receiver: _,
                 original_event_index,
             } => {
                 if remove_withdraw_event(&leaves, original_event_index)?.is_none() {

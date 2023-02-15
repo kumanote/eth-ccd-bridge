@@ -8,6 +8,7 @@ use ethers::{
     abi::AbiDecode,
     prelude::{Filter, Middleware},
 };
+use sha2::Digest;
 
 use crate::{
     concordium_contracts::DatabaseOperation,
@@ -56,6 +57,8 @@ pub enum EthEvent {
         /// native ETH and ERC20. They have different vault contracts
         /// since ETH does not comply with ERC20 spec.
         token_type:  [u8; 32],
+        name:        String,
+        decimals:    u8,
     },
     TokenUnmapped {
         id:          U256,
@@ -112,25 +115,29 @@ impl TryFrom<LockedTokenFilter> for EthEvent {
     }
 }
 
-impl TryFrom<TokenMapAddedFilter> for EthEvent {
+impl TryFrom<(TokenMapAddedFilter, String, u8)> for EthEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: TokenMapAddedFilter) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, name, decimals): (TokenMapAddedFilter, String, u8),
+    ) -> Result<Self, Self::Error> {
         Ok(Self::TokenMapped {
-            id:          value.id,
-            root_token:  value.root_token,
+            id: value.id,
+            root_token: value.root_token,
             child_token: concordium::types::ContractAddress::new(
                 value.child_token_index,
                 value.child_token_sub_index,
             ),
-            token_type:  value.token_type,
+            token_type: value.token_type,
+            name,
+            decimals,
         })
     }
 }
 
 impl From<TokenMapRemovedFilter> for EthEvent {
     fn from(value: TokenMapRemovedFilter) -> Self {
-        Self::TokenMapped {
+        Self::TokenUnmapped {
             id:          value.id,
             root_token:  value.root_token,
             child_token: concordium::types::ContractAddress::new(
@@ -161,7 +168,7 @@ impl TryFrom<WithdrawEventFilter> for EthEvent {
     }
 }
 
-async fn get_eth_block_events<M: Middleware>(
+async fn get_eth_block_events<M: Middleware + 'static>(
     contract: &StateSender<M>,
     block_number: u64,
     upper_block: u64,
@@ -216,6 +223,16 @@ where
                 topics: log.topics,
                 data:   log.data.0.into(),
             })?;
+            let (name, decimals) = if decoded.token_type == &sha3::Keccak256::digest("Ether")[..] {
+                log::debug!("New mapping for ETH.");
+                ("ETH".into(), 18)
+            } else {
+                log::debug!("New mapping for ERC20 token at {}.", decoded.root_token);
+                let contract = crate::erc20::Erc20::new(decoded.root_token, client.clone());
+                let name = contract.name().call().await?;
+                let decimals = contract.decimals().call().await?;
+                (name, decimals)
+            };
             let event = EthBlockEvent {
                 tx_hash:      log
                     .transaction_hash
@@ -224,7 +241,7 @@ where
                     .block_number
                     .context("Transaction is confirmed, so must have block number.")?
                     .as_u64(),
-                event:        decoded.try_into()?,
+                event:        (decoded, name, decimals).try_into()?,
             };
             log::debug!(
                 "Discovered new `TokenMapAdded` event emitted by {} in block {}.",
@@ -381,7 +398,7 @@ const NUM_CONFIRMATIONS: u64 = 10;
 // }
 
 /// Write "finalized" ethereum blocks to the provided channel.
-pub async fn watch_eth_blocks<M: Middleware>(
+pub async fn watch_eth_blocks<M: Middleware + 'static>(
     contract: StateSender<M>,
     actions_channel: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut block_number: u64,

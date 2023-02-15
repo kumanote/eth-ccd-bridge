@@ -1,5 +1,5 @@
 [package]
-name = "ccdeth_relayer2"
+name = "ccdeth_relayer"
 version = "1.0.0"
 edition = "2021"
 
