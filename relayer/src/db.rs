@@ -46,7 +46,14 @@ pub enum EthTransactionStatus {
     Missing,
 }
 
-#[derive(Debug, Copy, Clone, tokio_postgres::types::ToSql, tokio_postgres::types::FromSql, serde::Serialize)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    tokio_postgres::types::ToSql,
+    tokio_postgres::types::FromSql,
+    serde::Serialize,
+)]
 #[postgres(name = "concordium_transaction_status")]
 pub enum TransactionStatus {
     /// Transaction was added to the database and not yet finalized.
@@ -83,6 +90,7 @@ impl PreparedStatements {
         db_tx: &Transaction<'b>,
         origin_tx: &H256,
         origin_depositor: &Option<H160>,
+        deposit_amount: &Option<String>,
         origin_event_index: u64,
         bi: &BlockItem<Payload>,
     ) -> anyhow::Result<i64> {
@@ -94,6 +102,7 @@ impl PreparedStatements {
                 &&hash.as_ref()[..],
                 &origin_tx.as_bytes(),
                 &origin_depositor.as_ref().map(|x| x.as_bytes()),
+                deposit_amount,
                 &(origin_event_index as i64),
                 &tx_bytes,
                 &timestamp,
@@ -176,8 +185,8 @@ impl Database {
         let insert_concordium_tx = client
             .prepare(
                 "INSERT INTO concordium_transactions (tx_hash, origin_tx_hash, \
-                 origin_tx_depositor, origin_event_index, tx, timestamp, status)
- VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+                 origin_tx_depositor, deposit_amount, origin_event_index, tx, timestamp, status)
+ VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
             )
             .await?;
         let get_pending_concordium_txs = client
@@ -486,7 +495,7 @@ impl Database {
     pub async fn insert_transactions<P: PayloadLike>(
         &mut self,
         last_block_number: u64,
-        txs: &[(H256, Option<H160>, u64, BlockItem<P>)],
+        txs: &[(H256, Option<H160>, Option<String>, u64, BlockItem<P>)],
         // List of event indexes to mark as "done"
         wes: &[(H256, u64, U256, TransactionHash, u64, H160, u64)],
         // New token maps.
@@ -496,9 +505,16 @@ impl Database {
     ) -> anyhow::Result<()> {
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
-        for (origin_tx, origin_sender, origin_event_index, tx) in txs {
+        for (origin_tx, origin_sender, deposit_amount, origin_event_index, tx) in txs {
             statements
-                .insert_concordium_tx(&db_tx, origin_tx, origin_sender, *origin_event_index, tx)
+                .insert_concordium_tx(
+                    &db_tx,
+                    origin_tx,
+                    origin_sender,
+                    deposit_amount,
+                    *origin_event_index,
+                    tx,
+                )
                 .await?;
         }
         for (tx_hash, id, amount, origin_tx_hash, origin_event_id, receiver, event_index) in wes {
@@ -769,7 +785,13 @@ pub async fn handle_database(
                             let update = concordium_contracts::StateUpdate::Deposit(deposit);
                             // TODO estimate execution energy.
                             let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push((event.tx_hash, Some(depositor), id.low_u64(), tx));
+                            txs.push((
+                                event.tx_hash,
+                                Some(depositor),
+                                Some(amount.to_string()),
+                                id.low_u64(),
+                                tx,
+                            ));
                         }
                         ethereum::EthEvent::TokenMapped {
                             id,
@@ -787,7 +809,7 @@ pub async fn handle_database(
                             };
                             let update = concordium_contracts::StateUpdate::TokenMap(map);
                             let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push((event.tx_hash, None, id.low_u64(), tx));
+                            txs.push((event.tx_hash, None, None, id.low_u64(), tx));
                             maps.push((root_token, child_token, name, decimals));
                         }
                         ethereum::EthEvent::TokenUnmapped {
@@ -835,7 +857,7 @@ pub async fn handle_database(
 
                 // We have now written all the transactions to the database. Now send them to
                 // the Concordium node.
-                for (_, _, _, tx) in txs {
+                for (_, _, _, _, tx) in txs {
                     let hash = tx.hash();
                     ccd_transaction_sender.send(tx).await?;
                     log::info!("Enqueued transaction {}.", hash);

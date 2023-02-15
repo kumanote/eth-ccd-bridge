@@ -237,8 +237,8 @@ async fn main() -> anyhow::Result<()> {
 
     // return Ok(());
 
-    // let erc20 = ccdeth_relayer::erc20::Erc20::new(app.state_sender, ethereum_client.clone());
-    // let name = erc20.name().call().await;
+    // let erc20 = ccdeth_relayer::erc20::Erc20::new(app.state_sender,
+    // ethereum_client.clone()); let name = erc20.name().call().await;
     // let decimals = erc20.decimals().call().await?;
 
     let state_sender_contract = StateSender::new(app.state_sender, ethereum_client.clone());
