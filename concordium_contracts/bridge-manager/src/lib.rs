@@ -114,11 +114,11 @@ struct State<S> {
 /// View function to check if an event index has been processed.
 #[receive(
     contract = "bridge-manager",
-    name = "getProcessed",
+    name = "isProcessed",
     parameter = "u64",
     return_value = "bool"
 )]
-fn contract_get_processed<S: HasStateApi>(
+fn contract_is_processed<S: HasStateApi>(
     ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>,
 ) -> ReceiveResult<bool> {
@@ -130,17 +130,19 @@ fn contract_get_processed<S: HasStateApi>(
 /// Part of the return parameter of the `viewRoles` function.
 #[derive(Serialize, SchemaType, PartialEq)]
 struct ViewRolesState {
+    /// Vector of roles.
     roles: Vec<Roles>,
 }
 
 /// Return parameter of the `viewRoles` function.
 #[derive(Serialize, SchemaType)]
 struct ViewAllRolesState {
+    /// Vector specifiying for each address a vector of its associated roles.
     all_roles: Vec<(Address, ViewRolesState)>,
 }
 
 /// View function that returns the entire `roles` content of the state. Meant for
-/// testing.
+/// monitoring.
 #[receive(
     contract = "bridge-manager",
     name = "viewRoles",
@@ -165,12 +167,14 @@ fn contract_view_roles<S: HasStateApi>(
 /// Return parameter of the `viewTokenMappings` function.
 #[derive(Serialize, SchemaType, PartialEq)]
 struct ViewTokenMappings {
+    /// Token mappings from ethereum address to concordium contract address.
     root_mappings: Vec<(EthAddress, ContractAddress)>,
+    /// Token mappings from concordium contract address to ethereum address.
     child_mappings: Vec<(ContractAddress, EthAddress)>,
 }
 
 /// View function that returns the entire `tokenMappings` content of the state. Meant for
-/// testing.
+/// monitoring.
 #[receive(
     contract = "bridge-manager",
     name = "viewTokenMappings",
@@ -201,14 +205,18 @@ fn contract_view_token_mappings<S: HasStateApi>(
 /// Return parameter of the `viewConfiguration` function.
 #[derive(Serialize, SchemaType, PartialEq)]
 struct ViewConfigurationState {
+    /// Contract is paused if `paused = true` and unpaused if `paused = false`.
     paused: bool,
+    /// The current event index that has been logged in the last withdraw event.
     emit_event_index: u64,
+    /// The fee to be paid when initiating a withdrawal of tokens.
     withdraw_fee: Amount,
+    /// The address of the treasury receiving the above fees.
     treasurer_address: AccountAddress,
 }
 
 /// View function that returns configuration values of the state. Meant for
-/// testing.
+/// monitoring.
 #[receive(
     contract = "bridge-manager",
     name = "viewConfiguration",
@@ -1152,6 +1160,7 @@ mod tests {
     }
 
     /// Test `view_roles` function displays the `roles` content of the state.
+    /// Add the ADMIN and MAPPER role to ACCOUNT_0 and the MAPPER role to ACCOUNT_1.
     #[concordium_test]
     fn test_view_roles() {
         let mut ctx = TestInitContext::empty();
@@ -1230,7 +1239,78 @@ mod tests {
         );
     }
 
-    /// Test adding an operator succeeds and the appropriate event is logged.
+    /// Test if token mappings can be viewed in the state.
+    #[concordium_test]
+    fn test_token_mappings_view_function() {
+        let mut ctx = TestInitContext::empty();
+        ctx.set_init_origin(ACCOUNT_0);
+        let mut logger = TestLogger::init();
+
+        let mut builder = TestStateBuilder::new();
+
+        // Call the contract function.
+        let result = contract_init(&ctx, &mut builder, &mut logger);
+
+        // Check the result
+        let state = result.expect_report("Contract initialization failed");
+
+        let mut host = TestHost::new(state, builder);
+        let parameter = GrantRoleParams {
+            address: ADDRESS_2,
+            role: Roles::StateSyncer,
+        };
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_0);
+        ctx.set_parameter(&parameter_bytes);
+        let result: ContractResult<()> = contract_grant_role(&ctx, &mut host, &mut logger);
+
+        claim!(result.is_ok(), "ADDRESS_0 is allowed to grant role");
+
+        let parameter = StateUpdate::TokenMap(TokenMapOperation {
+            id: 1u64,
+            root: ETH_ADDRESS,
+            child: CIS2_ADDRESS,
+        });
+
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_2);
+        ctx.set_parameter(&parameter_bytes);
+        let result = contract_receive_state_update(&ctx, &mut host, &mut logger);
+        claim!(result.is_ok(), "ADDRESS_2  is allowed to state update");
+
+        claim!(
+            host.state()
+                .root_mapping
+                .get(&ETH_ADDRESS)
+                .unwrap()
+                .deref()
+                .clone()
+                == CIS2_ADDRESS,
+            "Mapping must be succesfull"
+        );
+
+        // Check `viewTokenMappings` function
+        let token_mappings_result = contract_view_token_mappings(&ctx, &mut host);
+
+        let token_mappings = token_mappings_result.unwrap();
+
+        claim_eq!(
+            token_mappings.root_mappings,
+            vec![(ETH_ADDRESS, CIS2_ADDRESS)],
+            "Initiator does not have admin"
+        );
+        claim_eq!(
+            token_mappings.child_mappings,
+            vec![(CIS2_ADDRESS, ETH_ADDRESS)],
+            "Initiator does not have admin"
+        );
+    }
+
+    /// Test deposit flow. Add tokens to token mappings and deposit a token.
     #[concordium_test]
     fn test_deposit_flow() {
         let mut ctx = TestInitContext::empty();
@@ -1291,22 +1371,6 @@ mod tests {
             "Mapping must be succesfull"
         );
 
-        // Check `viewTokenMappings` function
-        let token_mappings_result = contract_view_token_mappings(&ctx, &mut host);
-
-        let token_mappings = token_mappings_result.unwrap();
-
-        claim_eq!(
-            token_mappings.root_mappings,
-            vec![(ETH_ADDRESS, CIS2_ADDRESS)],
-            "Initiator does not have admin"
-        );
-        claim_eq!(
-            token_mappings.child_mappings,
-            vec![(CIS2_ADDRESS, ETH_ADDRESS)],
-            "Initiator does not have admin"
-        );
-
         let entrypoint_deposit = OwnedEntrypointName::new_unchecked("deposit".into());
         // We are simulating reentrancy with this mock because we mutate the state.
         host.setup_mock_entrypoint(
@@ -1351,11 +1415,11 @@ mod tests {
         let parameter_bytes = to_bytes(&index);
 
         ctx.set_parameter(&parameter_bytes);
-        // Check `getProcessed` function
-        let get_processed_result = contract_get_processed(&ctx, &mut host);
+        // Check `isProcessed` function
+        let is_processed_result = contract_is_processed(&ctx, &mut host);
 
         claim_eq!(
-            get_processed_result,
+            is_processed_result,
             Ok(true),
             "Event index should be processed"
         );
