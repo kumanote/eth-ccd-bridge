@@ -1,6 +1,6 @@
-import { ethers, run, web3 } from 'hardhat'
+import { ethers, run, web3, network } from 'hardhat'
 import { BridgeProxyAdmin, BridgeProxyAdmin__factory, ERC20Vault, ERC20VaultProxy__factory, ERC20Vault__factory, EtherVault, EtherVaultProxy__factory, EtherVault__factory, RootChainManager, RootChainManagerProxy__factory, RootChainManager__factory, StateSender, StateSenderProxy__factory, StateSender__factory } from '../typechain-types'
-
+import { execSync } from 'child_process';
 import { config } from 'dotenv'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 config({
@@ -48,16 +48,18 @@ async function createStateSender(): Promise<StateSender> {
   console.log(stateSender.address)
   await stateSender.deployed()
   console.log('sleep')
-  await sleep(50000)
-  // Verifying stateSender implementation
-  try {
-    await run('verify:verify', {
-      address: stateSender.address,
-      constructorArguments: [
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  await sleep(120000)
+  if (network.name != 'hardhat') {
+    // Verifying stateSender implementation
+    try {
+      await run('verify:verify', {
+        address: stateSender.address,
+        constructorArguments: [
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
   const proxy = await StateSenderFactoryProxy.deploy(
     stateSender.address,
@@ -67,19 +69,29 @@ async function createStateSender(): Promise<StateSender> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying stateSender proxy
-  try {
-    await run('verify:verify', {
-      contract: "contracts/StateSender/StateSenderProxy.sol:StateSenderProxy",
-      address: proxy.address,
-      constructorArguments: [
-        stateSender.address,
-        proxyAdmin.address,
-        stateSender.interface.encodeFunctionData('initialize', [owner.address])
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  if (network.name != 'hardhat') {
+    // Verifying stateSender proxy
+    try {
+      await run('verify:verify', {
+        contract: "contracts/StateSender/StateSenderProxy.sol:StateSenderProxy",
+        address: proxy.address,
+        constructorArguments: [
+          stateSender.address,
+          proxyAdmin.address,
+          stateSender.interface.encodeFunctionData('initialize', [owner.address])
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
+
+    console.log('\nLinking stateSender Proxy to implementation contract:');
+    let output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+      }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
+      }"`
+    ).toString();
+    console.log(output);
   }
 
   console.log(`StateSenderProxy at ${proxy.address} with implementation at ${stateSender.address}`)
@@ -96,17 +108,19 @@ async function createProxyAdmin(): Promise<BridgeProxyAdmin> {
   console.log(proxyAdmin.address)
   await proxyAdmin.deployed()
   console.log('sleep')
-  await sleep(50000)
-  // Verifying BridgeProxyAdmin
-  try {
-    await run('verify:verify', {
-      contract: "contracts/proxy/ProxyAdmin.sol:BridgeProxyAdmin",
-      address: proxyAdmin.address,
-      constructorArguments: [
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  await sleep(120000)
+  if (network.name != 'hardhat') {
+    // Verifying BridgeProxyAdmin
+    try {
+      await run('verify:verify', {
+        contract: "contracts/proxy/ProxyAdmin.sol:BridgeProxyAdmin",
+        address: proxyAdmin.address,
+        constructorArguments: [
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
   console.log(`ProxyAdmin at ${proxyAdmin.address}`)
 
@@ -122,15 +136,17 @@ async function createEtherVault(): Promise<EtherVault> {
   await ethVault.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying ethVault implementation
-  try {
-    await run('verify:verify', {
-      address: ethVault.address,
-      constructorArguments: [
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  if (network.name != 'hardhat') {
+    // Verifying ethVault implementation
+    try {
+      await run('verify:verify', {
+        address: ethVault.address,
+        constructorArguments: [
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
   const proxy = await EthVaultFactoryProxy.deploy(
     ethVault.address,
@@ -140,20 +156,31 @@ async function createEtherVault(): Promise<EtherVault> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying ethVault proxy
-  try {
-    await run('verify:verify', {
-      contract: "contracts/TokenVault/EtherVaultProxy.sol:EtherVaultProxy",
-      address: proxy.address,
-      constructorArguments: [
-        ethVault.address,
-        proxyAdmin.address,
-        ethVault.interface.encodeFunctionData('initialize', [owner.address])
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  if (network.name != 'hardhat') {
+    // Verifying ethVault proxy
+    try {
+      await run('verify:verify', {
+        contract: "contracts/TokenVault/EtherVaultProxy.sol:EtherVaultProxy",
+        address: proxy.address,
+        constructorArguments: [
+          ethVault.address,
+          proxyAdmin.address,
+          ethVault.interface.encodeFunctionData('initialize', [owner.address])
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
+
+    console.log('\nLinking ethVault Proxy to implementation contract:');
+    let output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+      }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
+      }"`
+    ).toString();
+    console.log(output);
   }
+
   console.log(`EtherVaultProxy at ${proxy.address} with implementation at ${ethVault.address}`)
 
   return EthVaultFactory.attach(proxy.address)
@@ -167,15 +194,17 @@ async function createErc20Vault(): Promise<ERC20Vault> {
   await erc20Vault.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying erc20Vault implementation
-  try {
-    await run('verify:verify', {
-      address: erc20Vault.address,
-      constructorArguments: [
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  if (network.name != 'hardhat') {
+    // Verifying erc20Vault implementation
+    try {
+      await run('verify:verify', {
+        address: erc20Vault.address,
+        constructorArguments: [
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
   const proxy = await ERC20VaultFactoryProxy.deploy(
     erc20Vault.address,
@@ -185,20 +214,31 @@ async function createErc20Vault(): Promise<ERC20Vault> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying erc20Vault proxy
-  try {
-    await run('verify:verify', {
-      contract: "contracts/TokenVault/ERC20VaultProxy.sol:ERC20VaultProxy",
-      address: proxy.address,
-      constructorArguments: [
-        erc20Vault.address,
-        proxyAdmin.address,
-        erc20Vault.interface.encodeFunctionData('initialize', [owner.address])
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  if (network.name != 'hardhat') {
+    // Verifying erc20Vault proxy
+    try {
+      await run('verify:verify', {
+        contract: "contracts/TokenVault/ERC20VaultProxy.sol:ERC20VaultProxy",
+        address: proxy.address,
+        constructorArguments: [
+          erc20Vault.address,
+          proxyAdmin.address,
+          erc20Vault.interface.encodeFunctionData('initialize', [owner.address])
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
+
+    console.log('\nLinking erc20Vault Proxy to implementation contract:');
+    let output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+      }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
+      }"`
+    ).toString();
+    console.log(output);
   }
+
   console.log(`ERC20VaultProxy at ${proxy.address} with implementation at ${erc20Vault.address}`)
 
   return ERC20VaultFactory.attach(proxy.address)
@@ -213,15 +253,17 @@ async function createRootChainManager(): Promise<RootChainManager> {
   await rootManager.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying rootManager implementation
-  try {
-    await run('verify:verify', {
-      address: rootManager.address,
-      constructorArguments: [
-      ]
-    })
-  } catch (err) {
-    console.error(err)
+  if (network.name != 'hardhat') {
+    // Verifying rootManager implementation
+    try {
+      await run('verify:verify', {
+        address: rootManager.address,
+        constructorArguments: [
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
   const proxy = await RootChainManagerFactoryProxy.deploy(
     rootManager.address,
@@ -231,28 +273,30 @@ async function createRootChainManager(): Promise<RootChainManager> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  // Verifying rootManager proxy
-  try {
-    await run('verify:verify', {
-      contract: "contracts/root/RootChainManagerProxy.sol:RootChainManagerProxy",
-      address: proxy.address,
-      constructorArguments: [
-        rootManager.address,
-        proxyAdmin.address,
-        rootManager.interface.encodeFunctionData('initialize', [owner.address])
-      ]
-    })
-  } catch (err) {
-    console.error(err)
-  }
+  if (network.name != 'hardhat') {
+    // Verifying rootManager proxy
+    try {
+      await run('verify:verify', {
+        contract: "contracts/root/RootChainManagerProxy.sol:RootChainManagerProxy",
+        address: proxy.address,
+        constructorArguments: [
+          rootManager.address,
+          proxyAdmin.address,
+          rootManager.interface.encodeFunctionData('initialize', [owner.address])
+        ]
+      })
+    } catch (err) {
+      console.error(err)
+    }
 
-  //  console.log('\nLinking Proxy to implementation contract:');
-  // let output = execSync(
-  //     `curl -d "address=${proxy}" -s "https://api${network != 'ethereum' ? `-` + network : ''
-  //     }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
-  //     }"`
-  // ).toString();
-  // console.log(output);
+    console.log('\nLinking rootManager Proxy to implementation contract:');
+    let output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+      }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
+      }"`
+    ).toString();
+    console.log(output);
+  }
 
   console.log(`RootChainManagerProxy at ${proxy.address} with implementation at ${rootManager.address}`)
 
