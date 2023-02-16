@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import { ethers } from "ethers";
 
 /**
  * Ether value to decimal
@@ -9,7 +9,7 @@ import { ethers } from 'ethers';
  * @returns {decimal} amount
  */
 export const formatUnits = (amount: ethers.BigNumberish, decimals = 18): number =>
-  parseFloat(ethers.utils.formatUnits(amount, decimals));
+    parseFloat(ethers.utils.formatUnits(amount, decimals));
 
 /**
  *

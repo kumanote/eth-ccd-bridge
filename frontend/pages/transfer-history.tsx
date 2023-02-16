@@ -4,7 +4,7 @@ import React from "react";
 type Props = {};
 
 const TransferHistory = (props: Props) => {
-  return <History />;
+    return <History />;
 };
 
 export default TransferHistory;

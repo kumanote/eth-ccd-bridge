@@ -9,16 +9,16 @@ import "../styles/globals.css";
 const queryClient = new QueryClient();
 
 function MyApp({ Component, pageProps }: AppProps) {
-  return (
-    <Web3Provider connectors={connectors} libraryName="ethers.js">
-      <GlobalStyles />
-      <QueryClientProvider client={queryClient}>
-        <Layout>
-          <Component {...pageProps} />
-        </Layout>
-      </QueryClientProvider>
-    </Web3Provider>
-  );
+    return (
+        <Web3Provider connectors={connectors} libraryName="ethers.js">
+            <GlobalStyles />
+            <QueryClientProvider client={queryClient}>
+                <Layout>
+                    <Component {...pageProps} />
+                </Layout>
+            </QueryClientProvider>
+        </Web3Provider>
+    );
 }
 
 export default MyApp;

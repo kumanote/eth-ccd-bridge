@@ -1,6 +1,6 @@
 REM Clear existing AxiosClient file
 call break>./src/api-query/__generated__/AxiosClient.ts
-powershell -Command "(new-object System.Net.WebClient).DownloadFile('https://relayer-testnet.toni.systems/openapi.json','public/swagger-spec.json')"
+powershell -Command "(new-object System.Net.WebClient).DownloadFile('public/openapi.json')"
 REM Install typegen code generator
 call npm install --global openapi-client-axios-typegen
 REM Run typegen on the swagger json specs, write to AxiosClient class file
