@@ -1,8 +1,6 @@
-//! wCCD: An example implementation of CIS2 for a single fungible token.
+//! An example implementation of CIS2 for a single fungible token.
 //!
 //! # Description
-//! The token in this contract is a wrapped CCD (wCCD), meaning it holds a one
-//! to one correspondence with the CCD.
 //! Note: The word 'address' refers to either an account address or a
 //! contract address.
 //!
@@ -11,25 +9,14 @@
 //! address to another address. An address can enable and disable one or more
 //! addresses as operators. An operator of some token owner address is allowed
 //! to transfer any tokens of the owner.
-//!
-//! Besides the contract functions required CIS2, this contract implements a
-//! function `wrap` for converting CCD into wCCD tokens. It accepts an amount of
-//! CCD and mints this amount of wCCD. The function takes a receiving address as
-//! the parameter and transfers the amount of tokens.
-//!
-//! The contract also implements a contract function `unwrap` for converting
-//! wCCD back into CCD. The function takes the amount of tokens to unwrap, the
-//! address owning these wCCD and a receiver for the CCD. If the sender is the
-//! owner or an operator of the owner, the wCCD are burned and the amount of
-//! CCD is sent to the receiver.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_cis2::{Cis2Event, *};
 use concordium_std::{collections::BTreeMap, *};
 use primitive_types::U256;
 
-/// The id of the wCCD token in this contract.
-const TOKEN_ID_WCCD: ContractTokenId = TokenIdUnit();
+/// The id of the token in this contract.
+const TOKEN_ID: ContractTokenId = TokenIdUnit();
 
 /// Tag for the GrantRole event.
 pub const GRANT_ROLE_EVENT_TAG: u8 = 0;
@@ -94,6 +81,36 @@ struct ReturnBasicState {
     metadata_url: concordium_cis2::MetadataUrl,
     /// Contract is paused if `paused = true` and unpaused if `paused = false`.
     paused: bool,
+}
+
+/// Part of the return type of the `viewRoles` function.
+#[derive(Serialize, SchemaType, PartialEq)]
+struct ViewRolesState {
+    /// Vector of roles.
+    roles: Vec<Roles>,
+}
+
+/// The return type of the `viewRoles` function.
+#[derive(Serialize, SchemaType)]
+struct ViewAllRolesState {
+    /// Vector specifiying for each address a vector of its associated roles.
+    all_roles: Vec<(Address, ViewRolesState)>,
+}
+
+/// Part of the return type of the `viewTokenState` function.
+#[derive(Serialize, SchemaType, Debug, PartialEq)]
+struct ViewAddressState {
+    /// The number of tokens owned by this address.
+    balance: ContractTokenAmount,
+    /// The addresses which are currently enabled as operators for
+    /// this address.
+    operators: Vec<Address>,
+}
+
+/// The return type of the `viewTokenState` function.
+#[derive(Serialize, SchemaType, Debug)]
+struct ViewTokenState {
+    token_state: Vec<(Address, ViewAddressState)>,
 }
 
 /// The parameter type for the contract function `setPaused`.
@@ -345,7 +362,7 @@ impl<S: HasStateApi> State<S> {
         token_id: &ContractTokenId,
         address: &Address,
     ) -> ContractResult<ContractTokenAmount> {
-        ensure_eq!(token_id, &TOKEN_ID_WCCD, ContractError::InvalidTokenId);
+        ensure_eq!(token_id, &TOKEN_ID, ContractError::InvalidTokenId);
         Ok(self
             .token
             .get(address)
@@ -373,7 +390,7 @@ impl<S: HasStateApi> State<S> {
         to: &Address,
         state_builder: &mut StateBuilder<S>,
     ) -> ContractResult<()> {
-        ensure_eq!(token_id, &TOKEN_ID_WCCD, ContractError::InvalidTokenId);
+        ensure_eq!(token_id, &TOKEN_ID, ContractError::InvalidTokenId);
         if amount == TOKEN_AMOUNT_ZERO {
             return Ok(());
         }
@@ -431,7 +448,7 @@ impl<S: HasStateApi> State<S> {
         owner: &Address,
         state_builder: &mut StateBuilder<S>,
     ) -> ContractResult<()> {
-        ensure_eq!(token_id, &TOKEN_ID_WCCD, ContractError::InvalidTokenId);
+        ensure_eq!(token_id, &TOKEN_ID, ContractError::InvalidTokenId);
         let mut owner_state = self.token.entry(*owner).or_insert_with(|| AddressState {
             balance: TOKEN_AMOUNT_ZERO,
             operators: state_builder.new_set(),
@@ -446,7 +463,7 @@ impl<S: HasStateApi> State<S> {
         amount: ContractTokenAmount,
         owner: &Address,
     ) -> ContractResult<()> {
-        ensure_eq!(token_id, &TOKEN_ID_WCCD, ContractError::InvalidTokenId);
+        ensure_eq!(token_id, &TOKEN_ID, ContractError::InvalidTokenId);
         if amount == TOKEN_AMOUNT_ZERO {
             return Ok(());
         }
@@ -550,7 +567,7 @@ fn contract_init<S: HasStateApi>(
 
     // Log event for the newly minted token.
     logger.log(&BridgeableEvent::Cis2Event(Cis2Event::Mint(MintEvent {
-        token_id: TOKEN_ID_WCCD,
+        token_id: TOKEN_ID,
         amount: TOKEN_AMOUNT_ZERO,
         owner: invoker,
     })))?;
@@ -560,8 +577,8 @@ fn contract_init<S: HasStateApi>(
         _,
         ContractTokenAmount,
     >(TokenMetadataEvent {
-        token_id: TOKEN_ID_WCCD,
-        metadata_url: metadata_url,
+        token_id: TOKEN_ID,
+        metadata_url,
     })))?;
 
     // Log event for the new admin.
@@ -760,8 +777,8 @@ fn contract_set_token_metadata_url<S: HasStateApi>(
         _,
         ContractTokenAmount,
     >(TokenMetadataEvent {
-        token_id: TOKEN_ID_WCCD,
-        metadata_url: metadata_url,
+        token_id: TOKEN_ID,
+        metadata_url,
     })))?;
 
     Ok(())
@@ -865,7 +882,7 @@ fn contract_token_metadata<S: HasStateApi>(
     for _ in 0..queries_length {
         let token_id: ContractTokenId = cursor.get()?;
         // Check the token exists.
-        ensure_eq!(token_id, TOKEN_ID_WCCD, ContractError::InvalidTokenId);
+        ensure_eq!(token_id, TOKEN_ID, ContractError::InvalidTokenId);
 
         response.push(metadata_url.clone());
     }
@@ -1032,6 +1049,55 @@ fn contract_view<S: HasStateApi>(
     };
     Ok(state)
 }
+
+/// View function that returns the entire `roles` content of the state. Meant for
+/// monitoring.
+#[receive(
+    contract = "cis2-bridgeable",
+    name = "viewRoles",
+    return_value = "ViewAllRolesState"
+)]
+fn contract_view_roles<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    host: &impl HasHost<State<S>, StateApiType = S>,
+) -> ReceiveResult<ViewAllRolesState> {
+    let state = host.state();
+
+    let mut all_roles = Vec::new();
+    for (address, a_state) in state.roles.iter() {
+        let roles: Vec<Roles> = a_state.roles.iter().map(|x| *x).collect();
+
+        all_roles.push((*address, ViewRolesState { roles }));
+    }
+
+    Ok(ViewAllRolesState { all_roles })
+}
+
+/// View function that returns the entire state setting of balances and operators. Meant for
+/// testing.
+#[receive(
+    contract = "cis2-bridgeable",
+    name = "viewTokenState",
+    return_value = "ViewTokenState"
+)]
+fn contract_view_token_state<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    host: &impl HasHost<State<S>, StateApiType = S>,
+) -> ReceiveResult<ViewTokenState> {
+    let state = host.state();
+
+    let mut inner_state = Vec::new();
+    for (k, a_state) in state.token.iter() {
+        let balance = a_state.balance;
+        let operators = a_state.operators.iter().map(|x| *x).collect();
+        inner_state.push((*k, ViewAddressState { balance, operators }));
+    }
+
+    Ok(ViewTokenState {
+        token_state: inner_state,
+    })
+}
+
 // Bridge functions
 
 /// The parameter type for the contract function `hasRole`.
@@ -1073,7 +1139,7 @@ fn contract_has_role<S: HasStateApi>(
     let address = query.address;
     let role = query.role;
     let has_role = _host.state().has_role(&address, role);
-    return Ok(HasRoleQueryResponse::from(has_role));
+    Ok(HasRoleQueryResponse::from(has_role))
 }
 
 /// The parameter type for the contract function `grantRole`.
@@ -1161,7 +1227,7 @@ fn contract_remove_role<S: HasStateApi>(
     );
 
     ensure!(
-        state.has_role(&params.address, params.role.clone()),
+        state.has_role(&params.address, params.role),
         ContractError::Custom(CustomContractError::RoleNotAssigned)
     );
 
@@ -1211,15 +1277,10 @@ fn contract_deposit<S: HasStateApi>(
         ContractError::Unauthorized
     );
 
-    state.mint(
-        &TOKEN_ID_WCCD,
-        params.amount,
-        &params.address,
-        state_builder,
-    )?;
+    state.mint(&TOKEN_ID, params.amount, &params.address, state_builder)?;
     // Log event for the newly minted token.
     logger.log(&BridgeableEvent::Cis2Event(Cis2Event::Mint(MintEvent {
-        token_id: TOKEN_ID_WCCD,
+        token_id: TOKEN_ID,
         amount: params.amount,
         owner: params.address,
     })))?;
@@ -1267,11 +1328,11 @@ fn contract_withdraw<S: HasStateApi>(
         ContractError::Unauthorized
     );
 
-    state.burn(&TOKEN_ID_WCCD, params.amount, &params.address)?;
+    state.burn(&TOKEN_ID, params.amount, &params.address)?;
 
     // Log event for the newly burned token.
     logger.log(&BridgeableEvent::Cis2Event(Cis2Event::Burn(BurnEvent {
-        token_id: TOKEN_ID_WCCD,
+        token_id: TOKEN_ID,
         amount: params.amount,
         owner: params.address,
     })))?;
@@ -1291,10 +1352,6 @@ mod tests {
     const ADDRESS_1: Address = Address::Account(ACCOUNT_1);
     const ACCOUNT_2: AccountAddress = AccountAddress([2u8; 32]);
     const ADDRESS_2: Address = Address::Account(ACCOUNT_2);
-    const ADMIN_ACCOUNT: AccountAddress = AccountAddress([2u8; 32]);
-    const ADMIN_ADDRESS: Address = Address::Account(ADMIN_ACCOUNT);
-    const NEW_ADMIN_ACCOUNT: AccountAddress = AccountAddress([3u8; 32]);
-    const NEW_ADMIN_ADDRESS: Address = Address::Account(NEW_ADMIN_ACCOUNT);
 
     const TOKEN_METADATA_URL: &str = "https://example.com/metadata";
 
@@ -1315,7 +1372,7 @@ mod tests {
     fn initial_state<S: HasStateApi>(state_builder: &mut StateBuilder<S>) -> State<S> {
         let mut state = State::new(state_builder, initial_metadata());
         state
-            .mint(&TOKEN_ID_WCCD, token_amount(400), &ADDRESS_0, state_builder)
+            .mint(&TOKEN_ID, token_amount(400), &ADDRESS_0, state_builder)
             .expect_report("Failed to setup state");
         state.grant_role(&ADDRESS_0, Roles::Admin, state_builder);
         state
@@ -1355,7 +1412,7 @@ mod tests {
             "Only one token is initialized"
         );
         let balance0 = state
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_0)
+            .balance(&TOKEN_ID, &ADDRESS_0)
             .expect_report("Token is expected to exist");
         claim_eq!(
             balance0,
@@ -1379,7 +1436,7 @@ mod tests {
                 .contains(&to_bytes(&BridgeableEvent::Cis2Event(Cis2Event::Mint(
                     MintEvent {
                         owner: ADDRESS_0,
-                        token_id: TOKEN_ID_WCCD,
+                        token_id: TOKEN_ID,
                         amount: TOKEN_AMOUNT_ZERO,
                     }
                 )))),
@@ -1389,7 +1446,7 @@ mod tests {
         claim!(
             logger.logs.contains(&to_bytes(&BridgeableEvent::Cis2Event(
                 Cis2Event::TokenMetadata::<_, ContractTokenAmount>(TokenMetadataEvent {
-                    token_id: TOKEN_ID_WCCD,
+                    token_id: TOKEN_ID,
                     metadata_url: MetadataUrl {
                         url: TOKEN_METADATA_URL.to_string(),
                         hash: Some([10_u8; 32])
@@ -1407,6 +1464,236 @@ mod tests {
                     role: Roles::Admin
                 }))),
             "Missing event for the new admin"
+        );
+    }
+
+    /// Test `view_token_state` function to return the entire state setting of balances and operators.
+    #[concordium_test]
+    fn test_view_token_state() {
+        let crypto: TestCryptoPrimitives = TestCryptoPrimitives::new();
+
+        // Setup the context
+        let mut ctx = TestInitContext::empty();
+        ctx.set_init_origin(ACCOUNT_0);
+        let mut logger = TestLogger::init();
+
+        let mut builder = TestStateBuilder::new();
+
+        // and parameter.
+        let init_params = SetMetadataUrlParams {
+            url: TOKEN_METADATA_URL.to_string(),
+            hash: Some([10_u8; 32]),
+        };
+        let parameter_bytes = to_bytes(&init_params);
+        ctx.set_parameter(&parameter_bytes);
+
+        // Call the contract function.
+        let result = contract_init(&ctx, &mut builder, &mut logger, &crypto);
+
+        // Check the result
+        let state = result.expect_report("Contract initialization failed");
+
+        let mut host = TestHost::new(state, builder);
+
+        // Grant ADDRESS_1 role MANAGER
+        let parameter = GrantRoleParams {
+            address: ADDRESS_1,
+            role: Roles::Manager,
+        };
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_0);
+        ctx.set_parameter(&parameter_bytes);
+        let result: ContractResult<()> = contract_grant_role(&ctx, &mut host, &mut logger);
+
+        claim!(result.is_ok(), "ADDRESS_0  is allowed to grant role");
+
+        // Deposit 20 tokens to ADDRESS_2
+        let deposit_param = DepositParams {
+            address: ADDRESS_2,
+            amount: token_amount(20),
+            token_id: TokenIdU64(0),
+        };
+        let deposit_param_bytes = to_bytes(&deposit_param);
+
+        ctx.set_sender(ADDRESS_1);
+        ctx.set_parameter(&deposit_param_bytes);
+
+        let result = contract_deposit(&ctx, &mut host, &mut logger);
+        claim!(result.is_ok(), "ADDRESS_1 is allowed to deposit");
+
+        // Deposit 10 tokens to ADDRESS_1
+        let deposit_param = DepositParams {
+            address: ADDRESS_1,
+            amount: token_amount(10),
+            token_id: TokenIdU64(0),
+        };
+        let deposit_param_bytes = to_bytes(&deposit_param);
+
+        ctx.set_sender(ADDRESS_1);
+        ctx.set_parameter(&deposit_param_bytes);
+        logger.logs.clear();
+        let result = contract_deposit(&ctx, &mut host, &mut logger);
+        claim!(result.is_ok(), "ADDRESS_1 is allowed to deposit");
+
+        // Add ADDRESS_2 as an operator of ADDRESS_1
+        let update = UpdateOperator {
+            operator: ADDRESS_2,
+            update: OperatorUpdate::Add,
+        };
+        let parameter = UpdateOperatorParams(vec![update]);
+        let parameter_bytes = to_bytes(&parameter);
+        ctx.set_parameter(&parameter_bytes);
+
+        // Call the contract function.
+        let result: ContractResult<()> = contract_update_operator(&ctx, &mut host, &mut logger);
+        claim!(
+            result.is_ok(),
+            "ADDRESS_1 should be able to set ADDRESS_2 as operator"
+        );
+
+        // Add ADDRESS_1 as an operator of ADDRESS_2
+        ctx.set_sender(ADDRESS_2);
+
+        let update = UpdateOperator {
+            operator: ADDRESS_1,
+            update: OperatorUpdate::Add,
+        };
+        let parameter = UpdateOperatorParams(vec![update]);
+        let parameter_bytes = to_bytes(&parameter);
+        ctx.set_parameter(&parameter_bytes);
+
+        // Call the contract function.
+        let result: ContractResult<()> = contract_update_operator(&ctx, &mut host, &mut logger);
+        claim!(
+            result.is_ok(),
+            "ADDRESS_2 should be able to set Address_1 as operator"
+        );
+
+        // Check `view_token_state` function returns the entire state setting of balances and operators.
+        let view_token_state_result = contract_view_token_state(&ctx, &mut host);
+
+        let token_state = view_token_state_result.unwrap().token_state;
+
+        // Check the view_token_state_result
+        claim_eq!(
+            token_state.len(),
+            2,
+            "Exactly 2 accounts should be included in the state"
+        );
+        claim_eq!(
+            token_state[0],
+            (
+                concordium_std::Address::Account(ACCOUNT_1),
+                ViewAddressState {
+                    balance: token_amount(10),
+                    operators: [ADDRESS_2].to_vec()
+                }
+            ),
+            "ACCOUNT_1 should have the correct balance and operators"
+        );
+        claim_eq!(
+            token_state[1],
+            (
+                concordium_std::Address::Account(ACCOUNT_2),
+                ViewAddressState {
+                    balance: token_amount(20),
+                    operators: [ADDRESS_1].to_vec()
+                }
+            ),
+            "ACCOUNT_2 should have the correct balance and operators"
+        );
+    }
+
+    /// Test `view_roles` function displays the `roles` content of the state.
+    /// Add the ADMIN and MANAGER role to ACCOUNT_0 and the MANAGER role to ACCOUNT_1.
+    #[concordium_test]
+    fn test_view_roles() {
+        let crypto: TestCryptoPrimitives = TestCryptoPrimitives::new();
+
+        // Setup the context
+        let mut ctx = TestInitContext::empty();
+        ctx.set_init_origin(ACCOUNT_0);
+        let mut logger = TestLogger::init();
+
+        let mut builder = TestStateBuilder::new();
+
+        // and parameter.
+        let init_params = SetMetadataUrlParams {
+            url: TOKEN_METADATA_URL.to_string(),
+            hash: Some([10_u8; 32]),
+        };
+        let parameter_bytes = to_bytes(&init_params);
+        ctx.set_parameter(&parameter_bytes);
+
+        // Call the contract function.
+        let result = contract_init(&ctx, &mut builder, &mut logger, &crypto);
+
+        // Check the result
+        let state = result.expect_report("Contract initialization failed");
+
+        let mut host = TestHost::new(state, builder);
+        let parameter = GrantRoleParams {
+            address: ADDRESS_1,
+            role: Roles::Manager,
+        };
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_0);
+        ctx.set_parameter(&parameter_bytes);
+        let grant_role_result = contract_grant_role(&ctx, &mut host, &mut logger);
+        claim!(
+            grant_role_result.is_ok(),
+            "ADDRESS_0  is allowed to grant role"
+        );
+
+        let parameter = GrantRoleParams {
+            address: ADDRESS_0,
+            role: Roles::Manager,
+        };
+        let parameter_bytes = to_bytes(&parameter);
+        let mut ctx = TestReceiveContext::empty();
+
+        ctx.set_sender(ADDRESS_0);
+        ctx.set_parameter(&parameter_bytes);
+        let grant_role_result2 = contract_grant_role(&ctx, &mut host, &mut logger);
+        claim!(
+            grant_role_result2.is_ok(),
+            "ADDRESS_0  is allowed to grant role"
+        );
+
+        // Testing the `viewRoles` function
+        let roles_result = contract_view_roles(&ctx, &mut host);
+
+        let roles = roles_result.unwrap();
+
+        // Check the roles_result
+        claim_eq!(
+            roles.all_roles.len(),
+            2,
+            "Exactly 2 accounts should have roles"
+        );
+        claim_eq!(
+            roles.all_roles[0],
+            (
+                concordium_std::Address::Account(ACCOUNT_0),
+                ViewRolesState {
+                    roles: vec![Roles::Admin, Roles::Manager]
+                }
+            ),
+            "ACCOUNT_0 should have the roles Admin and Manager"
+        );
+        claim_eq!(
+            roles.all_roles[1],
+            (
+                concordium_std::Address::Account(ACCOUNT_1),
+                ViewRolesState {
+                    roles: vec![Roles::Manager]
+                }
+            ),
+            "ACCOUNT_1 should have the role Manager"
         );
     }
 
@@ -1506,7 +1793,7 @@ mod tests {
         claim!(
             logger.logs.contains(&to_bytes(
                 &Cis2Event::TokenMetadata::<_, ContractTokenAmount>(TokenMetadataEvent {
-                    token_id: TOKEN_ID_WCCD,
+                    token_id: TOKEN_ID,
                     metadata_url: MetadataUrl {
                         url: new_metadata_url.to_string(),
                         hash: Some([57_u8; 32]),
@@ -1526,7 +1813,7 @@ mod tests {
 
         // and parameter.
         let transfer = Transfer {
-            token_id: TOKEN_ID_WCCD,
+            token_id: TOKEN_ID,
             amount: token_amount(100),
             from: ADDRESS_0,
             to: Receiver::from_account(ACCOUNT_1),
@@ -1540,12 +1827,7 @@ mod tests {
         let mut state_builder = TestStateBuilder::new();
         let mut state = State::new(&mut state_builder, initial_metadata());
         state
-            .mint(
-                &TOKEN_ID_WCCD,
-                token_amount(400),
-                &ADDRESS_0,
-                &mut state_builder,
-            )
+            .mint(&TOKEN_ID, token_amount(400), &ADDRESS_0, &mut state_builder)
             .expect_report("Failed to setup state");
         let mut host = TestHost::new(state, state_builder);
 
@@ -1557,11 +1839,11 @@ mod tests {
         // Check the state.
         let balance0 = host
             .state()
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_0)
+            .balance(&TOKEN_ID, &ADDRESS_0)
             .expect_report("Token is expected to exist");
         let balance1 = host
             .state()
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_1)
+            .balance(&TOKEN_ID, &ADDRESS_1)
             .expect_report("Token is expected to exist");
         claim_eq!(
             balance0,
@@ -1581,7 +1863,7 @@ mod tests {
             to_bytes(&Cis2Event::Transfer(TransferEvent {
                 from: ADDRESS_0,
                 to: ADDRESS_1,
-                token_id: TOKEN_ID_WCCD,
+                token_id: TOKEN_ID,
                 amount: token_amount(100),
             })),
             "Incorrect event emitted"
@@ -1600,7 +1882,7 @@ mod tests {
         let transfer = Transfer {
             from: ADDRESS_0,
             to: Receiver::from_account(ACCOUNT_1),
-            token_id: TOKEN_ID_WCCD,
+            token_id: TOKEN_ID,
             amount: token_amount(100),
             data: AdditionalData::empty(),
         };
@@ -1636,7 +1918,7 @@ mod tests {
         let transfer = Transfer {
             from: ADDRESS_0,
             to: Receiver::from_account(ACCOUNT_1),
-            token_id: TOKEN_ID_WCCD,
+            token_id: TOKEN_ID,
             amount: token_amount(100),
             data: AdditionalData::empty(),
         };
@@ -1659,11 +1941,11 @@ mod tests {
         // Check the state.
         let balance0 = host
             .state()
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_0)
+            .balance(&TOKEN_ID, &ADDRESS_0)
             .expect_report("Token is expected to exist");
         let balance1 = host
             .state()
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_1)
+            .balance(&TOKEN_ID, &ADDRESS_1)
             .expect_report("Token is expected to exist");
         claim_eq!(balance0, token_amount(300)); //, "Token owner balance should be decreased by the transferred amount");
         claim_eq!(
@@ -1679,7 +1961,7 @@ mod tests {
             to_bytes(&Cis2Event::Transfer(TransferEvent {
                 from: ADDRESS_0,
                 to: ADDRESS_1,
-                token_id: TOKEN_ID_WCCD,
+                token_id: TOKEN_ID,
                 amount: token_amount(100),
             })),
             "Incorrect event emitted"
@@ -1958,7 +2240,7 @@ mod tests {
         // Check Balances
         let balance = host
             .state()
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_2)
+            .balance(&TOKEN_ID, &ADDRESS_2)
             .expect_report("Token is expected to exist");
 
         claim_eq!(balance, token_amount(20));
@@ -1969,7 +2251,7 @@ mod tests {
             logger.logs[0],
             to_bytes(&Cis2Event::Mint(MintEvent {
                 owner: ADDRESS_2,
-                token_id: TOKEN_ID_WCCD,
+                token_id: TOKEN_ID,
                 amount: token_amount(20),
             })),
             "Incorrect event emitted"
@@ -2048,7 +2330,7 @@ mod tests {
         // Check Balances
         let balance = host
             .state()
-            .balance(&TOKEN_ID_WCCD, &ADDRESS_2)
+            .balance(&TOKEN_ID, &ADDRESS_2)
             .expect_report("Token is expected to exist");
 
         claim_eq!(balance, token_amount(11));
@@ -2059,7 +2341,7 @@ mod tests {
             logger.logs[0],
             to_bytes(&Cis2Event::Burn(BurnEvent {
                 owner: ADDRESS_2,
-                token_id: TOKEN_ID_WCCD,
+                token_id: TOKEN_ID,
                 amount: token_amount(9),
             })),
             "Incorrect event emitted"
