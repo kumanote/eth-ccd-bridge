@@ -88,10 +88,6 @@ impl PreparedStatements {
     pub async fn insert_concordium_tx<'a, 'b, Payload: PayloadLike>(
         &'a self,
         db_tx: &Transaction<'b>,
-        origin_tx: &H256,
-        origin_depositor: &Option<H160>,
-        deposit_amount: &Option<String>,
-        origin_event_index: u64,
         bi: &BlockItem<Payload>,
     ) -> anyhow::Result<i64> {
         let hash = bi.hash();
@@ -100,10 +96,6 @@ impl PreparedStatements {
         let res = db_tx
             .query_one(&self.insert_concordium_tx, &[
                 &&hash.as_ref()[..],
-                &origin_tx.as_bytes(),
-                &origin_depositor.as_ref().map(|x| x.as_bytes()),
-                deposit_amount,
-                &(origin_event_index as i64),
                 &tx_bytes,
                 &timestamp,
                 &TransactionStatus::Pending,
@@ -129,14 +121,24 @@ impl PreparedStatements {
                 contracts_common::to_bytes(tm),
             ),
             BridgeEvent::Deposit(de) => {
-                let rows = db_tx.query(
-                    "UPDATE ethereum_deposit_events SET tx_hash = $2 WHERE origin_event_index = $1 RETURNING id",
-                    &[&(de.id as i64), &&tx_hash.as_ref()[..]]
-                ).await?;
+                let rows = db_tx
+                    .query(
+                        "UPDATE ethereum_deposit_events SET tx_hash = $2 WHERE origin_event_index \
+                         = $1 RETURNING id",
+                        &[&(de.id as i64), &&tx_hash.as_ref()[..]],
+                    )
+                    .await?;
                 if rows.len() != 1 {
                     log::warn!("Deposited an event that was not emitted on Ethereum.");
                 }
-                (ConcordiumEventType::Deposit, None, None, None, None, contracts_common::to_bytes(de))
+                (
+                    ConcordiumEventType::Deposit,
+                    None,
+                    None,
+                    None,
+                    None,
+                    contracts_common::to_bytes(de),
+                )
             }
             BridgeEvent::Withdraw(we) => (
                 ConcordiumEventType::Withdraw,
@@ -211,9 +213,8 @@ impl Database {
         client.batch_execute(SCHEMA).await?;
         let insert_concordium_tx = client
             .prepare(
-                "INSERT INTO concordium_transactions (tx_hash, origin_tx_hash, \
-                 origin_tx_depositor, deposit_amount, origin_event_index, tx, timestamp, status)
- VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+                "INSERT INTO concordium_transactions (tx_hash, tx, timestamp, status) VALUES ($1, \
+                 $2, $3, $4) RETURNING id",
             )
             .await?;
         let get_pending_concordium_txs = client
@@ -241,8 +242,9 @@ impl Database {
             .await?;
         let insert_concordium_event = client
             .prepare(
-                "INSERT INTO concordium_events (tx_hash, event_index, event_type, child_index, child_subindex, receiver, amount, event_data, \
-                 processed, event_merkle_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+                "INSERT INTO concordium_events (tx_hash, event_index, event_type, child_index, \
+                 child_subindex, receiver, amount, event_data, processed, event_merkle_hash) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
             )
             .await?;
 
@@ -522,7 +524,7 @@ impl Database {
     pub async fn insert_transactions<P: PayloadLike>(
         &mut self,
         last_block_number: u64,
-        txs: &[(H256, Option<H160>, Option<String>, u64, BlockItem<P>)],
+        txs: &[BlockItem<P>],
         // List of event indexes to mark as "done"
         wes: &[(H256, u64, U256, TransactionHash, u64, H160, u64)],
         deposits: &[(H256, u64, U256, H160, H160)],
@@ -533,23 +535,23 @@ impl Database {
     ) -> anyhow::Result<()> {
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
-        for (origin_tx, origin_sender, deposit_amount, origin_event_index, tx) in txs {
-            statements
-                .insert_concordium_tx(
-                    &db_tx,
-                    origin_tx,
-                    origin_sender,
-                    deposit_amount,
-                    *origin_event_index,
-                    tx,
-                )
-                .await?;
+        for tx in txs {
+            statements.insert_concordium_tx(&db_tx, tx).await?;
         }
         for (origin_tx_hash, origin_event_index, amount, depositor, root_token) in deposits {
-            db_tx.query(
-                "INSERT INTO ethereum_deposit_events (origin_tx_hash, origin_event_index, amount, depositor, root_token) VALUES ($1, $2, $3, $4, $5);",
-                &[&origin_tx_hash.as_bytes(), &(*origin_event_index as i64), &(amount.to_string()), &depositor.as_bytes(), &root_token.as_bytes()]
-            ).await?;
+            db_tx
+                .query(
+                    "INSERT INTO ethereum_deposit_events (origin_tx_hash, origin_event_index, \
+                     amount, depositor, root_token) VALUES ($1, $2, $3, $4, $5);",
+                    &[
+                        &origin_tx_hash.as_bytes(),
+                        &(*origin_event_index as i64),
+                        &(amount.to_string()),
+                        &depositor.as_bytes(),
+                        &root_token.as_bytes(),
+                    ],
+                )
+                .await?;
         }
         for (tx_hash, id, amount, origin_tx_hash, origin_event_id, receiver, event_index) in wes {
             let rv = db_tx
@@ -820,14 +822,14 @@ pub async fn handle_database(
                             let update = concordium_contracts::StateUpdate::Deposit(deposit);
                             // TODO estimate execution energy.
                             let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push((
+                            txs.push(tx);
+                            deposits.push((
                                 event.tx_hash,
-                                Some(depositor),
-                                Some(amount.to_string()),
                                 id.low_u64(),
-                                tx,
+                                amount,
+                                depositor,
+                                root_token,
                             ));
-                            deposits.push((event.tx_hash, id.low_u64(), amount, depositor, root_token));
                         }
                         ethereum::EthEvent::TokenMapped {
                             id,
@@ -845,7 +847,7 @@ pub async fn handle_database(
                             };
                             let update = concordium_contracts::StateUpdate::TokenMap(map);
                             let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push((event.tx_hash, None, None, id.low_u64(), tx));
+                            txs.push(tx);
                             maps.push((root_token, child_token, name, decimals));
                         }
                         ethereum::EthEvent::TokenUnmapped {
@@ -893,7 +895,7 @@ pub async fn handle_database(
 
                 // We have now written all the transactions to the database. Now send them to
                 // the Concordium node.
-                for (_, _, _, _, tx) in txs {
+                for tx in txs {
                     let hash = tx.hash();
                     ccd_transaction_sender.send(tx).await?;
                     log::info!("Enqueued transaction {}.", hash);

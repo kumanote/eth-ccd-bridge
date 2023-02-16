@@ -43,16 +43,6 @@ END $$;
 CREATE TABLE IF NOT EXISTS concordium_transactions (
        id SERIAL8 PRIMARY KEY UNIQUE,
        tx_hash BYTEA NOT NULL,
-       -- The transaction on Ethereum that triggered sending this transaction.
-       origin_tx_hash BYTEA NOT NULL,
-       -- Depositor, if this transaction is a deposit. Otherwise NULL.
-       origin_tx_depositor BYTEA,
-       -- Deposited amount, if this is a deposit. Otherwise NULL.
-       deposit_amount TEXT,
-       -- Event index emitted on Ethereum.
-       origin_event_index INT8 NOT NULL,
-       -- The actual transaction, for retries. This is signed already
-       -- so cannot be manipulated.
        tx BYTEA NOT NULL,
        -- when the transaction was inserted
        timestamp INT8 NOT NULL,
