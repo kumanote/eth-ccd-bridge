@@ -6,7 +6,8 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 
 - NodeJS stable v18.12 (easiest to manage this through [NVM](https://github.com/nvm-sh/nvm))
 - [Yarn classic stable](https://classic.yarnpkg.com/en/docs/install)
-  - If using NVM to manage node versions, it might be best to NOT use node to install yarn but instead go with an alternative solution.
+  - If using NVM to manage node versions, it might be best to NOT use node to install yarn but instead go with an
+    alternative solution like a package manager for your operating system (like brew or apt).
 
 ## Installation
 
@@ -31,7 +32,10 @@ The `pages/api` directory is mapped to `/api/*`. Files in this directory are tre
 
 The project depends on a number of configuration options that can be set through environment variables.
 
-- `NEXT_PUBLIC_ROOT_MANAGER_ADDRESS`: Addrees of main contract [RootChainManager](../ethereum_contracts/contracts/root).
+- `NEXT_PUBLIC_ROOT_MANAGER_ADDRESS`: Address of main Ethereum contract [RootChainManager](../ethereum_contracts/contracts/root).
+- `NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS`: Address of Ethereum contract for generating predicate addresses for ETH.
+- `NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS`: Address of Ethereum contract for generating predicate addresses for ERC20 tokens.
+- `NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK`: Ethereum network to use.
 - `NEXT_PUBLIC_BRIDGE_MANAGER_INDEX`: Index of the Concordium [bridge manager contract](../concordium_contracts/bridge-manager).
 - `NEXT_PUBLIC_WETH_TOKEN_ADDRESS`: Ethereum contract address for wETH token.
 - `NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH`: Hex encoded block hash of testnet genesis block.
