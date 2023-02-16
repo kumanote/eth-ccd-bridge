@@ -267,8 +267,8 @@ pub enum BridgeEvent {
 impl BridgeEvent {
     pub fn event_index(&self) -> Option<u64> {
         match self {
-            BridgeEvent::TokenMap(tm) => None,
-            BridgeEvent::Deposit(de) => None,
+            BridgeEvent::TokenMap(_) => None,
+            BridgeEvent::Deposit(_) => None,
             BridgeEvent::Withdraw(we) => Some(we.event_index),
             BridgeEvent::GrantRole(_) => None,
             BridgeEvent::RevokeRole(_) => None,

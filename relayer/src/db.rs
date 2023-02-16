@@ -119,24 +119,47 @@ impl PreparedStatements {
         event: &BridgeEvent,
         merkle_event_hash: Option<[u8; 32]>,
     ) -> anyhow::Result<i64> {
-        let (event_type, data) = match event {
+        let (event_type, index, subindex, receiver, amount, data) = match event {
             BridgeEvent::TokenMap(tm) => (
                 ConcordiumEventType::TokenMap,
+                None,
+                None,
+                None,
+                None,
                 contracts_common::to_bytes(tm),
             ),
             BridgeEvent::Deposit(de) => {
-                (ConcordiumEventType::Deposit, contracts_common::to_bytes(de))
+                let rows = db_tx.query(
+                    "UPDATE ethereum_deposit_events SET tx_hash = $2 WHERE origin_event_index = $1 RETURNING id",
+                    &[&(de.id as i64), &&tx_hash.as_ref()[..]]
+                ).await?;
+                if rows.len() != 1 {
+                    log::warn!("Deposited an event that was not emitted on Ethereum.");
+                }
+                (ConcordiumEventType::Deposit, None, None, None, None, contracts_common::to_bytes(de))
             }
             BridgeEvent::Withdraw(we) => (
                 ConcordiumEventType::Withdraw,
+                Some(we.contract.index as i64),
+                Some(we.contract.subindex as i64),
+                Some(we.eth_address),
+                Some(&we.amount),
                 contracts_common::to_bytes(we),
             ),
             BridgeEvent::GrantRole(gr) => (
                 ConcordiumEventType::GrantRole,
+                None,
+                None,
+                None,
+                None,
                 contracts_common::to_bytes(gr),
             ),
             BridgeEvent::RevokeRole(rr) => (
                 ConcordiumEventType::RevokeRole,
+                None,
+                None,
+                None,
+                None,
                 contracts_common::to_bytes(rr),
             ),
         };
@@ -145,6 +168,10 @@ impl PreparedStatements {
                 &&tx_hash.as_ref()[..],
                 &event.event_index().map(|x| x as i64),
                 &event_type,
+                &index,
+                &subindex,
+                &receiver.as_ref().map(|x| &x[..]),
+                &amount.map(|x| x.to_string()),
                 &data,
                 &None::<Vec<u8>>,
                 &merkle_event_hash.map(|x| x.to_vec()),
@@ -214,8 +241,8 @@ impl Database {
             .await?;
         let insert_concordium_event = client
             .prepare(
-                "INSERT INTO concordium_events (tx_hash, event_index, event_type, event_data, \
-                 processed, event_merkle_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                "INSERT INTO concordium_events (tx_hash, event_index, event_type, child_index, child_subindex, receiver, amount, event_data, \
+                 processed, event_merkle_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
             )
             .await?;
 
@@ -498,6 +525,7 @@ impl Database {
         txs: &[(H256, Option<H160>, Option<String>, u64, BlockItem<P>)],
         // List of event indexes to mark as "done"
         wes: &[(H256, u64, U256, TransactionHash, u64, H160, u64)],
+        deposits: &[(H256, u64, U256, H160, H160)],
         // New token maps.
         maps: &[(H160, ContractAddress, String, u8)],
         // Removed token maps.
@@ -517,10 +545,16 @@ impl Database {
                 )
                 .await?;
         }
+        for (origin_tx_hash, origin_event_index, amount, depositor, root_token) in deposits {
+            db_tx.query(
+                "INSERT INTO ethereum_deposit_events (origin_tx_hash, origin_event_index, amount, depositor, root_token) VALUES ($1, $2, $3, $4, $5);",
+                &[&origin_tx_hash.as_bytes(), &(*origin_event_index as i64), &(amount.to_string()), &depositor.as_bytes(), &root_token.as_bytes()]
+            ).await?;
+        }
         for (tx_hash, id, amount, origin_tx_hash, origin_event_id, receiver, event_index) in wes {
             let rv = db_tx
                 .query_opt(&statements.mark_withdrawal_as_completed, &[
-                    &receiver.as_bytes(),
+                    &tx_hash.as_bytes(),
                     &(*event_index as i64),
                 ])
                 .await?;
@@ -762,6 +796,7 @@ pub async fn handle_database(
                 let mut txs = Vec::with_capacity(events.events.len());
                 let mut maps = Vec::new();
                 let mut unmaps = Vec::new();
+                let mut deposits = Vec::new();
                 for event in events.events {
                     match event.event {
                         ethereum::EthEvent::TokenLocked {
@@ -792,6 +827,7 @@ pub async fn handle_database(
                                 id.low_u64(),
                                 tx,
                             ));
+                            deposits.push((event.tx_hash, id.low_u64(), amount, depositor, root_token));
                         }
                         ethereum::EthEvent::TokenMapped {
                             id,
@@ -844,7 +880,7 @@ pub async fn handle_database(
                     }
                 }
 
-                db.insert_transactions(events.last_number, &txs, &wes, &maps, &unmaps)
+                db.insert_transactions(events.last_number, &txs, &wes, &deposits, &maps, &unmaps)
                     .await?;
                 for (_, _, _, _, _, receiver, we) in wes {
                     merkle_setter_sender
