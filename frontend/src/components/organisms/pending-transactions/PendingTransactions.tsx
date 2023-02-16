@@ -1,7 +1,7 @@
 import Button from "@components/atoms/button/Button";
 import Text from "@components/atoms/text/text";
 import usePrice from "@hooks/use-price";
-import moment from "moment";
+import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import { Components } from "src/api-query/__generated__/AxiosClient";
@@ -29,6 +29,7 @@ const PendingTransactions: React.FC<Props> = ({
     merkleProof,
 }) => {
     const getPrice = usePrice();
+    const tokenQuery = useGetTransactionToken()({ Withdraw: transaction });
 
     const [ethPrice, setEthPrice] = useState(0);
 
@@ -61,6 +62,10 @@ const PendingTransactions: React.FC<Props> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    if (tokenQuery.status !== "success" || tokenQuery.token === undefined) {
+        return null; // TODO: handle properly
+    }
+
     return (
         <Wrapper>
             <StyledContainer>
@@ -92,31 +97,32 @@ const PendingTransactions: React.FC<Props> = ({
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {`${parseAmount(transaction.amount, transaction.ccd_token.decimals)} ${
-                                transaction.ccd_token.name
+                            {`${parseAmount(transaction.amount, tokenQuery.token.decimals)} ${
+                                tokenQuery.token.ccd_name
                             }`}
                         </Text>
                     </GapWrapper>
-                    <GapWrapper>
-                        <Text
-                            fontFamily="Roboto"
-                            fontSize="13"
-                            fontWeight="light"
-                            fontColor="TitleText"
-                            fontLetterSpacing="0"
-                        >
-                            Timestamp:
-                        </Text>
-                        <Text
-                            fontFamily="Roboto"
-                            fontSize="11"
-                            fontWeight="bold"
-                            fontColor="TitleText"
-                            fontLetterSpacing="0"
-                        >
-                            {moment(transaction.timestamp * 1000).fromNow()}
-                        </Text>
-                    </GapWrapper>
+                    {/* TODO: show timestamp? */}
+                    {/* <GapWrapper> */}
+                    {/*     <Text */}
+                    {/*         fontFamily="Roboto" */}
+                    {/*         fontSize="13" */}
+                    {/*         fontWeight="light" */}
+                    {/*         fontColor="TitleText" */}
+                    {/*         fontLetterSpacing="0" */}
+                    {/*     > */}
+                    {/*         Timestamp: */}
+                    {/*     </Text> */}
+                    {/*     <Text */}
+                    {/*         fontFamily="Roboto" */}
+                    {/*         fontSize="11" */}
+                    {/*         fontWeight="bold" */}
+                    {/*         fontColor="TitleText" */}
+                    {/*         fontLetterSpacing="0" */}
+                    {/*     > */}
+                    {/*         {moment(transaction.timestamp * 1000).fromNow()} */}
+                    {/*     </Text> */}
+                    {/* </GapWrapper> */}
                     <GapWrapper>
                         <Text
                             fontFamily="Roboto"
@@ -134,13 +140,17 @@ const PendingTransactions: React.FC<Props> = ({
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            <a
-                                href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction?.ccd_tx_hash}`}
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                {parseHash(transaction?.ccd_tx_hash)}
-                            </a>
+                            {transaction.origin_tx_hash ? (
+                                <a
+                                    href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction.origin_tx_hash}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    {parseHash(transaction.origin_tx_hash)}
+                                </a>
+                            ) : (
+                                "Pending..."
+                            )}
                         </Text>
                     </GapWrapper>
 

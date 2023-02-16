@@ -26,7 +26,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         subindex: BigInt(0),
     } as ContractAddress;
 
-    const approve = async (ccdToken: Components.Schemas.CcdToken, energy?: number) => {
+    const approve = async (token: Components.Schemas.TokenMapItem, energy?: number) => {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
         }
@@ -35,11 +35,15 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             throw new Error("Energy is undefined");
         }
 
-        const maxContractExecutionEnergy = BigInt(Math.ceil((energy * 10 ** (ccdToken.decimals / 2)) / 100) * 100);
+        if (token.ccd_contract?.index === undefined || token.ccd_contract.subindex === undefined) {
+            throw new Error("Contract address undefined");
+        }
+
+        const maxContractExecutionEnergy = BigInt(Math.ceil((energy * 10 ** (token.decimals / 2)) / 100) * 100);
 
         const contractAddress = {
-            index: BigInt(ccdToken.contract_index),
-            subindex: BigInt(ccdToken.contract_subindex),
+            index: BigInt(token.ccd_contract?.index),
+            subindex: BigInt(token.ccd_contract?.subindex),
         } as ContractAddress;
 
         const receiveName = `${contractNames.cis2Bridgeable}.updateOperator`;
@@ -83,7 +87,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
     const withdraw = async function (
         amount: string,
-        ccdToken?: Components.Schemas.CcdToken,
+        token?: Components.Schemas.TokenMapItem,
         ethAddress?: string,
         energy?: number
     ): Promise<{ result: boolean; hash: string } | undefined> {
@@ -91,7 +95,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             throw new Error("No account available");
         }
 
-        if (!ccdToken) {
+        if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
         if (!ethAddress) {
@@ -109,7 +113,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
 
-        const parsedAmount = parseInt((Number(amount) * 10 ** ccdToken.decimals).toString());
+        const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
 
         const rawSchema = hexToBase64(bridgeManager);
 
@@ -128,8 +132,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
                 amount: parsedAmount.toString(),
                 token: {
-                    index: ccdToken.contract_index,
-                    subindex: ccdToken.contract_subindex,
+                    index: token.ccd_contract.index,
+                    subindex: token.ccd_contract.subindex,
                 },
                 token_id: "0000000000000000",
             },
@@ -148,8 +152,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         return tx;
     };
 
-    const balanceOf = async function (ccdToken?: Components.Schemas.CcdToken): Promise<number> {
-        if (!ccdToken) {
+    const balanceOf = async function (token: Components.Schemas.TokenMapItem): Promise<number> {
+        if (token?.ccd_contract?.index === undefined || token?.ccd_contract.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
 
@@ -171,14 +175,14 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         const res = await provider.getJsonRpcClient().invokeContract({
             method: `${contractNames.cis2Bridgeable}.balanceOf`,
             contract: {
-                index: BigInt(ccdToken.contract_index),
-                subindex: BigInt(ccdToken.contract_subindex),
+                index: BigInt(token.ccd_contract.index),
+                subindex: BigInt(token.ccd_contract.subindex),
             },
             parameter: param,
         });
         if (!res || res.tag === "failure" || !res.returnValue) {
             throw new Error(
-                `RPC call 'invokeContract' on method '${contractNames.cis2Bridgeable}.balanceOf' of contract '${ccdToken.contract_index}' failed`
+                `RPC call 'invokeContract' on method '${contractNames.cis2Bridgeable}.balanceOf' of contract '${token.ccd_contract.index}' failed`
             );
         }
 
@@ -186,8 +190,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         const balanceOf = BigInt(leb.unsigned.decode(Buffer.from(res.returnValue.slice(4), "hex")));
 
         // if it has 18 decimals, use ether util for precision
-        return ccdToken.decimals !== 18
-            ? +balanceOf.toString() / 10 ** ccdToken.decimals
+        return token.decimals !== 18
+            ? +balanceOf.toString() / 10 ** token.decimals
             : +ethers.utils.formatEther(balanceOf.toString());
     };
 
@@ -259,10 +263,10 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         return res.lastFinalizedBlock;
     };
 
-    const estimateWithdraw = async (amount: string, ccdToken?: Components.Schemas.CcdToken, ethAddress?: string) => {
+    const estimateWithdraw = async (amount: string, token?: Components.Schemas.TokenMapItem, ethAddress?: string) => {
         if (!enabled || !ccdAccount) return;
 
-        if (!ccdToken) {
+        if (token?.ccd_contract?.index === undefined || token?.ccd_contract.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
         if (!ethAddress) {
@@ -271,14 +275,14 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
         const provider = await detectCcdProvider();
 
-        const parsedAmount = parseInt((Number(amount) * 10 ** ccdToken.decimals).toString());
+        const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
 
         const userInput = {
             eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
             amount: parsedAmount.toString(),
             token: {
-                index: ccdToken.contract_index,
-                subindex: ccdToken.contract_subindex,
+                index: token.ccd_contract.index,
+                subindex: token.ccd_contract.subindex,
             },
             token_id: "0000000000000000",
         };
@@ -309,25 +313,25 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             );
         }
 
-        const parsedResult = Number(res?.usedEnergy.toString()) / 10 ** (ccdToken.decimals / 2); //energy to ccd
+        const parsedResult = Number(res?.usedEnergy.toString()) / 10 ** (token.decimals / 2); //energy to ccd
 
         const estimateCcd = +(parsedResult + 0.4 * parsedResult).toFixed(4); //add 40% of the result
 
         return estimateCcd;
     };
 
-    const estimateApprove = async (ccdToken?: Components.Schemas.CcdToken) => {
+    const estimateApprove = async (token?: Components.Schemas.TokenMapItem) => {
         if (!enabled || !ccdAccount) return;
 
-        if (!ccdToken) {
+        if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
 
         const provider = await detectCcdProvider();
 
         const contractAddress = {
-            index: BigInt(ccdToken.contract_index),
-            subindex: BigInt(ccdToken.contract_subindex),
+            index: BigInt(token.ccd_contract.index),
+            subindex: BigInt(token.ccd_contract.subindex),
         };
 
         const moduleFileBuffer = Buffer.from(hexToBase64(cis2Bridgeable), "base64");
@@ -340,8 +344,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 operator: {
                     Contract: [
                         {
-                            index: ccdToken?.contract_index,
-                            subindex: ccdToken?.contract_subindex,
+                            index: token?.ccd_contract.index,
+                            subindex: token?.ccd_contract.subindex,
                         },
                     ],
                 },
@@ -364,7 +368,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             energy: BigInt(30000),
         });
 
-        const parsedResult = Number(res?.usedEnergy.toString()) / 10 ** (ccdToken.decimals / 2); //energy to ccd
+        const parsedResult = Number(res?.usedEnergy.toString()) / 10 ** (token.decimals / 2); //energy to ccd
 
         const estimateCcd = +(parsedResult + 0.4 * parsedResult); //add 40% of the result
 

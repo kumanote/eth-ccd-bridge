@@ -1,6 +1,6 @@
 import OpenAPIClientAxios from "openapi-client-axios";
 import { GetState, SetState } from "zustand";
-import { Client } from "../../api-query/__generated__/AxiosClient";
+import { AxiosClient as Client } from "../../api-query/__generated__/AxiosClient";
 import { AxiosClientActions, AxiosClientStore } from "../../types/store/axios-client";
 
 const axiosClientActions = (set: SetState<AxiosClientStore>, get: GetState<AxiosClientStore>): AxiosClientActions => ({
