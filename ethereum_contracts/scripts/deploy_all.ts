@@ -48,7 +48,8 @@ async function createStateSender(): Promise<StateSender> {
   console.log(stateSender.address)
   await stateSender.deployed()
   console.log('sleep')
-  await sleep(120000)
+  await sleep(50000)
+  // Verifying stateSender implementation
   try {
     await run('verify:verify', {
       address: stateSender.address,
@@ -64,6 +65,22 @@ async function createStateSender(): Promise<StateSender> {
     stateSender.interface.encodeFunctionData('initialize', [owner.address])
   )
   await proxy.deployed()
+  console.log('sleep')
+  await sleep(120000)
+  // Verifying stateSender proxy
+  try {
+    await run('verify:verify', {
+      contract: "contracts/StateSender/StateSenderProxy.sol:StateSenderProxy",
+      address: proxy.address,
+      constructorArguments: [
+        stateSender.address,
+        proxyAdmin.address,
+        stateSender.interface.encodeFunctionData('initialize', [owner.address])
+      ]
+    })
+  } catch (err) {
+    console.error(err)
+  }
 
   console.log(`StateSenderProxy at ${proxy.address} with implementation at ${stateSender.address}`)
   return StateSenderFactory.attach(proxy.address)
@@ -79,9 +96,11 @@ async function createProxyAdmin(): Promise<BridgeProxyAdmin> {
   console.log(proxyAdmin.address)
   await proxyAdmin.deployed()
   console.log('sleep')
-  await sleep(120000)
+  await sleep(50000)
+  // Verifying BridgeProxyAdmin
   try {
     await run('verify:verify', {
+      contract: "contracts/proxy/ProxyAdmin.sol:BridgeProxyAdmin",
       address: proxyAdmin.address,
       constructorArguments: [
       ]
@@ -103,6 +122,7 @@ async function createEtherVault(): Promise<EtherVault> {
   await ethVault.deployed()
   console.log('sleep')
   await sleep(120000)
+  // Verifying ethVault implementation
   try {
     await run('verify:verify', {
       address: ethVault.address,
@@ -118,6 +138,22 @@ async function createEtherVault(): Promise<EtherVault> {
     ethVault.interface.encodeFunctionData('initialize', [owner.address])
   )
   await proxy.deployed()
+  console.log('sleep')
+  await sleep(120000)
+  // Verifying ethVault proxy
+  try {
+    await run('verify:verify', {
+      contract: "contracts/TokenVault/EtherVaultProxy.sol:EtherVaultProxy",
+      address: proxy.address,
+      constructorArguments: [
+        ethVault.address,
+        proxyAdmin.address,
+        ethVault.interface.encodeFunctionData('initialize', [owner.address])
+      ]
+    })
+  } catch (err) {
+    console.error(err)
+  }
   console.log(`EtherVaultProxy at ${proxy.address} with implementation at ${ethVault.address}`)
 
   return EthVaultFactory.attach(proxy.address)
@@ -131,6 +167,7 @@ async function createErc20Vault(): Promise<ERC20Vault> {
   await erc20Vault.deployed()
   console.log('sleep')
   await sleep(120000)
+  // Verifying erc20Vault implementation
   try {
     await run('verify:verify', {
       address: erc20Vault.address,
@@ -146,6 +183,22 @@ async function createErc20Vault(): Promise<ERC20Vault> {
     erc20Vault.interface.encodeFunctionData('initialize', [owner.address])
   )
   await proxy.deployed()
+  console.log('sleep')
+  await sleep(120000)
+  // Verifying erc20Vault proxy
+  try {
+    await run('verify:verify', {
+      contract: "contracts/TokenVault/ERC20VaultProxy.sol:ERC20VaultProxy",
+      address: proxy.address,
+      constructorArguments: [
+        erc20Vault.address,
+        proxyAdmin.address,
+        erc20Vault.interface.encodeFunctionData('initialize', [owner.address])
+      ]
+    })
+  } catch (err) {
+    console.error(err)
+  }
   console.log(`ERC20VaultProxy at ${proxy.address} with implementation at ${erc20Vault.address}`)
 
   return ERC20VaultFactory.attach(proxy.address)
@@ -160,6 +213,7 @@ async function createRootChainManager(): Promise<RootChainManager> {
   await rootManager.deployed()
   console.log('sleep')
   await sleep(120000)
+  // Verifying rootManager implementation
   try {
     await run('verify:verify', {
       address: rootManager.address,
@@ -167,7 +221,7 @@ async function createRootChainManager(): Promise<RootChainManager> {
       ]
     })
   } catch (err) {
-
+    console.error(err)
   }
   const proxy = await RootChainManagerFactoryProxy.deploy(
     rootManager.address,
@@ -175,14 +229,36 @@ async function createRootChainManager(): Promise<RootChainManager> {
     rootManager.interface.encodeFunctionData('initialize', [owner.address])
   )
   await proxy.deployed()
+  console.log('sleep')
+  await sleep(120000)
+  // Verifying rootManager proxy
+  try {
+    await run('verify:verify', {
+      contract: "contracts/root/RootChainManagerProxy.sol:RootChainManagerProxy",
+      address: proxy.address,
+      constructorArguments: [
+        rootManager.address,
+        proxyAdmin.address,
+        rootManager.interface.encodeFunctionData('initialize', [owner.address])
+      ]
+    })
+  } catch (err) {
+    console.error(err)
+  }
+
+  //  console.log('\nLinking Proxy to implementation contract:');
+  // let output = execSync(
+  //     `curl -d "address=${proxy}" -s "https://api${network != 'ethereum' ? `-` + network : ''
+  //     }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
+  //     }"`
+  // ).toString();
+  // console.log(output);
+
   console.log(`RootChainManagerProxy at ${proxy.address} with implementation at ${rootManager.address}`)
 
   return RootChainManagerFactory.attach(proxy.address)
 }
 
-async function setupProxyAdmin(): Promise<void> {
-  // Nothing to do
-}
 async function setupRootManager(): Promise<void> {
   const ethTokenType = await ethVault.TOKEN_TYPE()
   const erc20TokenType = await erc20Vault.TOKEN_TYPE()
@@ -247,7 +323,6 @@ async function main(): Promise<void> {
   const signers = await ethers.getSigners()
   owner = signers[0]
   proxyAdmin = await createProxyAdmin()
-  await setupProxyAdmin()
   rootManager = await createRootChainManager()
   ethVault = await createEtherVault()
   erc20Vault = await createErc20Vault()
