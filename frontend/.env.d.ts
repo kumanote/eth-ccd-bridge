@@ -20,6 +20,10 @@ declare global {
 
             // Ethereum token contract addresses
             /**
+             * Address of the ETH ethereum contract
+             */
+            NEXT_PUBLIC_ETH_TOKEN_ADDRESS: string;
+            /**
              * Address of the wETH ethereum contract
              */
             NEXT_PUBLIC_WETH_TOKEN_ADDRESS: string;
