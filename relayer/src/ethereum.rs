@@ -16,7 +16,7 @@ use ethers::{
 use sha2::Digest;
 
 use crate::{
-    concordium_contracts::DatabaseOperation,
+    db::DatabaseOperation,
     state_sender::{
         LockedTokenFilter, StateSender, TokenMapAddedFilter, TokenMapRemovedFilter,
         WithdrawEventFilter,

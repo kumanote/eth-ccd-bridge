@@ -17,7 +17,7 @@ use ethers::prelude::{
     Http, HttpRateLimitRetryPolicy, LocalWallet, Middleware, Provider, RetryClient, Signer,
 };
 use futures::Future;
-use std::{path::PathBuf, sync::Arc, str::FromStr};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -104,7 +104,7 @@ struct Relayer {
     #[clap(
         long,
         env = "ETHCCD_RELAYER_MAX_GAS_PRICE",
-        value_parser = U256::from_dec_str, 
+        value_parser = U256::from_dec_str,
         default_value = "1000000000",
     )]
     max_gas_price: U256,

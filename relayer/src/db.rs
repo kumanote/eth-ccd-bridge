@@ -1,7 +1,5 @@
 use crate::{
-    concordium_contracts::{
-        self, BridgeEvent, BridgeManager, BridgeManagerClient, DatabaseOperation, WithdrawEvent,
-    },
+    concordium_contracts::{self, BridgeEvent, BridgeManager, BridgeManagerClient, WithdrawEvent},
     ethereum,
 };
 use anyhow::Context;
@@ -193,6 +191,40 @@ pub struct Database {
     pub client:          tokio_postgres::Client,
     connection_handle:   JoinHandle<Result<(), tokio_postgres::Error>>,
     prepared_statements: PreparedStatements,
+}
+
+#[derive(Debug)]
+pub enum DatabaseOperation {
+    ConcordiumEvents {
+        /// Events are from this block.
+        block:              BlockInfo,
+        /// Events for the given transactions.
+        transaction_events: Vec<(TransactionHash, Vec<BridgeEvent>)>,
+    },
+    EthereumEvents {
+        events: ethereum::EthBlockEvents,
+    },
+    MarkConcordiumTransaction {
+        tx_hash: TransactionHash,
+        state:   TransactionStatus,
+    },
+    GetPendingConcordiumTransactions {
+        response: tokio::sync::oneshot::Sender<Vec<(TransactionHash, BlockItem<EncodedPayload>)>>,
+    },
+    StoreEthereumTransaction {
+        tx_hash:  H256,
+        tx:       ethers::prelude::Bytes,
+        response: tokio::sync::oneshot::Sender<(ethers::prelude::Bytes, Vec<u64>)>,
+        root:     [u8; 32],
+        ids:      Vec<u64>,
+    },
+    MarkSetMerkleCompleted {
+        root:     [u8; 32],
+        ids:      Vec<u64>,
+        response: tokio::sync::oneshot::Sender<()>,
+        success:  bool,
+        tx_hash:  H256,
+    },
 }
 
 #[derive(Debug, tokio_postgres::types::ToSql, tokio_postgres::types::FromSql)]

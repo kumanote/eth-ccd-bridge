@@ -15,8 +15,8 @@ use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
-    concordium_contracts::{DatabaseOperation, WithdrawEvent},
-    db::MerkleUpdate,
+    concordium_contracts::WithdrawEvent,
+    db::{DatabaseOperation, MerkleUpdate},
     root_chain_manager::BridgeManager,
     state_sender,
 };

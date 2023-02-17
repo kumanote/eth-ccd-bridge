@@ -1,7 +1,7 @@
 //! This module deal with interaction with the bridge manager contract
 //! on Concordium. It deals with parsing events emitted by the contract,
 //! and sending updates to it.
-use crate::{db::TransactionStatus, ethereum};
+use crate::db;
 use anyhow::Context;
 use concordium_rust_sdk::{
     cis2::{self, TokenId},
@@ -17,7 +17,6 @@ use concordium_rust_sdk::{
     },
     v2,
 };
-use ethabi::ethereum_types::H256;
 use futures::{StreamExt, TryStreamExt};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -439,45 +438,11 @@ pub enum NodeError {
     OtherError(#[from] anyhow::Error),
 }
 
-#[derive(Debug)]
-pub enum DatabaseOperation {
-    ConcordiumEvents {
-        /// Events are from this block.
-        block:              BlockInfo,
-        /// Events for the given transactions.
-        transaction_events: Vec<(TransactionHash, Vec<BridgeEvent>)>,
-    },
-    EthereumEvents {
-        events: ethereum::EthBlockEvents,
-    },
-    MarkConcordiumTransaction {
-        tx_hash: TransactionHash,
-        state:   TransactionStatus,
-    },
-    GetPendingConcordiumTransactions {
-        response: tokio::sync::oneshot::Sender<Vec<(TransactionHash, BlockItem<EncodedPayload>)>>,
-    },
-    StoreEthereumTransaction {
-        tx_hash:  H256,
-        tx:       ethers::prelude::Bytes,
-        response: tokio::sync::oneshot::Sender<(ethers::prelude::Bytes, Vec<u64>)>,
-        root:     [u8; 32],
-        ids:      Vec<u64>,
-    },
-    MarkSetMerkleCompleted {
-        root:     [u8; 32],
-        ids:      Vec<u64>,
-        response: tokio::sync::oneshot::Sender<()>,
-        success:  bool,
-        tx_hash:  H256,
-    },
-}
-
 /// Return Err if querying the node failed.
 /// Return Ok(()) if the channel to the database was closed.
 pub async fn use_node(
     mut bridge_manager: BridgeManagerClient,
-    sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
+    sender: tokio::sync::mpsc::Sender<db::DatabaseOperation>,
     mut height: AbsoluteBlockHeight, // start height
     max_parallel: u32,
     stop_flag: Arc<AtomicBool>,
@@ -521,7 +486,7 @@ pub async fn use_node(
                 }
             }
             if sender
-                .send(DatabaseOperation::ConcordiumEvents {
+                .send(db::DatabaseOperation::ConcordiumEvents {
                     block,
                     transaction_events,
                 })
