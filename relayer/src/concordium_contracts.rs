@@ -552,6 +552,7 @@ pub async fn concordium_tx_sender(
         let retry = process_response(hash, client.send_block_item(&bi).await)?;
         if retry {
             // Retry at most 5 times, waiting at most 32 * 5 = 160s
+            let mut success = false;
             for i in 0..6 {
                 let delay = std::time::Duration::from_secs(5 << i);
                 log::error!(
@@ -561,9 +562,11 @@ pub async fn concordium_tx_sender(
                 tokio::time::sleep(delay).await;
                 let retry = process_response(hash, client.send_block_item(&bi).await)?;
                 if !retry {
+                    success = true;
                     break;
                 }
             }
+            anyhow::ensure!(success, "Unable to reconnect in 6 attempts.");
         }
     }
     Ok(())
