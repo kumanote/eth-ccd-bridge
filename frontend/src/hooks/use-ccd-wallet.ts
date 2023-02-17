@@ -26,7 +26,7 @@ const useCCDWallet = () => {
                     .then((provider) =>
                         provider
                             .getJsonRpcClient()
-                            .getCryptographicParameters(process.env.NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH.toString())
+                            .getCryptographicParameters(process.env.NEXT_PUBLIC_NETWORK_GENESIS_BLOCK_HASH.toString())
                             .then((result) => {
                                 if (result === undefined || result?.value === null) {
                                     deleteCCDWallet();
