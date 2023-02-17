@@ -19,10 +19,6 @@ use ethers::prelude::{
 use futures::Future;
 use std::{path::PathBuf, sync::Arc};
 
-/// Goerli test network chain ID.
-/// Needs to be changed for production.
-const CHAIN_ID: u64 = 5;
-
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
 struct Relayer {
@@ -123,11 +119,46 @@ struct Relayer {
         default_value = "600"
     )]
     merkle_update_interval: u64,
+    /// Chain ID for the Ethereum network.
+    #[clap(
+        long,
+        help = "Chain ID. Goerli is 5, mainnet is 1.",
+        env = "ETHCCD_RELAYER_CHAIN_ID",
+        default_value = "600"
+    )]
+    chain_id: u64,
+    /// Number of confirmations required on Ethereum before considering
+    /// the transaction as "final".
+    #[clap(
+        long,
+        help = "Number of confirmations required on Ethereum before considering the transaction \
+                as final.",
+        env = "ETHCCD_RELAYER_NUM_CONFIRMATIONS",
+        default_value = "10"
+    )]
+    num_confirmations: u64,
+    /// Request timeout for Concordium node requests.
+    #[clap(
+        long,
+        help = "Timeout for requests to the Concordium node.",
+        env = "ETHCCD_RELAYER_CONCORDIUM_REQUEST_TIMEOUT",
+        default_value = "10"
+    )]
+    concordium_request_timeout: u64,
+    /// Request timeout for Ethereum node requests.
+    #[clap(
+        long,
+        help = "Timeout for requests to the Ethereum node.",
+        env = "ETHCCD_RELAYER_ETHEREUM_REQUEST_TIMEOUT",
+        default_value = "10"
+    )]
+    ethereum_request_timeout: u64,
 }
 
-const NUM_CONFIRMATIONS: u64 = 14;
-
-fn spawn_report<E, A, T>(future: T) -> tokio::task::JoinHandle<T::Output>
+fn spawn_report<E, A, T>(
+    name: impl std::fmt::Display + Send + 'static,
+    future: T,
+) -> tokio::task::JoinHandle<T::Output>
 where
     T: Future<Output = Result<A, E>> + Send + 'static,
     A: Send + 'static,
@@ -136,7 +167,7 @@ where
         match future.await {
             Ok(a) => Ok(a),
             Err(e) => {
-                log::error!("Task terminated: {:#?}", e);
+                log::error!("Task {} terminated: {:#?}", name, e);
                 Err(e)
             }
         }
@@ -147,6 +178,7 @@ async fn find_start_ethereum_config<M: Middleware>(
     client: M,
     last_processed: Option<u64>,
     creation_height: u64,
+    num_confirmations: u64,
 ) -> anyhow::Result<(u64, u64)>
 where
     M::Error: 'static, {
@@ -154,7 +186,7 @@ where
         .get_block_number()
         .await?
         .as_u64()
-        .saturating_sub(NUM_CONFIRMATIONS);
+        .saturating_sub(num_confirmations);
     if let Some(last_processed) = last_processed {
         Ok((
             last_processed + 1,
@@ -190,7 +222,13 @@ async fn main() -> anyhow::Result<()> {
     log_builder.filter_module(module_path!(), app.log_level);
     log_builder.init();
 
-    let inner_ethereum_client = Http::new(app.ethereum_api);
+    let inner_ethereum_client = {
+        let network_client = reqwest::ClientBuilder::new()
+            .timeout(std::time::Duration::from_secs(app.ethereum_request_timeout))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()?;
+        Http::new_with_client(app.ethereum_api, network_client)
+    };
     let ethereum_client = RetryClient::new(
         inner_ethereum_client,
         Box::new(HttpRateLimitRetryPolicy::default()),
@@ -204,15 +242,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Transactions will be signed with the private key below and will be broadcast
     // via the eth_sendRawTransaction API)
-    let wallet: LocalWallet = app.eth_private_key.with_chain_id(CHAIN_ID);
+    let wallet: LocalWallet = app.eth_private_key.with_chain_id(app.chain_id);
     let sender = wallet.address();
 
     let balance = ethereum_client.get_balance(sender, None).await?;
-    println!("{:#?}", balance);
+    log::info!("Balance of the Ethereum sender account is {balance}.");
     let ethereum_nonce = ethereum_client.get_transaction_count(sender, None).await?;
-    println!("Nonce = {}", ethereum_nonce);
-    let gas_price = ethereum_client.get_gas_price().await?;
-    println!("Gas price = {}", gas_price);
+    log::info!("Nonce of the Ethereum sender account is {ethereum_nonce}.");
 
     // ethers::prelude::Abigen::new("BridgeManager", "abis/root-chain-manager.json")
     //     .unwrap()
@@ -248,8 +284,32 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(ethereum_client.clone()),
     );
 
-    let concordium_client = v2::Client::new(app.concordium_api).await?;
-    let (last_ethereum, last_concordium, db) = Database::new(app.db_config).await?;
+    let mut concordium_client = {
+        let ep = app
+            .concordium_api
+            .timeout(std::time::Duration::from_secs(
+                app.concordium_request_timeout,
+            ))
+            .connect_timeout(std::time::Duration::from_secs(10));
+        v2::Client::new(ep).await?
+    };
+    {
+        let lfb = concordium_client
+            .get_consensus_info()
+            .await?
+            .last_finalized_block;
+        let bi = concordium_client.get_block_info(lfb).await?.response;
+        if chrono::Utc::now().signed_duration_since(bi.block_slot_time)
+            > chrono::Duration::seconds(120)
+        {
+            anyhow::bail!(
+                "Unable to start. The last finalized time of the Concordium node is more than \
+                 2min in the past."
+            );
+        }
+    }
+
+    let (last_ethereum, last_concordium, db) = Database::new(&app.db_config).await?;
     let start_nonce = db.submit_missing_txs(concordium_client.clone()).await?;
 
     let bridge_manager_client =
@@ -266,6 +326,7 @@ async fn main() -> anyhow::Result<()> {
         ethereum_client.clone(),
         last_ethereum,
         app.state_sender_creation_block_number,
+        app.num_confirmations,
     )
     .await?;
     log::info!(
@@ -280,6 +341,8 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
+    log::info!("Starting at {concordium_start_height} on the Concordium chain.");
+
     let (max_marked_event_index, leaves) = db
         .pending_withdrawals(bridge_manager_client.clone())
         .await?;
@@ -292,41 +355,56 @@ async fn main() -> anyhow::Result<()> {
 
     let pending_merkle_set = db.pending_ethereum_tx().await?;
 
+    let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (stop_sender, stop_receiver) = tokio::sync::watch::channel(());
+    let shutdown_handler_handle = tokio::spawn(set_shutdown(stop_flag.clone(), stop_sender));
+
     let tx_sender_handle = tokio::spawn(concordium_contracts::concordium_tx_sender(
         concordium_client.clone(),
         ccd_transaction_receiver,
     ));
 
-    let db_task_handle = spawn_report(db::handle_database(
-        db,
-        db_receiver,
-        bridge_manager,
-        ccd_transaction_sender,
-        merkle_setter_sender,
-    ));
+    let db_task_handle = spawn_report(
+        "database handler",
+        db::handle_database(
+            app.db_config,
+            db,
+            db_receiver,
+            bridge_manager,
+            ccd_transaction_sender,
+            merkle_setter_sender,
+            stop_flag.clone(),
+        ),
+    );
 
-    let mark_concordium_txs_handle = spawn_report(db::mark_concordium_txs(
-        db_sender.clone(),
-        concordium_client,
-    ));
+    let mark_concordium_txs_handle = spawn_report(
+        "Mark concordium transactions",
+        db::mark_concordium_txs(db_sender.clone(), concordium_client, stop_flag.clone()),
+    );
 
-    let stop_flag = std::sync::atomic::AtomicBool::new(false);
+    let watch_concordium_handle = spawn_report(
+        "Watch concordium",
+        concordium_contracts::use_node(
+            bridge_manager_client.clone(),
+            db_sender.clone(),
+            concordium_start_height,
+            app.max_parallel,
+            stop_flag.clone(),
+            app.max_behind,
+        ),
+    );
 
-    let watch_concordium_handle = spawn_report(concordium_contracts::use_node(
-        bridge_manager_client.clone(),
-        db_sender.clone(),
-        concordium_start_height,
-        app.max_parallel,
-        stop_flag, // TODO: Stop flag must be shared
-        app.max_behind,
-    ));
-
-    let watch_ethereum_handle = spawn_report(ethereum::watch_eth_blocks(
-        state_sender_contract,
-        db_sender.clone(),
-        start_number,
-        upper_number,
-    ));
+    let watch_ethereum_handle = spawn_report(
+        "Watch ethereum",
+        ethereum::watch_eth_blocks(
+            state_sender_contract,
+            db_sender.clone(),
+            start_number,
+            upper_number,
+            app.num_confirmations,
+            stop_flag.clone(),
+        ),
+    );
 
     let merkle_client = MerkleSetterClient::new(
         root_chain_manager_contract,
@@ -340,34 +418,59 @@ async fn main() -> anyhow::Result<()> {
         max_marked_event_index,
     )?;
 
-    let merkle_updater_handle = spawn_report(merkle::send_merkle_root_updates(
-        merkle_client,
-        pending_merkle_set,
-        merkle_setter_receiver,
-        db_sender.clone(),
-    ));
-    // TODO: Send these merkle updates.
+    let merkle_updater_handle = spawn_report(
+        "Merkle updater",
+        merkle::send_merkle_root_updates(
+            merkle_client,
+            pending_merkle_set,
+            merkle_setter_receiver,
+            db_sender.clone(),
+            app.num_confirmations,
+            stop_receiver,
+        ),
+    );
+    merkle_updater_handle.await??;
+    watch_ethereum_handle.await??;
+    watch_concordium_handle.await??;
+    mark_concordium_txs_handle.await??;
+    db_task_handle.await??;
+    tx_sender_handle.await??;
+    shutdown_handler_handle.await??;
+    Ok(())
+}
 
-    tokio::select! {
-        x = tx_sender_handle => {
-            println!("Transaction sender terminated {:#?}", x)
+/// Construct a future for shutdown signals (for unix: SIGINT and SIGTERM) (for
+/// windows: ctrl c and ctrl break). The signal handler is set when the future
+/// is polled and until then the default signal handler.
+async fn set_shutdown(
+    flag: Arc<std::sync::atomic::AtomicBool>,
+    stop: tokio::sync::watch::Sender<()>,
+) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix as unix_signal;
+        let mut terminate_stream = unix_signal::signal(unix_signal::SignalKind::terminate())?;
+        let mut interrupt_stream = unix_signal::signal(unix_signal::SignalKind::interrupt())?;
+        let terminate = Box::pin(terminate_stream.recv());
+        let interrupt = Box::pin(interrupt_stream.recv());
+        futures::future::select(terminate, interrupt).await;
+        flag.store(true, std::sync::atomic::Ordering::Release);
+        if stop.send(()).is_err() {
+            log::error!("Unable to send stop signal.");
         }
-        x = db_task_handle => {
-            println!("DB task terminated {:#?}", x)
+    }
+    #[cfg(windows)]
+    {
+        use tokio::signal::windows as windows_signal;
+        let mut ctrl_break_stream = windows_signal::ctrl_break()?;
+        let mut ctrl_c_stream = windows_signal::ctrl_c()?;
+        let ctrl_break = Box::pin(ctrl_break_stream.recv());
+        let ctrl_c = Box::pin(ctrl_c_stream.recv());
+        futures::future::select(ctrl_break, ctrl_c).await;
+        flag.store(true, Ordering::Release);
+        if stop.send(()).is_err() {
+            log::error!("Unable to send stop signal.");
         }
-        x = mark_concordium_txs_handle => {
-            println!("Mark concordium transactions terminated {:#?}", x)
-        }
-        x = watch_concordium_handle => {
-            println!("Watch concordium terminated {:#?}", x)
-        }
-        x = watch_ethereum_handle => {
-            println!("Watch ethereum terminated {:#?}", x)
-        }
-        x = merkle_updater_handle => {
-            println!("Merkle updater terminated {:#?}", x)
-        }
-    };
-
+    }
     Ok(())
 }

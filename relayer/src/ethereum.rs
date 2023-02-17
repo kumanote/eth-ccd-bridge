@@ -1,3 +1,8 @@
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
 use anyhow::Context;
 use concordium_rust_sdk as concordium;
 use ethabi::{
@@ -192,6 +197,7 @@ where
                 topics: log.topics,
                 data:   log.data.0.into(),
             })?;
+            let root_token = decoded.root_token;
             let event = EthBlockEvent {
                 tx_hash:      log
                     .transaction_hash
@@ -203,9 +209,10 @@ where
                 event:        decoded.try_into()?,
             };
             log::debug!(
-                "Discovered new `Locked` event emitted by {} in block number {}.",
-                log.address,
+                "Discovered new `Locked` event emitted by {} in block number {}. Token = {}.",
+                log.address.to_string(),
                 event.block_number,
+                root_token.to_string(),
             );
             events.push(event);
         }
@@ -320,98 +327,23 @@ where
     })
 }
 
-// TODO: Make this configurable.
-const NUM_CONFIRMATIONS: u64 = 10;
-
-// // TODO: Do not go beyond where the contract exists.
-// async fn find_block<M: Middleware>(
-//     contract: &StateSender<M>,
-//     manager: &mut BridgeManager,
-//     default_number: u64,
-// ) -> anyhow::Result<(H256, u64, u64)>
-// where
-//     M::Error: 'static, {
-//     let client = contract.client();
-//     // Since we never register any events for blocks that are nearer than
-//     // NUM_CONFIRMATIONS this is safe.
-//     let end = client
-//         .get_block_number()
-//         .await?
-//         .as_u64()
-//         .saturating_sub(NUM_CONFIRMATIONS);
-//     let mut block_number = end;
-//     let mut step = 1;
-//     while block_number > default_number {
-//         log::trace!("Trying at height {}.", block_number);
-//         // TODO: It is not ideal to always query to the end. But it is
-// simpler.         // Revise.
-//         let mut events = get_eth_block_events(&contract, block_number,
-// end).await?;         events.events.retain(|e| {
-//             matches!(
-//                 e.event,
-//                 EthEvent::TokenLocked { .. } | EthEvent::TokenMapped { .. }
-//             )
-//         });
-//         events.events.sort_by_key(|e| e.block_number);
-//         if let Some((first, rest)) = events.events.split_first() {
-//             if manager
-//                 .check_operation_used(first.event.id().as_u64())
-//                 .await?
-//             {
-//                 for e in rest {
-//                     if
-// !manager.check_operation_used(e.event.id().as_u64()).await? {
-// let block_number = e.block_number;                         let block_hash =
-// contract                             .client()
-//                             .get_block(block_number)
-//                             .await?
-//                             .context("Block at given default height not
-// present.")?                             .hash
-//                             .context("Block at given default height does not
-// have a hash.")?;                         return Ok((block_hash, block_number,
-// end));                     }
-//                 }
-//                 // If we are here then all the operations are used. So we
-// return the last block.                 break;
-//             } else {
-//                 block_number = block_number.saturating_sub(step);
-//                 step = std::cmp::min(10_000, step * 2);
-//             }
-//         } else {
-//             block_number = block_number.saturating_sub(step);
-//             step = std::cmp::min(10_000, step * 2);
-//         }
-//     }
-//     let block_number = if block_number <= default_number {
-//         default_number
-//     } else {
-//         end
-//     };
-//     let block_hash = contract
-//         .client()
-//         .get_block(block_number)
-//         .await?
-//         .context("Block at given height not present.")?
-//         .hash
-//         .context("Block at given height does not have a hash.")?;
-//     return Ok((block_hash, block_number, end));
-// }
-
 /// Write "finalized" ethereum blocks to the provided channel.
 pub async fn watch_eth_blocks<M: Middleware + 'static>(
     contract: StateSender<M>,
     actions_channel: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut block_number: u64,
     mut upper_block: u64,
+    num_confirmations: u64,
+    stop_flag: Arc<AtomicBool>,
 ) -> anyhow::Result<()>
 where
     M::Error: 'static, {
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(5000));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let client = contract.client();
-    loop {
+    while !stop_flag.load(Ordering::Acquire) {
         let number = client.get_block_number().await?;
-        if block_number.saturating_add(NUM_CONFIRMATIONS) <= number.as_u64() {
+        if block_number.saturating_add(num_confirmations) <= number.as_u64() {
             // TODO: Handle sending error here.
             let block_events = get_eth_block_events(&contract, block_number, upper_block).await?;
             actions_channel
@@ -426,4 +358,6 @@ where
             interval.tick().await;
         }
     }
+    actions_channel.closed().await;
+    Ok(())
 }

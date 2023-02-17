@@ -310,14 +310,13 @@ where
     }
 }
 
-// TODO: Make configurable.
-const NUM_CONFIRMATIONS: usize = 10;
-
 pub async fn send_merkle_root_updates<M: Middleware + 'static, S: Signer + 'static>(
     client: MerkleSetterClient<M, S>,
     pending_merkle_set: Option<(H256, ethers::prelude::Bytes, u64, [u8; 32], Vec<u64>)>,
     mut receiver: tokio::sync::mpsc::Receiver<MerkleUpdate>,
     db_sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
+    num_confirmations: u64,
+    mut stop: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()>
 where
     M::Error: 'static,
@@ -326,15 +325,30 @@ where
     // Check if we need to resubmit the pending transaction.
     if let Some((tx_hash, raw_tx, _timestamp, root, ids)) = pending_merkle_set {
         let ethereum_client = client.root_manager.client();
-        let status = ethereum_client.get_transaction(tx_hash).await?;
+        let status = ethereum_client
+            .get_transaction(tx_hash)
+            .await
+            .context("Unable to get transaction status.")?;
         if status.is_none() {
-            let _pending_tx = ethereum_client.send_raw_transaction(raw_tx).await?;
+            let _pending_tx = ethereum_client
+                .send_raw_transaction(raw_tx)
+                .await
+                .context("Unable to send raw transaction.")?;
         }
         pending = Some((tx_hash, root, ids))
     }
     let leaves = client.current_leaves.clone();
-    let sender_handle = tokio::spawn(ethereum_tx_sender(client, db_sender, pending));
-    while let Some(mu) = receiver.recv().await {
+    let sender_handle = tokio::spawn(ethereum_tx_sender(
+        client,
+        db_sender,
+        pending,
+        num_confirmations,
+        stop.clone(),
+    ));
+    while let Some(mu) = tokio::select! {
+        _ = stop.changed() => None,
+        v = receiver.recv() => v
+    } {
         match mu {
             MerkleUpdate::NewWithdraws { withdraws } => {
                 for (event_index, merkle_hash) in withdraws {
@@ -355,7 +369,7 @@ where
         }
     }
     // TODO: Handle stop flag.
-    let r = sender_handle.await??;
+    let () = sender_handle.await??;
     Ok(())
 }
 
@@ -363,6 +377,8 @@ async fn ethereum_tx_sender<M: Middleware, S: Signer>(
     mut client: MerkleSetterClient<M, S>,
     db_sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut pending: Option<(H256, [u8; 32], Vec<u64>)>,
+    num_confirmations: u64,
+    mut stop: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()>
 where
     M::Error: 'static,
@@ -372,13 +388,19 @@ where
         client.update_interval.to_std()?,
     );
     send_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    loop {
+    'outer: while !stop.has_changed().unwrap_or(true) {
         // Handle followup for any pending transaction firs.
         if pending.is_some() {
             let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
             check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             while let Some((pending_hash, root, ids)) = pending {
-                check_interval.tick().await;
+                let stop = tokio::select! {
+                    _ = stop.changed() => true,
+                    _ = check_interval.tick() => false,
+                };
+                if stop {
+                    break 'outer;
+                }
                 let result = client
                     .root_manager
                     .client()
@@ -387,9 +409,7 @@ where
                 if let Some(receipt) = result {
                     if let Some(bn) = receipt.block_number {
                         let current_block = client.root_manager.client().get_block_number().await?;
-                        if bn.saturating_add((NUM_CONFIRMATIONS as u64).into())
-                            <= current_block.into()
-                        {
+                        if bn.saturating_add(num_confirmations.into()) <= current_block.into() {
                             let mut found = false;
                             for log in receipt.logs {
                                 use ethers::contract::EthEvent;
@@ -455,7 +475,13 @@ where
             }
         }
 
-        send_interval.tick().await;
+        let stop = tokio::select! {
+            _ = stop.changed() => true,
+            _ = send_interval.tick() => false,
+        };
+        if stop {
+            break 'outer;
+        }
         // Now check if we have to send a new one
         {
             // only send new transaction if there is no pending transaction.
@@ -498,4 +524,5 @@ where
             }
         }
     }
+    Ok(())
 }

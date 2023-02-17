@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS concordium_transactions (
        id SERIAL8 PRIMARY KEY UNIQUE,
        tx_hash BYTEA NOT NULL,
        tx BYTEA NOT NULL,
+       origin_tx_hash BYTEA NOT NULL,
        -- when the transaction was inserted
        timestamp INT8 NOT NULL,
        status concordium_transaction_status NOT NULL,

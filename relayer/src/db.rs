@@ -19,6 +19,10 @@ use concordium_rust_sdk::{
 };
 use ethabi::ethereum_types::{H160, H256, U256};
 use num_bigint::BigUint;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::task::JoinHandle;
 use tokio_postgres::{NoTls, Statement, Transaction};
 
@@ -88,6 +92,7 @@ impl PreparedStatements {
     pub async fn insert_concordium_tx<'a, 'b, Payload: PayloadLike>(
         &'a self,
         db_tx: &Transaction<'b>,
+        origin_tx_hash: &H256,
         bi: &BlockItem<Payload>,
     ) -> anyhow::Result<i64> {
         let hash = bi.hash();
@@ -97,6 +102,7 @@ impl PreparedStatements {
             .query_one(&self.insert_concordium_tx, &[
                 &&hash.as_ref()[..],
                 &tx_bytes,
+                &origin_tx_hash.as_bytes(),
                 &timestamp,
                 &TransactionStatus::Pending,
             ])
@@ -206,15 +212,15 @@ pub enum ConcordiumEventType {
 
 impl Database {
     pub async fn new(
-        config: tokio_postgres::Config,
+        config: &tokio_postgres::Config,
     ) -> anyhow::Result<(Option<u64>, Option<AbsoluteBlockHeight>, Self)> {
         let (client, connection) = config.connect(NoTls).await?;
         let connection_handle = tokio::spawn(connection);
         client.batch_execute(SCHEMA).await?;
         let insert_concordium_tx = client
             .prepare(
-                "INSERT INTO concordium_transactions (tx_hash, tx, timestamp, status) VALUES ($1, \
-                 $2, $3, $4) RETURNING id",
+                "INSERT INTO concordium_transactions (tx_hash, tx, origin_tx_hash, timestamp, \
+                 status) VALUES ($1, $2, $3, $4, $5) RETURNING id",
             )
             .await?;
         let get_pending_concordium_txs = client
@@ -524,7 +530,7 @@ impl Database {
     pub async fn insert_transactions<P: PayloadLike>(
         &mut self,
         last_block_number: u64,
-        txs: &[BlockItem<P>],
+        txs: &[(H256, BlockItem<P>)],
         // List of event indexes to mark as "done"
         wes: &[(H256, u64, U256, TransactionHash, u64, H160, u64)],
         deposits: &[(H256, u64, U256, H160, H160)],
@@ -535,8 +541,10 @@ impl Database {
     ) -> anyhow::Result<()> {
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
-        for tx in txs {
-            statements.insert_concordium_tx(&db_tx, tx).await?;
+        for (origin_tx_hash, tx) in txs {
+            statements
+                .insert_concordium_tx(&db_tx, origin_tx_hash, tx)
+                .await?;
         }
         for (origin_tx_hash, origin_event_index, amount, depositor, root_token) in deposits {
             db_tx
@@ -624,8 +632,8 @@ impl Database {
 
     pub async fn insert_concordium_events(
         &mut self,
-        block: BlockInfo,
-        events: Vec<(TransactionHash, Vec<BridgeEvent>)>,
+        block: &BlockInfo,
+        events: &[(TransactionHash, Vec<BridgeEvent>)],
     ) -> anyhow::Result<Vec<(u64, [u8; 32])>> {
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
@@ -633,7 +641,7 @@ impl Database {
         for (tx_hash, events) in events {
             for event in events {
                 let merkle_event_hash = if let BridgeEvent::Withdraw(we) = &event {
-                    let hash = crate::merkle::make_event_leaf_hash(tx_hash, we)?;
+                    let hash = crate::merkle::make_event_leaf_hash(*tx_hash, we)?;
                     withdraws.push((we.event_index, hash));
                     Some(hash)
                 } else {
@@ -690,12 +698,13 @@ impl Database {
 pub async fn mark_concordium_txs(
     db_actions: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut client: v2::Client,
+    stop: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
     // TODO: We could just be listening for blocks. But if there are no pending
     // transactions that is not efficient.
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(10000));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    loop {
+    while !stop.load(Ordering::Acquire) {
         interval.tick().await;
         let (response, receiver) = tokio::sync::oneshot::channel();
         db_actions
@@ -752,6 +761,8 @@ pub async fn mark_concordium_txs(
             }
         }
     }
+    db_actions.closed().await;
+    Ok(())
 }
 
 fn convert_to_token_amount(a: U256) -> cis2::TokenAmount {
@@ -771,172 +782,358 @@ pub enum MerkleUpdate {
     },
 }
 
+const MAX_CONNECT_ATTEMPTS: u32 = 5;
+
+async fn try_reconnect(
+    config: &tokio_postgres::Config,
+    stop_flag: &AtomicBool,
+    create_tables: bool,
+) -> anyhow::Result<(Option<u64>, Option<AbsoluteBlockHeight>, Database)> {
+    let mut i = 1;
+    while !stop_flag.load(Ordering::Acquire) {
+        match Database::new(config).await {
+            Ok(db) => return Ok(db),
+            Err(e) if i < MAX_CONNECT_ATTEMPTS => {
+                let delay = std::time::Duration::from_millis(500 * (1 << i));
+                log::error!(
+                    "Could not connect to the database due to {:#}. Reconnecting in {}ms.",
+                    e,
+                    delay.as_millis()
+                );
+                tokio::time::sleep(delay).await;
+                i += 1;
+            }
+            Err(e) => {
+                log::error!(
+                    "Could not connect to the database in {} attempts. Last attempt failed with \
+                     reason {:#}.",
+                    MAX_CONNECT_ATTEMPTS,
+                    e
+                );
+                return Err(e);
+            }
+        }
+    }
+    anyhow::bail!("The service was asked to stop.");
+}
+
 pub async fn handle_database(
+    config: tokio_postgres::Config,
     mut db: Database,
     mut blocks: tokio::sync::mpsc::Receiver<DatabaseOperation>,
     mut bridge_manager: BridgeManager,
     ccd_transaction_sender: tokio::sync::mpsc::Sender<BlockItem<EncodedPayload>>,
     merkle_setter_sender: tokio::sync::mpsc::Sender<MerkleUpdate>,
+    stop_flag: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
-    while let Some(action) = blocks.recv().await {
-        match action {
-            DatabaseOperation::ConcordiumEvents {
-                block,
-                transaction_events,
-            } => {
-                let withdraws = db
-                    .insert_concordium_events(block, transaction_events)
-                    .await?;
+    let mut retry = None;
+
+    while !stop_flag.load(Ordering::Acquire) {
+        let next_item = if let Some(v) = retry.take() {
+            Some(v)
+        } else {
+            blocks.recv().await
+        };
+        if let Some(action) = next_item {
+            match insert_into_db(
+                &mut db,
+                action,
+                &merkle_setter_sender,
+                &ccd_transaction_sender,
+                &mut bridge_manager,
+            )
+            .await
+            {
+                Ok(()) => {
+                    log::trace!("Processed database operation.");
+                }
+                Err(InsertError::Retry(action)) => {
+                    let delay = std::time::Duration::from_millis(2000);
+                    log::error!(
+                        "Could not insert into the database. Reconnecting in {}ms.",
+                        delay.as_millis()
+                    );
+                    tokio::time::sleep(delay).await;
+                    let new_db = match try_reconnect(&config, &stop_flag, false).await {
+                        Ok(db) => db.2,
+                        Err(e) => {
+                            blocks.close();
+                            db.connection_handle.abort();
+                            db.connection_handle.await??;
+                            return Err(e);
+                        }
+                    };
+                    let old_db = std::mem::replace(&mut db, new_db);
+                    old_db.connection_handle.abort();
+                    match old_db.connection_handle.await {
+                        Ok(v) => {
+                            if let Err(e) = v {
+                                log::warn!(
+                                    "Could not correctly stop the old database connection due to: \
+                                     {}.",
+                                    e
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            if e.is_panic() {
+                                log::warn!(
+                                    "Could not correctly stop the old database connection. The \
+                                     connection thread panicked."
+                                );
+                            } else {
+                                log::warn!("Could not correctly stop the old database connection.");
+                            }
+                        }
+                    }
+                    retry = Some(action);
+                }
+                Err(other) => {
+                    log::debug!(
+                        "One of the internal channels was closed ({:#}). Closing the database \
+                         worker.",
+                        other
+                    );
+                    // One of the channels closed. Terminate.
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    blocks.close();
+    db.connection_handle.abort();
+    db.connection_handle.await??;
+    Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+enum InsertError {
+    #[error("Other error {0:#}")]
+    Other(#[from] anyhow::Error),
+    #[error("Retry.")]
+    Retry(DatabaseOperation),
+}
+
+async fn insert_into_db(
+    db: &mut Database,
+    action: DatabaseOperation,
+    merkle_setter_sender: &tokio::sync::mpsc::Sender<MerkleUpdate>,
+    ccd_transaction_sender: &tokio::sync::mpsc::Sender<BlockItem<EncodedPayload>>,
+    bridge_manager: &mut BridgeManager,
+) -> Result<(), InsertError> {
+    match action {
+        DatabaseOperation::ConcordiumEvents {
+            block,
+            transaction_events,
+        } => {
+            if let Ok(withdraws) = db
+                .insert_concordium_events(&block, &transaction_events)
+                .await
+            {
                 if !withdraws.is_empty() {
                     merkle_setter_sender
                         .send(MerkleUpdate::NewWithdraws { withdraws })
-                        .await?
+                        .await
+                        .map_err(|_| {
+                            anyhow::anyhow!("Error sending merkle update. The channel is closed.")
+                        })?
                 }
+            } else {
+                return Err(InsertError::Retry(DatabaseOperation::ConcordiumEvents {
+                    block,
+                    transaction_events,
+                }));
             }
-            DatabaseOperation::EthereumEvents { events } => {
-                let mut wes = Vec::new();
-                let mut txs = Vec::with_capacity(events.events.len());
-                let mut maps = Vec::new();
-                let mut unmaps = Vec::new();
-                let mut deposits = Vec::new();
-                for event in events.events {
-                    match event.event {
-                        ethereum::EthEvent::TokenLocked {
-                            id,
-                            depositor,
-                            deposit_receiver,
-                            root_token,
-                            vault: _,
+        }
+        DatabaseOperation::EthereumEvents { events } => {
+            let mut wes = Vec::new();
+            let mut txs = Vec::with_capacity(events.events.len());
+            let mut maps = Vec::new();
+            let mut unmaps = Vec::new();
+            let mut deposits = Vec::new();
+            for event in &events.events {
+                match event.event {
+                    ethereum::EthEvent::TokenLocked {
+                        id,
+                        depositor,
+                        deposit_receiver,
+                        root_token,
+                        vault: _,
+                        amount,
+                    } => {
+                        // Send transaction to Concordium.
+                        let deposit = concordium_contracts::DepositOperation {
+                            id:       id.low_u64(),
+                            user:     deposit_receiver.into(),
+                            root:     root_token.into(),
+                            amount:   convert_to_token_amount(amount),
+                            // TODO: Hardcoded token ID. Works with contracts as they are
+                            // now, but is not ideal.
+                            token_id: cis2::TokenId::new_unchecked(vec![0u8; 8]),
+                        };
+                        let update = concordium_contracts::StateUpdate::Deposit(deposit);
+                        // TODO estimate execution energy.
+                        let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
+                        txs.push((event.tx_hash, tx));
+                        deposits.push((event.tx_hash, id.low_u64(), amount, depositor, root_token));
+                    }
+                    ethereum::EthEvent::TokenMapped {
+                        id,
+                        root_token,
+                        child_token,
+                        token_type: _,
+                        ref name,
+                        decimals,
+                    } => {
+                        // Send transaction to Concordium.
+                        let map = concordium_contracts::TokenMapOperation {
+                            id:    id.low_u64(),
+                            root:  root_token.into(),
+                            child: child_token,
+                        };
+                        let update = concordium_contracts::StateUpdate::TokenMap(map);
+                        let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
+                        txs.push((event.tx_hash, tx));
+                        maps.push((root_token, child_token, name.clone(), decimals));
+                    }
+                    ethereum::EthEvent::TokenUnmapped {
+                        id,
+                        root_token,
+                        child_token,
+                        token_type: _,
+                    } => {
+                        // Do nothing at present. Manual intervention needed.
+                        log::warn!("Token {id} ({root_token} -> {child_token}) unmapped.");
+                        unmaps.push((root_token, child_token));
+                    }
+                    ethereum::EthEvent::Withdraw {
+                        id,
+                        child_token: _,
+                        amount,
+                        receiver,
+                        origin_tx_hash,
+                        origin_event_index,
+                        child_token_id: _,
+                    } => {
+                        wes.push((
+                            event.tx_hash,
+                            id.low_u64(),
                             amount,
-                        } => {
-                            // Send transaction to Concordium.
-                            let deposit = concordium_contracts::DepositOperation {
-                                id:       id.low_u64(),
-                                user:     deposit_receiver.into(),
-                                root:     root_token.into(),
-                                amount:   convert_to_token_amount(amount),
-                                // TODO: Hardcoded token ID. Works with contracts as they are now,
-                                // but is not ideal.
-                                token_id: cis2::TokenId::new_unchecked(vec![0u8; 8]),
-                            };
-                            let update = concordium_contracts::StateUpdate::Deposit(deposit);
-                            // TODO estimate execution energy.
-                            let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push(tx);
-                            deposits.push((
-                                event.tx_hash,
-                                id.low_u64(),
-                                amount,
-                                depositor,
-                                root_token,
-                            ));
-                        }
-                        ethereum::EthEvent::TokenMapped {
-                            id,
-                            root_token,
-                            child_token,
-                            token_type: _,
-                            name,
-                            decimals,
-                        } => {
-                            // Send transaction to Concordium.
-                            let map = concordium_contracts::TokenMapOperation {
-                                id:    id.low_u64(),
-                                root:  root_token.into(),
-                                child: child_token,
-                            };
-                            let update = concordium_contracts::StateUpdate::TokenMap(map);
-                            let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                            txs.push(tx);
-                            maps.push((root_token, child_token, name, decimals));
-                        }
-                        ethereum::EthEvent::TokenUnmapped {
-                            id,
-                            root_token,
-                            child_token,
-                            token_type: _,
-                        } => {
-                            // Do nothing at present. Manual intervention needed.
-                            log::warn!("Token {id} ({root_token} -> {child_token}) unmapped.");
-                            unmaps.push((root_token, child_token));
-                        }
-                        ethereum::EthEvent::Withdraw {
-                            id,
-                            child_token: _,
-                            amount,
-                            receiver,
                             origin_tx_hash,
                             origin_event_index,
-                            child_token_id: _,
-                        } => {
-                            wes.push((
-                                event.tx_hash,
-                                id.low_u64(),
-                                amount,
-                                origin_tx_hash,
-                                origin_event_index,
-                                receiver,
-                                origin_event_index,
-                            ));
-                        }
+                            receiver,
+                            origin_event_index,
+                        ));
                     }
                 }
+            }
 
-                db.insert_transactions(events.last_number, &txs, &wes, &deposits, &maps, &unmaps)
-                    .await?;
+            if db
+                .insert_transactions(events.last_number, &txs, &wes, &deposits, &maps, &unmaps)
+                .await
+                .is_ok()
+            {
                 for (_, _, _, _, _, receiver, we) in wes {
                     merkle_setter_sender
                         .send(MerkleUpdate::WithdrawalCompleted {
                             original_event_index: we,
                             receiver,
                         })
-                        .await?;
+                        .await
+                        .map_err(|_| anyhow::anyhow!("Merkle channel closed"))?;
                 }
+            } else {
+                return Err(InsertError::Retry(DatabaseOperation::EthereumEvents {
+                    events,
+                }));
+            }
 
-                // We have now written all the transactions to the database. Now send them to
-                // the Concordium node.
-                for tx in txs {
-                    let hash = tx.hash();
-                    ccd_transaction_sender.send(tx).await?;
-                    log::info!("Enqueued transaction {}.", hash);
-                }
+            // We have now written all the transactions to the database. Now send them to
+            // the Concordium node.
+            for (_, tx) in txs {
+                let hash = tx.hash();
+                ccd_transaction_sender
+                    .send(tx)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Transaction sender channel closed."))?;
+                log::info!("Enqueued transaction {}.", hash);
             }
-            DatabaseOperation::MarkConcordiumTransaction { tx_hash, state } => {
-                log::debug!("Marking {} as {:?}.", tx_hash, state);
-                db.mark_concordium_tx(tx_hash, state).await?;
+        }
+        DatabaseOperation::MarkConcordiumTransaction { tx_hash, state } => {
+            log::debug!("Marking {} as {:?}.", tx_hash, state);
+            if db.mark_concordium_tx(tx_hash, state).await.is_err() {
+                return Err(InsertError::Retry(
+                    DatabaseOperation::MarkConcordiumTransaction { tx_hash, state },
+                ));
             }
-            DatabaseOperation::GetPendingConcordiumTransactions { response } => {
-                let txs = db.pending_concordium_txs().await?;
+        }
+        DatabaseOperation::GetPendingConcordiumTransactions { response } => {
+            if let Ok(txs) = db.pending_concordium_txs().await {
                 response
                     .send(txs)
                     .map_err(|_| anyhow::anyhow!("Unable to send response. Terminating."))?;
+            } else {
+                return Err(InsertError::Retry(
+                    DatabaseOperation::GetPendingConcordiumTransactions { response },
+                ));
             }
-            DatabaseOperation::StoreEthereumTransaction {
-                tx_hash,
-                tx,
-                response,
-                ids,
-                root,
-            } => {
-                let _id = db.insert_ethereum_tx(tx_hash, &tx, root, &ids).await?;
+        }
+        DatabaseOperation::StoreEthereumTransaction {
+            tx_hash,
+            tx,
+            response,
+            ids,
+            root,
+        } => {
+            if db
+                .insert_ethereum_tx(tx_hash, &tx, root, &ids)
+                .await
+                .is_ok()
+            {
                 response.send((tx, ids)).map_err(|_| {
                     anyhow::anyhow!(
                         "Unable to send response StoreEthereumTransaction. Terminating."
                     )
                 })?;
+            } else {
+                return Err(InsertError::Retry(
+                    DatabaseOperation::StoreEthereumTransaction {
+                        tx_hash,
+                        tx,
+                        response,
+                        root,
+                        ids,
+                    },
+                ));
             }
-            DatabaseOperation::MarkSetMerkleCompleted {
-                root,
-                ids,
-                response,
-                success,
-                tx_hash,
-            } => {
-                db.mark_merkle_root_set(root, &ids, success, tx_hash)
-                    .await?;
+        }
+        DatabaseOperation::MarkSetMerkleCompleted {
+            root,
+            ids,
+            response,
+            success,
+            tx_hash,
+        } => {
+            if db
+                .mark_merkle_root_set(root, &ids, success, tx_hash)
+                .await
+                .is_ok()
+            {
                 response.send(()).map_err(|_| {
                     anyhow::anyhow!("Unable to send response MarkSetMerkleCompleted. Terminating.")
                 })?;
+            } else {
+                return Err(InsertError::Retry(
+                    DatabaseOperation::MarkSetMerkleCompleted {
+                        root,
+                        ids,
+                        response,
+                        success,
+                        tx_hash,
+                    },
+                ));
             }
         }
     }

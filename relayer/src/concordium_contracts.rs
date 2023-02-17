@@ -420,7 +420,7 @@ pub async fn use_node(
     sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut height: AbsoluteBlockHeight, // start height
     max_parallel: u32,
-    stop_flag: AtomicBool,
+    stop_flag: Arc<AtomicBool>,
     max_behind: u32, // maximum number of seconds a node can be behind before it is deemed "behind"
 ) -> Result<(), NodeError> {
     let mut finalized_blocks = bridge_manager
