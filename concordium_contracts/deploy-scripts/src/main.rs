@@ -8,9 +8,9 @@ use std::{
 
 use anyhow::Context;
 use big_s::S;
-use concordium_contracts_common::{Address, NewContractNameError, NewReceiveNameError};
 use concordium_rust_sdk::{
     endpoints::{self, RPCError},
+    smart_contracts::common::{Address, NewContractNameError, NewReceiveNameError},
     types::{
         smart_contracts::{ExceedsParameterSize, ModuleRef, WasmModule},
         ContractAddress,
@@ -23,13 +23,13 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    contracts::{convert_contract_address, BridgeRoles, CIS2BridgeableRoles},
+    contracts::{BridgeRoles, CIS2BridgeableRoles},
     deployer::{BRIDGE_UPGRADE_METHOD, CIS2_UPGRADE_METHOD},
 };
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    pub concordium_url: String,
+    pub concordium_url:   String,
     pub concordium_token: String,
 
     pub concordium_manager_account_file: String,
@@ -37,22 +37,22 @@ pub struct Config {
 
 #[derive(Clone, Debug)]
 pub struct WrappedToken {
-    pub name: String,
-    pub token_metadata_url: String,
+    pub name:                String,
+    pub token_metadata_url:  String,
     pub token_metadata_hash: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Output {
     pub bridge_manager: ContractAddress,
-    pub tokens: Vec<OutputToken>,
+    pub tokens:         Vec<OutputToken>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OutputToken {
-    pub name: String,
+    pub name:      String,
     pub token_url: String,
-    pub contract: ContractAddress,
+    pub contract:  ContractAddress,
 }
 
 #[derive(Error, Debug)]
@@ -171,7 +171,7 @@ async fn deploy_token(
     deployer
         .token_grant_role(
             mock_token,
-            Address::Contract(convert_contract_address(&bridge_manager)),
+            Address::Contract(bridge_manager),
             CIS2BridgeableRoles::Manager,
         )
         .await?;
@@ -181,9 +181,9 @@ async fn deploy_token(
     );
 
     let token = OutputToken {
-        name: token.name.clone(),
+        name:      token.name.clone(),
         token_url: token.token_metadata_url.clone(),
-        contract: mock_token,
+        contract:  mock_token,
     };
 
     Ok(token)
@@ -212,7 +212,7 @@ async fn init_contracts(
     println!("");
 
     let mut output = Output {
-        bridge_manager: bridge_manager,
+        bridge_manager,
         tokens: vec![],
     };
 
@@ -326,22 +326,22 @@ async fn main() -> Result<(), DeployError> {
 
     let tokens = [
         WrappedToken {
-            name: S("ETH.eth"),
-            token_metadata_url: S("https://relayer-testnet.toni.systems/token/metadata/ETH.et"),
+            name:                S("ETH.eth"),
+            token_metadata_url:  S("https://relayer-testnet.toni.systems/token/metadata/ETH.et"),
             token_metadata_hash: S(
                 "08951bc955a7cc53d5d374d79be086357837cbacc7387e1803976bb6569ecaea",
             ),
         },
         WrappedToken {
-            name: S("MOCK.et"),
-            token_metadata_url: S("https://relayer-testnet.toni.systems/token/metadata/MOCK.et"),
+            name:                S("MOCK.et"),
+            token_metadata_url:  S("https://relayer-testnet.toni.systems/token/metadata/MOCK.et"),
             token_metadata_hash: S(
                 "9fe0f5ab1019deec299474bcc712afdee4aa59762cd6e6b1fc23223a36e96f6f",
             ),
         },
         WrappedToken {
-            name: S("USDC.et"),
-            token_metadata_url: S("https://relayer-testnet.toni.systems/token/metadata/USDC.et"),
+            name:                S("USDC.et"),
+            token_metadata_url:  S("https://relayer-testnet.toni.systems/token/metadata/USDC.et"),
             token_metadata_hash: S(
                 "be08a2ad4f7b9633b2cd2ee101b6555e512fc67556dd8234bfe05cdbccd574a0",
             ),

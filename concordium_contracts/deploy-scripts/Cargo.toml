@@ -19,10 +19,6 @@ thiserror = "1.0"
 tokio = {version = "1.18", features = ["rt", "macros"]}
 tonic = "0.8"
 
-[dependencies.concordium-contracts-common]
-path = "./deps/concordium-rust-sdk/concordium-base/concordium-contracts-common/concordium-contracts-common"
-version = "4"
-
 [dependencies.concordium-rust-sdk]
-path = "./deps/concordium-rust-sdk"
+path = "../../../rust-client/"
 version = "2"

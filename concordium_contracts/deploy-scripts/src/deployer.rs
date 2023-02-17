@@ -1,12 +1,12 @@
-use std::str::FromStr;
-
 use anyhow::Context;
 use big_s::S;
-use concordium_contracts_common::{Address, ModuleReference, OwnedContractName, OwnedReceiveName};
 use concordium_rust_sdk::{
     common::types::{Amount, TransactionTime},
     endpoints::{Client, QueryError},
     id::{self, types::AccountAddress},
+    smart_contracts::common::{
+        self as contracts_common, Address, ModuleReference, OwnedContractName, OwnedReceiveName,
+    },
     types::{
         queries::AccountNonceResponse,
         smart_contracts::{
@@ -22,10 +22,11 @@ use concordium_rust_sdk::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use crate::{
     contracts::{
-        convert_account_address, BridgeGrantRoleParams, BridgeRoles, CIS2BridgeableGrantRoleParams,
+        BridgeGrantRoleParams, BridgeRoles, CIS2BridgeableGrantRoleParams,
         CIS2BridgeableInitParams, CIS2BridgeableRoles, UpgradeParams,
     },
     DeployError,
@@ -43,7 +44,7 @@ const CIS2_INIT_METHOD: &str = "init_cis2-bridgeable";
 /// Helper to parse account keys.
 pub struct AccountData {
     account_keys: id::types::AccountKeys,
-    address: id::types::AccountAddress,
+    address:      id::types::AccountAddress,
 }
 
 #[derive(Clone, Debug)]
@@ -58,7 +59,7 @@ pub struct ContractInitialized {
 
 #[derive(Clone, Debug)]
 pub struct Deployer {
-    pub client: Client,
+    pub client:      Client,
     pub manager_key: String,
 }
 
@@ -68,7 +69,7 @@ impl Deployer {
             .context("Could not read the keys file.")?;
 
         Ok(Deployer {
-            client: client,
+            client,
             manager_key: key_data,
         })
     }
@@ -157,17 +158,17 @@ impl Deployer {
         module_ref: ModuleRef,
     ) -> Result<ContractAddress, DeployError> {
         let parameters = CIS2BridgeableInitParams {
-            url: metadata,
+            url:  metadata,
             hash: Some(metadata_hash),
         };
-        let bytes = concordium_contracts_common::to_bytes(&parameters);
+        let bytes = contracts_common::to_bytes(&parameters);
         let param: Parameter = bytes.try_into()?;
 
         let payload = InitContractPayload {
             init_name: OwnedContractName::new(S(CIS2_INIT_METHOD))?,
             amount: Amount::from_micro_ccd(0),
             mod_ref: module_ref,
-            param: param,
+            param,
         };
 
         let contract = self.init_contract(payload).await?;
@@ -185,7 +186,7 @@ impl Deployer {
             init_name: OwnedContractName::new(S(BRIDGE_INIT_METHOD))?,
             amount: Amount::from_micro_ccd(0),
             mod_ref: module_ref,
-            param: param,
+            param,
         };
 
         let contract = self.init_contract(payload).await?;
@@ -228,16 +229,16 @@ impl Deployer {
         let modref: ModuleReference = ModuleReference::from(slice);
 
         let params = UpgradeParams {
-            module: modref,
+            module:  modref,
             migrate: None,
         };
-        let bytes = concordium_contracts_common::to_bytes(&params);
+        let bytes = contracts_common::to_bytes(&params);
 
         let update_payload = transactions::UpdateContractPayload {
-            amount: Amount::from_ccd(0),
-            address: contract,
+            amount:       Amount::from_ccd(0),
+            address:      contract,
             receive_name: OwnedReceiveName::from_str(method)?,
-            message: bytes.try_into()?,
+            message:      bytes.try_into()?,
         };
 
         let energy = self
@@ -302,19 +303,16 @@ impl Deployer {
     ) -> Result<(), DeployError> {
         let manager_account = self.get_manager_account()?;
 
-        let address = Address::Account(convert_account_address(&manager_account.address));
+        let address = Address::Account(manager_account.address);
 
-        let params = BridgeGrantRoleParams {
-            address: address,
-            role: role,
-        };
-        let bytes = concordium_contracts_common::to_bytes(&params);
+        let params = BridgeGrantRoleParams { address, role };
+        let bytes = contracts_common::to_bytes(&params);
 
         let update_payload = transactions::UpdateContractPayload {
-            amount: Amount::from_ccd(0),
-            address: contract,
+            amount:       Amount::from_ccd(0),
+            address:      contract,
             receive_name: OwnedReceiveName::from_str(BRIDGE_GRANT_ROLE_METHOD)?,
-            message: bytes.try_into()?,
+            message:      bytes.try_into()?,
         };
 
         let energy = self
@@ -335,17 +333,14 @@ impl Deployer {
     ) -> Result<(), DeployError> {
         let manager_account = self.get_manager_account()?;
 
-        let params = CIS2BridgeableGrantRoleParams {
-            address: address,
-            role: role,
-        };
-        let bytes = concordium_contracts_common::to_bytes(&params);
+        let params = CIS2BridgeableGrantRoleParams { address, role };
+        let bytes = contracts_common::to_bytes(&params);
 
         let update_payload = transactions::UpdateContractPayload {
-            amount: Amount::from_ccd(0),
-            address: contract,
+            amount:       Amount::from_ccd(0),
+            address:      contract,
             receive_name: OwnedReceiveName::from_str(CIS2_GRANT_ROLE_METHOD)?,
-            message: bytes.try_into()?,
+            message:      bytes.try_into()?,
         };
 
         let energy = self
@@ -409,12 +404,12 @@ impl Deployer {
         let consensus_info = self.client.clone().get_consensus_status().await?;
 
         let context = ContractContext {
-            invoker: Some(Address::Account(manager_address)),
-            contract: payload.address,
-            amount: payload.amount,
-            method: payload.receive_name,
+            invoker:   Some(Address::Account(manager_address)),
+            contract:  payload.address,
+            amount:    payload.amount,
+            method:    payload.receive_name,
             parameter: payload.message,
-            energy: 100000.into(),
+            energy:    100000.into(),
         };
 
         let result = self
@@ -469,9 +464,9 @@ impl Deployer {
                     reject_reason,
                 } => {
                     if transaction_type != Some(TransactionType::DeployModule) {
-                        return Err(DeployError::InvalidBlockItem(S(
-                            "Expected transaction type to be DeployModule if rejected",
-                        )));
+                        return Err(DeployError::InvalidBlockItem(S("Expected transaction \
+                                                                    type to be DeployModule \
+                                                                    if rejected")));
                     }
 
                     match reject_reason {
@@ -489,19 +484,17 @@ impl Deployer {
                     }
                 }
                 AccountTransactionEffects::ModuleDeployed { module_ref } => {
-                    return Ok(ModuleDeployed {
-                        module_ref: module_ref,
-                    });
+                    return Ok(ModuleDeployed { module_ref });
                 }
                 _ => {
                     return Err(DeployError::InvalidBlockItem(S(
-                        "invalid transaction effects",
+                        "invalid transaction effects"
                     )))
                 }
             },
             _ => {
                 return Err(DeployError::InvalidBlockItem(S(
-                    "Expected Account transaction",
+                    "Expected Account transaction"
                 )));
             }
         }
@@ -518,9 +511,9 @@ impl Deployer {
                     reject_reason,
                 } => {
                     if transaction_type != Some(TransactionType::InitContract) {
-                        return Err(DeployError::InvalidBlockItem(S(
-                            "Expected transaction type to be InitContract if rejected",
-                        )));
+                        return Err(DeployError::InvalidBlockItem(S("Expected transaction \
+                                                                    type to be InitContract \
+                                                                    if rejected")));
                     }
 
                     return Err(DeployError::TransactionRejectedR(format!(
@@ -535,13 +528,13 @@ impl Deployer {
                 }
                 _ => {
                     return Err(DeployError::InvalidBlockItem(S(
-                        "invalid transaction effects",
+                        "invalid transaction effects"
                     )))
                 }
             },
             _ => {
                 return Err(DeployError::InvalidBlockItem(S(
-                    "Expected Account transaction",
+                    "Expected Account transaction"
                 )));
             }
         }
@@ -555,9 +548,9 @@ impl Deployer {
                     reject_reason,
                 } => {
                     if transaction_type != Some(TransactionType::Update) {
-                        return Err(DeployError::InvalidBlockItem(S(
-                            "Expected transaction type to be Update if rejected",
-                        )));
+                        return Err(DeployError::InvalidBlockItem(S("Expected transaction \
+                                                                    type to be Update if \
+                                                                    rejected")));
                     }
 
                     return Err(DeployError::TransactionRejectedR(format!(
@@ -570,13 +563,13 @@ impl Deployer {
                 }
                 _ => {
                     return Err(DeployError::InvalidBlockItem(S(
-                        "invalid transaction effects",
+                        "invalid transaction effects"
                     )))
                 }
             },
             _ => {
                 return Err(DeployError::InvalidBlockItem(S(
-                    "Expected Account transaction",
+                    "Expected Account transaction"
                 )));
             }
         }
