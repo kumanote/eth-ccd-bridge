@@ -278,6 +278,7 @@ where
         if let Some(new_root) = tree.root() {
             let client = self.root_manager.client();
             let current_gas_price = client.get_gas_price().await?;
+            log::debug!("Current gas price is {}.", current_gas_price);
             if current_gas_price <= self.max_gas_price {
                 let call = self.root_manager.set_merkle_root(new_root);
                 let mut tx = call.tx;

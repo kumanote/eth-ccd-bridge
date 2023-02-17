@@ -1,7 +1,10 @@
+//! This module deal with interaction with the bridge manager contract
+//! on Concordium. It deals with parsing events emitted by the contract,
+//! and sending updates to it.
 use crate::{db::TransactionStatus, ethereum};
 use anyhow::Context;
 use concordium_rust_sdk::{
-    cis2::{TokenAmount, TokenId},
+    cis2::{self, TokenId},
     common::types::{Amount, TransactionTime},
     smart_contracts::common as contracts_common,
     types::{
@@ -12,7 +15,7 @@ use concordium_rust_sdk::{
         AbsoluteBlockHeight, Address, BlockItemSummary, ContractAddress, Energy, Nonce,
         RejectReason, WalletAccount,
     },
-    v2::{self, BlockIdentifier},
+    v2,
 };
 use ethabi::ethereum_types::H256;
 use futures::{StreamExt, TryStreamExt};
@@ -21,55 +24,85 @@ use std::sync::{
     Arc,
 };
 
+/// Type of Ethereum addresses.
 type EthAddress = [u8; 20];
-type ContractTokenAmount = TokenAmount;
 
 #[derive(contracts_common::Serialize, Debug)]
+/// Mint new token in response to a deposit on Ethereum.
 pub struct DepositOperation {
+    /// Id of the event on Ethereum that emitted the deposit.
     pub id:       u64,
+    /// The address to which the deposit should be made.
     pub user:     Address,
+    /// Address of the root token to be mapped.
     pub root:     EthAddress,
-    pub amount:   ContractTokenAmount,
+    /// Amount to be minted.
+    pub amount:   cis2::TokenAmount,
+    /// Token ID of the Concordium token to be minted.
     pub token_id: TokenId,
 }
 
 #[derive(contracts_common::Serialize, Debug)]
 pub struct TokenMapOperation {
+    /// Id of the operation emitted by Ethereum StateSender.
     pub id:    u64,
+    /// Address of the origin token on Ethereum.
     pub root:  EthAddress,
+    /// Address of the mapped token on Concordium.
     pub child: ContractAddress,
 }
 #[derive(contracts_common::Serialize, Debug)]
+/// State updates supported by the Bridge Manager contract.
 pub enum StateUpdate {
+    /// Deposit an amount of a mapped token.
     Deposit(DepositOperation),
+    /// Add a new token mapping.
     TokenMap(TokenMapOperation),
 }
 
 #[derive(Debug, Clone)]
+/// A wrapper around [`BridgeManagerClient`] that adds ability to send
+/// transactions.
+/// This structure maintains secret keys and the nonce.
+///
+/// The nonce is created when the client is created, and it is updated by
+/// [`make_state_update_tx`](BridgeManager::make_state_update_tx).
+/// This means that the [`BridgeManager`] assumes exclusive access to the
+/// account.
 pub struct BridgeManager {
     pub client: BridgeManagerClient,
     sender:     std::sync::Arc<WalletAccount>,
     next_nonce: Nonce,
 }
 
+/// Maximum allowed dry run energy.
 const ALLOWED_DRY_RUN_NRG: Energy = Energy { energy: 1_000_000 };
 
 // TODO: See how to keep this more easily in sync with the contracts.
 const DUPLICATE_OPERATION: i32 = -10;
 
 #[derive(Debug, Clone)]
+/// Return value from dry-running a transaction.
 pub enum DryRunReturn {
+    /// Dry run succeeded with the given amount of used energy.
     Success {
         used_energy: Energy,
+        /// Payload to be used for sending a smart contract update.
         payload:     UpdateContractPayload,
     },
+    /// The operation was already executed against the Concordium contract.
     DuplicateOperation,
-    OtherError {
-        reason: RejectReason,
-    },
+    /// Another reason for failure.
+    OtherError { reason: RejectReason },
 }
 
 impl BridgeManager {
+    /// Construct a new [`Self`].
+    ///
+    /// If the `start_nonce` is not supplied it will be queried
+    /// using [`get_next_account_sequence_number`](v2::Client::
+    /// get_next_account_sequence_number). In such a case, if there are
+    /// non-finalized transactions the invocation will fail.
     pub async fn new(
         mut client: BridgeManagerClient,
         sender: WalletAccount,
@@ -90,11 +123,12 @@ impl BridgeManager {
         };
         Ok(Self {
             client,
-            sender: sender.into(),
+            sender: Arc::new(sender),
             next_nonce,
         })
     }
 
+    /// Make the payload corresponding to the desired [`StateUpdate`].
     fn make_payload(&self, update: &StateUpdate) -> UpdateContractPayload {
         UpdateContractPayload {
             amount:       Amount::from_micro_ccd(0),
@@ -106,7 +140,12 @@ impl BridgeManager {
         }
     }
 
-    pub async fn check_operation_used(&mut self, id: u64) -> anyhow::Result<bool> {
+    /// Check whether a given operation id has already been executed.
+    pub async fn check_operation_used(
+        &mut self,
+        id: u64,
+        bi: impl v2::IntoBlockIdentifier,
+    ) -> anyhow::Result<bool> {
         let ctx = ContractContext {
             invoker:   Some(self.sender.address.into()),
             contract:  self.client.contract,
@@ -115,11 +154,7 @@ impl BridgeManager {
             parameter: Parameter::new_unchecked(id.to_le_bytes().into()),
             energy:    10_000.into(),
         };
-        let result = self
-            .client
-            .client
-            .invoke_instance(BlockIdentifier::LastFinal, &ctx)
-            .await?;
+        let result = self.client.client.invoke_instance(bi, &ctx).await?;
         match result.response {
             InvokeContractResult::Success { return_value, .. } => {
                 let rv = return_value.context("Unexpected response.")?.value;
@@ -135,9 +170,11 @@ impl BridgeManager {
         }
     }
 
+    /// Dry run a state update transaction in the provided block.
     pub async fn dry_run_state_update(
         &mut self,
         update: &StateUpdate,
+        bi: impl v2::IntoBlockIdentifier,
     ) -> anyhow::Result<DryRunReturn> {
         let payload = self.make_payload(update);
         let ctx = ContractContext::new_from_payload(
@@ -145,11 +182,7 @@ impl BridgeManager {
             ALLOWED_DRY_RUN_NRG,
             payload.clone(),
         );
-        let result = self
-            .client
-            .client
-            .invoke_instance(BlockIdentifier::LastFinal, &ctx)
-            .await?;
+        let result = self.client.client.invoke_instance(bi, &ctx).await?;
         match result.response {
             InvokeContractResult::Success { used_energy, .. } => Ok(DryRunReturn::Success {
                 used_energy,
@@ -169,6 +202,10 @@ impl BridgeManager {
         }
     }
 
+    /// Construct a update transaction that can be sent to execute the provided
+    /// [`StateUpdate`]. The expiry time of the transaction is set for 1d.
+    ///
+    /// This **does not** send the transaction.
     pub fn make_state_update_tx(
         &mut self,
         execution_energy: Energy,
@@ -192,6 +229,7 @@ impl BridgeManager {
         tx.into()
     }
 
+    /// Make and send the update transaction.
     pub async fn send_state_update(
         &mut self,
         execution_energy: Energy,
@@ -203,50 +241,67 @@ impl BridgeManager {
     }
 }
 
-// TODO: We could just import the contract instead of copying this.
-
 #[derive(contracts_common::Serialize, PartialEq, Eq, Debug, Copy, Clone)]
+/// Roles that can be set for the `BridgeManager` contracg
 pub enum Roles {
+    /// Admin, can set other roles, including admins.
     Admin,
+    /// Mapper can add and remove token mappings.
     Mapper,
+    /// `StateSyncher` can send deposits. This role is played by the relayer.
     StateSyncer,
 }
 
 #[derive(Debug, PartialEq, Eq, contracts_common::Serialize)]
+/// A new token was mapped.
 pub struct TokenMapEvent {
+    /// Id of the operation emitted by Ethereum. Used to deduplicate them.
     pub id:    u64,
+    /// Address of the original token on Ethereum.
     pub root:  EthAddress,
+    /// Address of the mapped token on Concordium.
     pub child: ContractAddress,
 }
 
 #[derive(Debug, PartialEq, Eq, contracts_common::Serialize)]
 pub struct DepositEvent {
+    /// Id of the operation emitted by Ethereum. Used to deduplicate them.
     pub id:       u64,
+    /// Address of the child token that is to be minted.
     pub contract: ContractAddress,
-    pub amount:   ContractTokenAmount,
+    /// Amount to be minted.
+    pub amount:   cis2::TokenAmount,
+    /// Id of the token on Concordium.
     pub token_id: TokenId,
 }
 
 #[derive(Debug, PartialEq, Eq, contracts_common::Serialize)]
 pub struct WithdrawEvent {
+    /// Index of the event emitted by the BridgeManager.
     pub event_index: u64,
+    /// Address of the child token that is to be withdrawn.
     pub contract:    ContractAddress,
-    pub amount:      ContractTokenAmount,
+    /// Amount to be withdrawn.
+    pub amount:      cis2::TokenAmount,
+    /// Address that originated the withdrawal.
     pub ccd_address: Address,
+    /// The recepient of the withdrawal on Ethereum.
     pub eth_address: EthAddress,
+    /// Id of the token on Concordium.
     pub token_id:    TokenId,
 }
 
-// A GrantRoleEvent introduced by this smart contract.
 #[derive(Debug, PartialEq, Eq, contracts_common::Serialize)]
+/// An event emitted when a role has been granted.
 pub struct GrantRoleEvent {
-    /// Address that has been given the role
+    /// Address that has been granted the role.
     address: Address,
     /// The role that has been granted.
     role:    Roles,
 }
-// A RevokeRoleEvent introduced by this smart contract.
+
 #[derive(Debug, PartialEq, Eq, contracts_common::Serialize)]
+/// An event emitted when a role has been revoked/removed.
 pub struct RevokeRoleEvent {
     /// Address that has been revoked the role
     address: Address,
@@ -254,8 +309,8 @@ pub struct RevokeRoleEvent {
     role:    Roles,
 }
 
-/// Tagged event to be serialized for the event log.
 #[derive(Debug, PartialEq, Eq)]
+/// All possible events emitted by the bridge.
 pub enum BridgeEvent {
     TokenMap(TokenMapEvent),
     Deposit(DepositEvent),
@@ -265,6 +320,8 @@ pub enum BridgeEvent {
 }
 
 impl BridgeEvent {
+    /// Extract an event index if possible. Event index
+    /// is only emitted by [`WithdrawEvent`].
     pub fn event_index(&self) -> Option<u64> {
         match self {
             BridgeEvent::TokenMap(_) => None,
@@ -277,14 +334,15 @@ impl BridgeEvent {
 }
 
 /// Tag for the BridgeManager TokenMap event.
-pub const TOKEN_MAP_EVENT_TAG: u8 = u8::MAX;
+const TOKEN_MAP_EVENT_TAG: u8 = u8::MAX;
 /// Tag for the BridgeManager Deposit event.
-pub const DEPOSIT_EVENT_TAG: u8 = u8::MAX - 1;
+const DEPOSIT_EVENT_TAG: u8 = u8::MAX - 1;
 /// Tag for the BridgeManager Withdraw event.
-pub const WITHDRAW_EVENT_TAG: u8 = u8::MAX - 2;
-pub const GRANT_ROLE_EVENT_TAG: u8 = 0;
-pub const REVOKE_ROLE_EVENT_TAG: u8 = 1;
+const WITHDRAW_EVENT_TAG: u8 = u8::MAX - 2;
+const GRANT_ROLE_EVENT_TAG: u8 = 0;
+const REVOKE_ROLE_EVENT_TAG: u8 = 1;
 
+/// Serialization that must match that of the Contract.
 impl contracts_common::Serial for BridgeEvent {
     fn serial<W: contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
@@ -312,6 +370,7 @@ impl contracts_common::Serial for BridgeEvent {
     }
 }
 
+/// Deserialization that must match that of the contract.
 impl contracts_common::Deserial for BridgeEvent {
     fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
         let tag = source.read_u8()?;
@@ -327,6 +386,7 @@ impl contracts_common::Deserial for BridgeEvent {
 }
 
 #[derive(Clone, Debug)]
+/// A client for querying and looking at events of the bridge manager contract.
 pub struct BridgeManagerClient {
     pub client: v2::Client,
     contract:   ContractAddress,
@@ -484,12 +544,62 @@ pub async fn use_node(
     Ok(())
 }
 
+/// A worker that sends transactions to the Concordium node.
+///
+/// The transactions in the channel should be in increasing order of nonces,
+/// otherwise sending will fail.
 pub async fn concordium_tx_sender(
     mut client: v2::Client,
     mut receiver: tokio::sync::mpsc::Receiver<BlockItem<EncodedPayload>>,
 ) -> anyhow::Result<()> {
+    // Process the response.
+    // Return an error if submitting this transaction failed and this cannot be
+    // recovered.
+    //
+    // Otherwise either return Ok(true) if retry should be attempted, or Ok(false).
+    // if submission succeeded.
+    let process_response = |hash, response: v2::RPCResult<TransactionHash>| match response {
+        Ok(hash) => {
+            log::info!("Transaction {hash} sent to the Concordium node.");
+            Ok(false)
+        }
+        Err(e) => {
+            if e.is_duplicate() {
+                log::warn!("Transaction {hash} already exists at the node.");
+                Ok(false)
+            } else if e.is_invalid_argument() {
+                log::error!(
+                    "Transaction {hash} is not valid for the current state of the node. Aborting."
+                );
+                anyhow::bail!(
+                    "Transaction {} is not valid for the current state of the node. Aborting.",
+                    hash
+                )
+            } else {
+                log::error!("Sending transaction to Concordium failed due to {e}.");
+                Ok(true)
+            }
+        }
+    };
+
     while let Some(bi) = receiver.recv().await {
-        client.send_block_item(&bi).await?;
+        let hash = bi.hash();
+        let retry = process_response(hash, client.send_block_item(&bi).await)?;
+        if retry {
+            // Retry at most 5 times, waiting at most 32 * 5 = 160s
+            for i in 0..6 {
+                let delay = std::time::Duration::from_secs(5 << i);
+                log::error!(
+                    "Waiting for {} seconds before resubmitting {hash}.",
+                    delay.as_secs()
+                );
+                tokio::time::sleep(delay).await;
+                let retry = process_response(hash, client.send_block_item(&bi).await)?;
+                if !retry {
+                    break;
+                }
+            }
+        }
     }
     Ok(())
 }

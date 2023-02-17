@@ -17,7 +17,7 @@ use ethers::prelude::{
     Http, HttpRateLimitRetryPolicy, LocalWallet, Middleware, Provider, RetryClient, Signer,
 };
 use futures::Future;
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, str::FromStr};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -85,8 +85,6 @@ struct Relayer {
         env = "ETHCCD_RELAYER_DB_STRING"
     )]
     db_config: tokio_postgres::Config,
-    #[clap(long, env = "ETH_ADDRESS")]
-    eth_address: H160,
     #[clap(long, env = "ETH_KEY")]
     eth_private_key: LocalWallet,
     #[clap(
@@ -106,11 +104,12 @@ struct Relayer {
     #[clap(
         long,
         env = "ETHCCD_RELAYER_MAX_GAS_PRICE",
-        default_value = "1000000000"
+        value_parser = U256::from_dec_str, 
+        default_value = "1000000000",
     )]
     max_gas_price: U256,
     // Maximum gas for setting merkle roots.
-    #[clap(long, env = "ETHCCD_RELAYER_MAX_GAS_PRICE", default_value = "100000")]
+    #[clap(long, env = "ETHCCD_RELAYER_MAX_GAS", value_parser = U256::from_dec_str, default_value = "100000")]
     max_gas: U256,
     // Maximum gas for setting merkle roots.
     #[clap(
@@ -124,7 +123,7 @@ struct Relayer {
         long,
         help = "Chain ID. Goerli is 5, mainnet is 1.",
         env = "ETHCCD_RELAYER_CHAIN_ID",
-        default_value = "600"
+        default_value_t = 5
     )]
     chain_id: u64,
     /// Number of confirmations required on Ethereum before considering
@@ -249,6 +248,9 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Balance of the Ethereum sender account is {balance}.");
     let ethereum_nonce = ethereum_client.get_transaction_count(sender, None).await?;
     log::info!("Nonce of the Ethereum sender account is {ethereum_nonce}.");
+    log::info!("Using max gas price bound = {}.", app.max_gas_price);
+    log::info!("Using max gas bound = {}.", app.max_gas);
+    log::info!("Using chain id = {}.", app.chain_id);
 
     // ethers::prelude::Abigen::new("BridgeManager", "abis/root-chain-manager.json")
     //     .unwrap()
@@ -409,8 +411,8 @@ async fn main() -> anyhow::Result<()> {
     let merkle_client = MerkleSetterClient::new(
         root_chain_manager_contract,
         wallet,
-        app.max_gas_price,
-        app.max_gas,
+        app.max_gas_price.into(),
+        app.max_gas.into(),
         ethereum_nonce,
         &pending_merkle_set,
         chrono::Duration::seconds(app.merkle_update_interval.try_into()?),
