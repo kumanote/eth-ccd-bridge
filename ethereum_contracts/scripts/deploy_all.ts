@@ -1,6 +1,6 @@
 import { ethers, run, web3, network } from 'hardhat'
 import { BridgeProxyAdmin, BridgeProxyAdmin__factory, ERC20Vault, ERC20VaultProxy__factory, ERC20Vault__factory, EtherVault, EtherVaultProxy__factory, EtherVault__factory, RootChainManager, RootChainManagerProxy__factory, RootChainManager__factory, StateSender, StateSenderProxy__factory, StateSender__factory } from '../typechain-types'
-import { execSync } from 'child_process';
+import { execSync } from 'child_process'
 import { config } from 'dotenv'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 config({
@@ -49,7 +49,7 @@ async function createStateSender(): Promise<StateSender> {
   await stateSender.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying stateSender implementation
     try {
       await run('verify:verify', {
@@ -69,11 +69,11 @@ async function createStateSender(): Promise<StateSender> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying stateSender proxy
     try {
       await run('verify:verify', {
-        contract: "contracts/StateSender/StateSenderProxy.sol:StateSenderProxy",
+        contract: 'contracts/StateSender/StateSenderProxy.sol:StateSenderProxy',
         address: proxy.address,
         constructorArguments: [
           stateSender.address,
@@ -85,13 +85,14 @@ async function createStateSender(): Promise<StateSender> {
       console.error(err)
     }
 
-    console.log('\nLinking stateSender Proxy to implementation contract:');
-    let output = execSync(
-      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+    console.log('\nLinking stateSender Proxy to implementation contract:')
+    const output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name !== 'mainnet' ? '-' + network.name : ''
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
       }"`
-    ).toString();
-    console.log(output);
+    ).toString()
+    console.log(output)
   }
 
   console.log(`StateSenderProxy at ${proxy.address} with implementation at ${stateSender.address}`)
@@ -109,11 +110,11 @@ async function createProxyAdmin(): Promise<BridgeProxyAdmin> {
   await proxyAdmin.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying BridgeProxyAdmin
     try {
       await run('verify:verify', {
-        contract: "contracts/proxy/ProxyAdmin.sol:BridgeProxyAdmin",
+        contract: 'contracts/proxy/ProxyAdmin.sol:BridgeProxyAdmin',
         address: proxyAdmin.address,
         constructorArguments: [
         ]
@@ -136,7 +137,7 @@ async function createEtherVault(): Promise<EtherVault> {
   await ethVault.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying ethVault implementation
     try {
       await run('verify:verify', {
@@ -156,11 +157,11 @@ async function createEtherVault(): Promise<EtherVault> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying ethVault proxy
     try {
       await run('verify:verify', {
-        contract: "contracts/TokenVault/EtherVaultProxy.sol:EtherVaultProxy",
+        contract: 'contracts/TokenVault/EtherVaultProxy.sol:EtherVaultProxy',
         address: proxy.address,
         constructorArguments: [
           ethVault.address,
@@ -172,13 +173,14 @@ async function createEtherVault(): Promise<EtherVault> {
       console.error(err)
     }
 
-    console.log('\nLinking ethVault Proxy to implementation contract:');
-    let output = execSync(
-      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+    console.log('\nLinking ethVault Proxy to implementation contract:')
+    const output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name !== 'mainnet' ? '-' + network.name : ''
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
       }"`
-    ).toString();
-    console.log(output);
+    ).toString()
+    console.log(output)
   }
 
   console.log(`EtherVaultProxy at ${proxy.address} with implementation at ${ethVault.address}`)
@@ -194,7 +196,7 @@ async function createErc20Vault(): Promise<ERC20Vault> {
   await erc20Vault.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying erc20Vault implementation
     try {
       await run('verify:verify', {
@@ -214,11 +216,11 @@ async function createErc20Vault(): Promise<ERC20Vault> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying erc20Vault proxy
     try {
       await run('verify:verify', {
-        contract: "contracts/TokenVault/ERC20VaultProxy.sol:ERC20VaultProxy",
+        contract: 'contracts/TokenVault/ERC20VaultProxy.sol:ERC20VaultProxy',
         address: proxy.address,
         constructorArguments: [
           erc20Vault.address,
@@ -230,13 +232,14 @@ async function createErc20Vault(): Promise<ERC20Vault> {
       console.error(err)
     }
 
-    console.log('\nLinking erc20Vault Proxy to implementation contract:');
-    let output = execSync(
-      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+    console.log('\nLinking erc20Vault Proxy to implementation contract:')
+    const output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name !== 'mainnet' ? '-' + network.name : ''
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
       }"`
-    ).toString();
-    console.log(output);
+    ).toString()
+    console.log(output)
   }
 
   console.log(`ERC20VaultProxy at ${proxy.address} with implementation at ${erc20Vault.address}`)
@@ -253,7 +256,7 @@ async function createRootChainManager(): Promise<RootChainManager> {
   await rootManager.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying rootManager implementation
     try {
       await run('verify:verify', {
@@ -273,11 +276,11 @@ async function createRootChainManager(): Promise<RootChainManager> {
   await proxy.deployed()
   console.log('sleep')
   await sleep(120000)
-  if (network.name != 'hardhat') {
+  if (network.name !== 'hardhat') {
     // Verifying rootManager proxy
     try {
       await run('verify:verify', {
-        contract: "contracts/root/RootChainManagerProxy.sol:RootChainManagerProxy",
+        contract: 'contracts/root/RootChainManagerProxy.sol:RootChainManagerProxy',
         address: proxy.address,
         constructorArguments: [
           rootManager.address,
@@ -289,13 +292,14 @@ async function createRootChainManager(): Promise<RootChainManager> {
       console.error(err)
     }
 
-    console.log('\nLinking rootManager Proxy to implementation contract:');
-    let output = execSync(
-      `curl -d "address=${proxy.address}" -s "https://api${network.name != 'mainnet' ? `-` + network.name : ''
+    console.log('\nLinking rootManager Proxy to implementation contract:')
+    const output = execSync(
+      `curl -d "address=${proxy.address}" -s "https://api${network.name !== 'mainnet' ? '-' + network.name : ''
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       }.etherscan.io/api?module=contract&action=verifyproxycontract&apikey=${process.env.ETHERSCAN_API_KEY
       }"`
-    ).toString();
-    console.log(output);
+    ).toString()
+    console.log(output)
   }
 
   console.log(`RootChainManagerProxy at ${proxy.address} with implementation at ${rootManager.address}`)

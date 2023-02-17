@@ -13,8 +13,7 @@ import "solidity-coverage";
 import "hardhat-gas-reporter";
 import "@nomiclabs/hardhat-web3";
 
-const ACCOUNT_PRIVATE_KEY = process.env.ACCOUNT_PRIVATE_KEY || "";
-const ETHEREUM_GOERLI_KEY = process.env.ETHEREUM_GOERLI_KEY || "";
+const ETHEREUM_GOERLI_KEY = process.env.ETHEREUM_GOERLI_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
 const ETHEREUM_MAINNET_KEY = process.env.ETHEREUM_MAINNET_KEY || "";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 const BSCSCAN_API_KEY = process.env.BSCSCAN_API_KEY || "";
