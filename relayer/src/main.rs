@@ -12,12 +12,12 @@ use concordium::{
     v2,
 };
 use concordium_rust_sdk as concordium;
-use ethabi::ethereum_types::{H160, U256};
+use ethabi::ethereum_types::{U256};
 use ethers::prelude::{
     Http, HttpRateLimitRetryPolicy, LocalWallet, Middleware, Provider, RetryClient, Signer,
 };
 use futures::Future;
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
