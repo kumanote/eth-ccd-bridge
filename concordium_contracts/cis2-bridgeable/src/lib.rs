@@ -97,20 +97,10 @@ struct ViewAllRolesState {
     all_roles: Vec<(Address, ViewRolesState)>,
 }
 
-/// Part of the return type of the `viewTokenState` function.
-#[derive(Serialize, SchemaType, Debug, PartialEq)]
-struct ViewAddressState {
-    /// The number of tokens owned by this address.
-    balance: ContractTokenAmount,
-    /// The addresses which are currently enabled as operators for
-    /// this address.
-    operators: Vec<Address>,
-}
-
-/// The return type of the `viewTokenState` function.
+/// The return type of the `viewTokenOwners` function.
 #[derive(Serialize, SchemaType, Debug)]
-struct ViewTokenState {
-    token_state: Vec<(Address, ViewAddressState)>,
+struct ViewTokenOwners {
+    token_owners: Vec<Address>,
 }
 
 /// The parameter type for the contract function `setPaused`.
@@ -1073,29 +1063,22 @@ fn contract_view_roles<S: HasStateApi>(
     Ok(ViewAllRolesState { all_roles })
 }
 
-/// View function that returns the entire state setting of balances and operators. Meant for
-/// testing.
+/// View function that returns all token owners. Meant for
+/// monitoring.
 #[receive(
     contract = "cis2-bridgeable",
-    name = "viewTokenState",
-    return_value = "ViewTokenState"
+    name = "viewTokenOwners",
+    return_value = "ViewTokenOwners"
 )]
 fn contract_view_token_state<S: HasStateApi>(
     _ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>,
-) -> ReceiveResult<ViewTokenState> {
+) -> ReceiveResult<ViewTokenOwners> {
     let state = host.state();
 
-    let mut inner_state = Vec::new();
-    for (k, a_state) in state.token.iter() {
-        let balance = a_state.balance;
-        let operators = a_state.operators.iter().map(|x| *x).collect();
-        inner_state.push((*k, ViewAddressState { balance, operators }));
-    }
+    let token_owners = state.token.iter().map(|x| *x.0).collect();
 
-    Ok(ViewTokenState {
-        token_state: inner_state,
-    })
+    Ok(ViewTokenOwners { token_owners })
 }
 
 // Bridge functions
@@ -1574,35 +1557,23 @@ mod tests {
         // Check `view_token_state` function returns the entire state setting of balances and operators.
         let view_token_state_result = contract_view_token_state(&ctx, &mut host);
 
-        let token_state = view_token_state_result.unwrap().token_state;
+        let token_owners = view_token_state_result.unwrap().token_owners;
 
         // Check the view_token_state_result
         claim_eq!(
-            token_state.len(),
+            token_owners.len(),
             2,
             "Exactly 2 accounts should be included in the state"
         );
         claim_eq!(
-            token_state[0],
-            (
-                concordium_std::Address::Account(ACCOUNT_1),
-                ViewAddressState {
-                    balance: token_amount(10),
-                    operators: [ADDRESS_2].to_vec()
-                }
-            ),
-            "ACCOUNT_1 should have the correct balance and operators"
+            token_owners[0],
+            concordium_std::Address::Account(ACCOUNT_1),
+            "ACCOUNT_1 should be a token owner."
         );
         claim_eq!(
-            token_state[1],
-            (
-                concordium_std::Address::Account(ACCOUNT_2),
-                ViewAddressState {
-                    balance: token_amount(20),
-                    operators: [ADDRESS_1].to_vec()
-                }
-            ),
-            "ACCOUNT_2 should have the correct balance and operators"
+            token_owners[1],
+            concordium_std::Address::Account(ACCOUNT_2),
+            "ACCOUNT_2 should be a token owner."
         );
     }
 
