@@ -8,7 +8,7 @@ declare global {
              */
             NEXT_PUBLIC_ROOT_MANAGER_ADDRESS: string;
             NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS: string; // TODO: What's this? Add documentation
-            // NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
+            NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS: string; // TODO: Add documentation
             // NEXT_PUBLIC_STATE_SENDER_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
             // NEXT_PUBLIC_PROXY_ADMIN_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
 

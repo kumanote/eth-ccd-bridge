@@ -21,7 +21,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
         const typeToVault = await rootContract.typeToVault(
-            process.env.NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS //address to generate the predicate address
+            process.env.NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS //address to generate the predicate address
         );
 
         return typeToVault;
