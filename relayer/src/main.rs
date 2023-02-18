@@ -16,7 +16,6 @@ use ethabi::ethereum_types::U256;
 use ethers::prelude::{
     Http, HttpRateLimitRetryPolicy, LocalWallet, Middleware, Provider, RetryClient, Signer,
 };
-use futures::Future;
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Parser, Debug)]
@@ -154,25 +153,6 @@ struct Relayer {
     ethereum_request_timeout: u64,
 }
 
-fn spawn_report<E, A, T>(
-    name: impl std::fmt::Display + Send + 'static,
-    future: T,
-) -> tokio::task::JoinHandle<T::Output>
-where
-    T: Future<Output = Result<A, E>> + Send + 'static,
-    A: Send + 'static,
-    E: Send + 'static + std::fmt::Debug, {
-    tokio::spawn(async move {
-        match future.await {
-            Ok(a) => Ok(a),
-            Err(e) => {
-                log::error!("Task {} terminated: {:#?}", name, e);
-                Err(e)
-            }
-        }
-    })
-}
-
 async fn find_start_ethereum_config<M: Middleware>(
     client: M,
     last_processed: Option<u64>,
@@ -251,6 +231,12 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Using max gas price bound = {}.", app.max_gas_price);
     log::info!("Using max gas bound = {}.", app.max_gas);
     log::info!("Using chain id = {}.", app.chain_id);
+
+    // Set up signal handlers before doing anything non-trivial so we have some sort
+    // of graceful shut down during initial database lookups and pending
+    // transaction sends.
+    let (stop_sender, mut stop_receiver) = tokio::sync::watch::channel(());
+    let shutdown_handler_handle = tokio::spawn(set_shutdown(stop_sender));
 
     // ethers::prelude::Abigen::new("BridgeManager", "abis/root-chain-manager.json")
     //     .unwrap()
@@ -363,80 +349,107 @@ async fn main() -> anyhow::Result<()> {
 
     let pending_merkle_set = db.pending_ethereum_tx().await?;
 
-    let (stop_sender, stop_receiver) = tokio::sync::watch::channel(());
-    let shutdown_handler_handle = tokio::spawn(set_shutdown(stop_sender));
-
+    // Now we set up the main service, after we have established a baseline.
+    // The different tasks communicate using channels established above.
+    // The shutdown plan is as follows.
+    // - Tasks which only query are just aborted.
+    // - Tasks which send transactions or write to the database are given an
+    //   opportunity to shut down gracefully by sending a signal on the
+    //   stop_sender/stop_receiver channel. The same broadcast channel is shared by
+    //   all tasks, and the only sender is the signal handler.
     let tx_sender_handle = tokio::spawn(concordium_contracts::concordium_tx_sender(
         concordium_client.clone(),
         ccd_transaction_receiver,
         stop_receiver.clone(),
     ));
+    let db_task_handle = tokio::spawn(db::handle_database(
+        app.db_config,
+        db,
+        db_receiver,
+        bridge_manager,
+        ccd_transaction_sender,
+        merkle_setter_sender,
+        stop_receiver.clone(),
+    ));
+    let merkle_updater_handle = {
+        let merkle_client = MerkleSetterClient::new(
+            root_chain_manager_contract,
+            wallet,
+            app.max_gas_price.into(),
+            app.max_gas.into(),
+            ethereum_nonce,
+            &pending_merkle_set,
+            chrono::Duration::seconds(app.merkle_update_interval.try_into()?),
+            leaves,
+            max_marked_event_index,
+        )?;
 
-    let db_task_handle = spawn_report(
-        "database handler",
-        db::handle_database(
-            app.db_config,
-            db,
-            db_receiver,
-            bridge_manager,
-            ccd_transaction_sender,
-            merkle_setter_sender,
-            stop_receiver.clone(),
-        ),
-    );
-
-    let watch_concordium_handle = spawn_report(
-        "Watch concordium",
-        concordium_contracts::listen_concordium(
-            bridge_manager_client.clone(),
-            db_sender.clone(),
-            concordium_start_height,
-            app.max_parallel,
-            app.max_behind,
-        ),
-    );
-
-    let watch_ethereum_handle = spawn_report(
-        "Watch ethereum",
-        ethereum::watch_eth_blocks(
-            state_sender_contract,
-            db_sender.clone(),
-            start_number,
-            upper_number,
-            app.num_confirmations,
-        ),
-    );
-
-    let merkle_client = MerkleSetterClient::new(
-        root_chain_manager_contract,
-        wallet,
-        app.max_gas_price.into(),
-        app.max_gas.into(),
-        ethereum_nonce,
-        &pending_merkle_set,
-        chrono::Duration::seconds(app.merkle_update_interval.try_into()?),
-        leaves,
-        max_marked_event_index,
-    )?;
-
-    let merkle_updater_handle = spawn_report(
-        "Merkle updater",
-        merkle::send_merkle_root_updates(
+        tokio::spawn(merkle::send_merkle_root_updates(
             merkle_client,
             pending_merkle_set,
             merkle_setter_receiver,
             db_sender.clone(),
             app.num_confirmations,
-            stop_receiver,
-        ),
-    );
-    merkle_updater_handle.await??;
-    watch_ethereum_handle.await??;
-    watch_concordium_handle.await??;
-    db_task_handle.await??;
-    tx_sender_handle.await??;
-    shutdown_handler_handle.await??;
+            stop_receiver.clone(),
+        ))
+    };
+
+    // The remaining tasks only watch so they are aborted on on signal received.
+    let watch_concordium_handle = tokio::spawn(concordium_contracts::listen_concordium(
+        bridge_manager_client.clone(),
+        db_sender.clone(),
+        concordium_start_height,
+        app.max_parallel,
+        app.max_behind,
+    ));
+    let watch_ethereum_handle = tokio::spawn(ethereum::watch_eth_blocks(
+        state_sender_contract,
+        db_sender.clone(),
+        start_number,
+        upper_number,
+        app.num_confirmations,
+    ));
+
+    // Wait for signal to be received.
+    if let Err(e) = stop_receiver.changed().await {
+        log::error!("The signal handler unexpectedly died with {e}. Shutting off the service.");
+    }
+
+    // Stop watcher tasks.
+    watch_concordium_handle.abort();
+    watch_ethereum_handle.abort();
+
+    // And wait for all of them to terminate.
+    await_and_report("merkle updater", merkle_updater_handle).await;
+    await_and_report("watch Ethereum", watch_ethereum_handle).await;
+    await_and_report("watch Concordium", watch_concordium_handle).await;
+    await_and_report("database handler", db_task_handle).await;
+    await_and_report("concordium transaction sender", tx_sender_handle).await;
+    await_and_report("shutdown handler", shutdown_handler_handle).await;
     Ok(())
+}
+
+async fn await_and_report<E: std::fmt::Display>(
+    descr: &str,
+    handle: tokio::task::JoinHandle<Result<(), E>>,
+) {
+    match handle.await {
+        Ok(Ok(())) => {
+            log::info!("Task {descr} terminated.");
+        }
+        Ok(Err(e)) => {
+            log::error!("Task {descr} unexpectedly stopped due to {e:#}.");
+        }
+        Err(e) => {
+            if e.is_panic() {
+                log::error!("Task panicked.");
+            } else if e.is_cancelled() {
+                log::info!("Task {descr} was cancelled.");
+            } else {
+                log::error!("Task {descr} unexpectedly closed.");
+            }
+        }
+    }
 }
 
 /// Construct a future for shutdown signals (for unix: SIGINT and SIGTERM) (for

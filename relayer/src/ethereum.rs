@@ -177,6 +177,34 @@ async fn get_eth_block_events<M: Middleware + 'static>(
     contract: &StateSender<M>,
     block_number: u64,
     upper_block: u64,
+) -> anyhow::Result<EthBlockEvents> {
+    let mut retry_num = 0;
+    loop {
+        match get_eth_block_events_worker(contract, block_number, upper_block).await {
+            Ok(x) => return Ok(x),
+            Err(e) => {
+                if retry_num > 6 {
+                    log::error!("Too many failures attempting to query Ethereum events. Aborting.");
+                    anyhow::bail!(
+                        "Too many failures attempting to query Ethereum events. Aborting."
+                    );
+                } else {
+                    let delay = std::time::Duration::from_secs(5 << retry_num);
+                    log::error!(
+                        "Failed getting Ethereum block events due to {e}. Retrying in {} seconds.",
+                        delay.as_secs()
+                    );
+                    retry_num += 1;
+                }
+            }
+        }
+    }
+}
+
+async fn get_eth_block_events_worker<M: Middleware + 'static>(
+    contract: &StateSender<M>,
+    block_number: u64,
+    upper_block: u64,
 ) -> anyhow::Result<EthBlockEvents>
 where
     M::Error: 'static, {
@@ -193,6 +221,10 @@ where
             .context("Unable to get LockedToken logs.")?;
         for log in logs {
             // TODO: If log.removed is true do something.
+            if log.removed.unwrap_or(true) {
+                log::error!("An event in a confirmed block was removed.");
+                // TODO: Raise an error.
+            }
             let decoded = LockedTokenFilter::decode_log(&RawLog {
                 topics: log.topics,
                 data:   log.data.0.into(),
@@ -226,6 +258,10 @@ where
             .context("Unable to MapAdded logs.")?;
         for log in logs {
             // TODO: If log.removed is true do something.
+            if log.removed.unwrap_or(true) {
+                log::error!("An event in a confirmed block was removed.");
+                // TODO: Raise an error.
+            }
             let decoded = TokenMapAddedFilter::decode_log(&RawLog {
                 topics: log.topics,
                 data:   log.data.0.into(),
@@ -266,7 +302,10 @@ where
             .await
             .context("Unable to get MapRemoved logs.")?;
         for log in logs {
-            // TODO: If log.removed is true do something.
+            if log.removed.unwrap_or(true) {
+                log::error!("An event in a confirmed block was removed.");
+                // TODO: Raise an error.
+            }
             let decoded = TokenMapRemovedFilter::decode_log(&RawLog {
                 topics: log.topics,
                 data:   log.data.0.into(),
@@ -297,6 +336,9 @@ where
             .await
             .context("Unable to get Withdraw logs.")?;
         for log in logs {
+            if log.removed.unwrap_or(true) {
+                log::error!("An event in a confirmed block was removed.");
+            }
             // TODO: If log.removed is true do something.
             let decoded = WithdrawEventFilter::decode_log(&RawLog {
                 topics: log.topics,
