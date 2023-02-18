@@ -7,6 +7,7 @@ use concordium_rust_sdk::{
     cis2::{self, TokenId},
     common::types::{Amount, TransactionTime},
     endpoints::QueryError,
+    id::types::AccountAddress,
     smart_contracts::common as contracts_common,
     types::{
         hashes::TransactionHash,
@@ -19,10 +20,7 @@ use concordium_rust_sdk::{
     v2,
 };
 use futures::{StreamExt, TryStreamExt};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 /// Type of Ethereum addresses.
 type EthAddress = [u8; 20];
@@ -388,12 +386,23 @@ impl contracts_common::Deserial for BridgeEvent {
 #[derive(Clone, Debug)]
 /// A client for querying and looking at events of the bridge manager contract.
 pub struct BridgeManagerClient {
-    pub client: v2::Client,
-    contract:   ContractAddress,
+    pub client:         v2::Client,
+    pub sender_account: AccountAddress,
+    contract:           ContractAddress,
 }
 
 impl BridgeManagerClient {
-    pub fn new(client: v2::Client, contract: ContractAddress) -> Self { Self { client, contract } }
+    pub fn new(
+        client: v2::Client,
+        sender_account: AccountAddress,
+        contract: ContractAddress,
+    ) -> Self {
+        Self {
+            client,
+            sender_account,
+            contract,
+        }
+    }
 
     /// Get all the bridge manager event logs.
     pub fn extract_events(
@@ -547,6 +556,30 @@ async fn listen_concordium_worker(
                     .map_err(NodeError::Internal)?;
                 if !events.is_empty() {
                     transaction_events.push((summary.hash, events));
+                }
+                // Also check for any other transactions from the sender account.
+                // So we can mark transactions we have sent as failed.
+                if summary.is_rejected_account_transaction().is_some() {
+                    if let Some(acc) = summary.sender_account() {
+                        if acc.is_alias(&bridge_manager.sender_account) {
+                            log::warn!(
+                                "Discovered a failed transaction {} sent by Concordium relayer \
+                                 account.",
+                                summary.hash
+                            );
+                            if sender
+                                .send(db::DatabaseOperation::MarkConcordiumTransaction {
+                                    tx_hash: summary.hash,
+                                    state:   db::TransactionStatus::Failed,
+                                })
+                                .await
+                                .is_err()
+                            {
+                                log::error!("The channel to the database writer has been closed.");
+                                return Ok(());
+                            }
+                        }
+                    }
                 }
             }
             if sender

@@ -12,7 +12,7 @@ use concordium::{
     v2,
 };
 use concordium_rust_sdk as concordium;
-use ethabi::ethereum_types::{U256};
+use ethabi::ethereum_types::U256;
 use ethers::prelude::{
     Http, HttpRateLimitRetryPolicy, LocalWallet, Middleware, Provider, RetryClient, Signer,
 };
@@ -314,15 +314,21 @@ async fn main() -> anyhow::Result<()> {
     let (last_ethereum, last_concordium, db) = Database::new(&app.db_config).await?;
     let start_nonce = db.submit_missing_txs(concordium_client.clone()).await?;
 
-    let bridge_manager_client =
-        BridgeManagerClient::new(concordium_client.clone(), app.bridge_manager);
+    let concordium_wallet = WalletAccount::from_json_file(app.concordium_wallet)?;
 
-    let bridge_manager = {
-        let wallet = WalletAccount::from_json_file(app.concordium_wallet)?;
-        concordium_contracts::BridgeManager::new(bridge_manager_client.clone(), wallet, start_nonce)
-            .await
-            .context("Unable to connect to Concordium API.")?
-    };
+    let bridge_manager_client = BridgeManagerClient::new(
+        concordium_client.clone(),
+        concordium_wallet.address,
+        app.bridge_manager,
+    );
+
+    let bridge_manager = concordium_contracts::BridgeManager::new(
+        bridge_manager_client.clone(),
+        concordium_wallet,
+        start_nonce,
+    )
+    .await
+    .context("Unable to connect to Concordium API.")?;
 
     let (start_number, upper_number) = find_start_ethereum_config(
         ethereum_client.clone(),
@@ -357,9 +363,8 @@ async fn main() -> anyhow::Result<()> {
 
     let pending_merkle_set = db.pending_ethereum_tx().await?;
 
-    let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let (stop_sender, stop_receiver) = tokio::sync::watch::channel(());
-    let shutdown_handler_handle = tokio::spawn(set_shutdown(stop_flag.clone(), stop_sender));
+    let shutdown_handler_handle = tokio::spawn(set_shutdown(stop_sender));
 
     let tx_sender_handle = tokio::spawn(concordium_contracts::concordium_tx_sender(
         concordium_client.clone(),
@@ -376,13 +381,8 @@ async fn main() -> anyhow::Result<()> {
             bridge_manager,
             ccd_transaction_sender,
             merkle_setter_sender,
-            stop_flag.clone(),
+            stop_receiver.clone(),
         ),
-    );
-
-    let mark_concordium_txs_handle = spawn_report(
-        "Mark concordium transactions",
-        db::mark_concordium_txs(db_sender.clone(), concordium_client, stop_flag.clone()),
     );
 
     let watch_concordium_handle = spawn_report(
@@ -404,7 +404,6 @@ async fn main() -> anyhow::Result<()> {
             start_number,
             upper_number,
             app.num_confirmations,
-            stop_flag.clone(),
         ),
     );
 
@@ -434,7 +433,6 @@ async fn main() -> anyhow::Result<()> {
     merkle_updater_handle.await??;
     watch_ethereum_handle.await??;
     watch_concordium_handle.await??;
-    mark_concordium_txs_handle.await??;
     db_task_handle.await??;
     tx_sender_handle.await??;
     shutdown_handler_handle.await??;
@@ -444,10 +442,7 @@ async fn main() -> anyhow::Result<()> {
 /// Construct a future for shutdown signals (for unix: SIGINT and SIGTERM) (for
 /// windows: ctrl c and ctrl break). The signal handler is set when the future
 /// is polled and until then the default signal handler.
-async fn set_shutdown(
-    flag: Arc<std::sync::atomic::AtomicBool>,
-    stop: tokio::sync::watch::Sender<()>,
-) -> anyhow::Result<()> {
+async fn set_shutdown(stop: tokio::sync::watch::Sender<()>) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         use tokio::signal::unix as unix_signal;
@@ -456,7 +451,6 @@ async fn set_shutdown(
         let terminate = Box::pin(terminate_stream.recv());
         let interrupt = Box::pin(interrupt_stream.recv());
         futures::future::select(terminate, interrupt).await;
-        flag.store(true, std::sync::atomic::Ordering::Release);
         if stop.send(()).is_err() {
             log::error!("Unable to send stop signal.");
         }
@@ -469,7 +463,6 @@ async fn set_shutdown(
         let ctrl_break = Box::pin(ctrl_break_stream.recv());
         let ctrl_c = Box::pin(ctrl_c_stream.recv());
         futures::future::select(ctrl_break, ctrl_c).await;
-        flag.store(true, Ordering::Release);
         if stop.send(()).is_err() {
             log::error!("Unable to send stop signal.");
         }

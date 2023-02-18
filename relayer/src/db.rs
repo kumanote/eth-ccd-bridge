@@ -17,10 +17,6 @@ use concordium_rust_sdk::{
 };
 use ethabi::ethereum_types::{H160, H256, U256};
 use num_bigint::BigUint;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
 use tokio::task::JoinHandle;
 use tokio_postgres::{NoTls, Statement, Transaction};
 
@@ -84,6 +80,7 @@ struct PreparedStatements {
     insert_concordium_event:      Statement,
     mark_withdrawal_as_completed: Statement,
     get_pending_withdrawals:      Statement,
+    get_max_event_index:          Statement,
 }
 
 impl PreparedStatements {
@@ -116,14 +113,28 @@ impl PreparedStatements {
         merkle_event_hash: Option<[u8; 32]>,
     ) -> anyhow::Result<i64> {
         let (event_type, index, subindex, receiver, amount, data) = match event {
-            BridgeEvent::TokenMap(tm) => (
-                ConcordiumEventType::TokenMap,
-                None,
-                None,
-                None,
-                None,
-                contracts_common::to_bytes(tm),
-            ),
+            BridgeEvent::TokenMap(tm) => {
+                let rows = db_tx
+                    .query(&self.mark_concordium_tx, &[
+                        &tx_hash.as_ref(),
+                        &TransactionStatus::Finalized,
+                    ])
+                    .await?;
+                if rows.len() != 1 {
+                    log::warn!(
+                        "A TokenMap event was emitted by a transaction not submitted by the \
+                         relayer."
+                    );
+                }
+                (
+                    ConcordiumEventType::TokenMap,
+                    None,
+                    None,
+                    None,
+                    None,
+                    contracts_common::to_bytes(tm),
+                )
+            }
             BridgeEvent::Deposit(de) => {
                 let rows = db_tx
                     .query(
@@ -134,6 +145,18 @@ impl PreparedStatements {
                     .await?;
                 if rows.len() != 1 {
                     log::warn!("Deposited an event that was not emitted on Ethereum.");
+                }
+                let rows = db_tx
+                    .query(&self.mark_concordium_tx, &[
+                        &tx_hash.as_ref(),
+                        &TransactionStatus::Finalized,
+                    ])
+                    .await?;
+                if rows.len() != 1 {
+                    log::warn!(
+                        "A deposit event was emitted by a transaction not submitted by the \
+                         relayer."
+                    );
                 }
                 (
                     ConcordiumEventType::Deposit,
@@ -298,6 +321,9 @@ impl Database {
                  IS NULL) AND event_type = 'withdraw' ORDER BY id ASC;",
             )
             .await?;
+        let get_max_event_index = client
+            .prepare("SELECT MAX(event_index) FROM concordium_events WHERE (root IS NOT NULL);")
+            .await?;
         let ethereum_checkpoint = client
             .query_opt(
                 "SELECT last_processed_height FROM checkpoints WHERE network = 'ethereum'",
@@ -314,6 +340,7 @@ impl Database {
             .await?;
         let concordium_last_height =
             concordium_checkpoint.map(|row| row.get::<_, i64>("last_processed_height") as u64);
+
         let db = Database {
             client,
             connection_handle,
@@ -326,6 +353,7 @@ impl Database {
                 insert_concordium_event,
                 get_pending_withdrawals,
                 mark_withdrawal_as_completed,
+                get_max_event_index,
             },
         };
         Ok((
@@ -503,10 +531,7 @@ impl Database {
             .await?;
         let max_sent = self
             .client
-            .query_one(
-                "SELECT MAX(event_index) FROM concordium_events WHERE (root IS NOT NULL);",
-                &[],
-            )
+            .query_one(&self.prepared_statements.get_max_event_index, &[])
             .await?;
         let max_sent_event_index = max_sent.try_get::<_, Option<i64>>(0)?.map(|x| x as u64);
         let mut result = Vec::with_capacity(rows.len());
@@ -727,16 +752,17 @@ impl Database {
     }
 }
 
-pub async fn mark_concordium_txs(
+// TODO: Revise this to do cleanup instead.
+async fn mark_concordium_txs(
     db_actions: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut client: v2::Client,
-    stop: Arc<AtomicBool>,
+    stop: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
     // TODO: We could just be listening for blocks. But if there are no pending
     // transactions that is not efficient.
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(10000));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    while !stop.load(Ordering::Acquire) {
+    while !stop.has_changed().unwrap_or(true) {
         interval.tick().await;
         let (response, receiver) = tokio::sync::oneshot::channel();
         db_actions
@@ -818,11 +844,10 @@ const MAX_CONNECT_ATTEMPTS: u32 = 5;
 
 async fn try_reconnect(
     config: &tokio_postgres::Config,
-    stop_flag: &AtomicBool,
-    create_tables: bool,
+    stop_flag: &tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<(Option<u64>, Option<AbsoluteBlockHeight>, Database)> {
     let mut i = 1;
-    while !stop_flag.load(Ordering::Acquire) {
+    while !stop_flag.has_changed().unwrap_or(true) {
         match Database::new(config).await {
             Ok(db) => return Ok(db),
             Err(e) if i < MAX_CONNECT_ATTEMPTS => {
@@ -856,11 +881,13 @@ pub async fn handle_database(
     mut bridge_manager: BridgeManager,
     ccd_transaction_sender: tokio::sync::mpsc::Sender<BlockItem<EncodedPayload>>,
     merkle_setter_sender: tokio::sync::mpsc::Sender<MerkleUpdate>,
-    stop_flag: Arc<AtomicBool>,
+    stop_flag: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
     let mut retry = None;
 
-    while !stop_flag.load(Ordering::Acquire) {
+    // Loop until told to stop. If the stop sender has been dropped
+    // treat that as if we need to stop as well.
+    while !stop_flag.has_changed().unwrap_or(true) {
         let next_item = if let Some(v) = retry.take() {
             Some(v)
         } else {
@@ -886,7 +913,7 @@ pub async fn handle_database(
                         delay.as_millis()
                     );
                     tokio::time::sleep(delay).await;
-                    let new_db = match try_reconnect(&config, &stop_flag, false).await {
+                    let new_db = match try_reconnect(&config, &stop_flag).await {
                         Ok(db) => db.2,
                         Err(e) => {
                             blocks.close();
@@ -1103,9 +1130,12 @@ async fn insert_into_db(
         }
         DatabaseOperation::GetPendingConcordiumTransactions { response } => {
             if let Ok(txs) = db.pending_concordium_txs().await {
-                response
-                    .send(txs)
-                    .map_err(|_| anyhow::anyhow!("Unable to send response. Terminating."))?;
+                if let Err(e) = response.send(txs) {
+                    log::error!(
+                        "Unable to send response to the sender of \
+                         GetPendingConcordiumTransactions, indicating they have stopped."
+                    );
+                }
             } else {
                 return Err(InsertError::Retry(
                     DatabaseOperation::GetPendingConcordiumTransactions { response },
@@ -1124,11 +1154,9 @@ async fn insert_into_db(
                 .await
                 .is_ok()
             {
-                response.send((tx, ids)).map_err(|_| {
-                    anyhow::anyhow!(
-                        "Unable to send response StoreEthereumTransaction. Terminating."
-                    )
-                })?;
+                if let Err(e) = response.send((tx, ids)) {
+                    log::error!("Unable to send response StoreEthereumTransaction. Continuing.");
+                }
             } else {
                 return Err(InsertError::Retry(
                     DatabaseOperation::StoreEthereumTransaction {
@@ -1153,9 +1181,9 @@ async fn insert_into_db(
                 .await
                 .is_ok()
             {
-                response.send(()).map_err(|_| {
-                    anyhow::anyhow!("Unable to send response MarkSetMerkleCompleted. Terminating.")
-                })?;
+                if let Err(e) = response.send(()) {
+                    log::error!("Unable to send response MarkSetMerkleCompleted. Continuing.")
+                }
             } else {
                 return Err(InsertError::Retry(
                     DatabaseOperation::MarkSetMerkleCompleted {

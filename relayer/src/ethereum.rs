@@ -334,14 +334,13 @@ pub async fn watch_eth_blocks<M: Middleware + 'static>(
     mut block_number: u64,
     mut upper_block: u64,
     num_confirmations: u64,
-    stop_flag: Arc<AtomicBool>,
 ) -> anyhow::Result<()>
 where
     M::Error: 'static, {
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(5000));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let client = contract.client();
-    while !stop_flag.load(Ordering::Acquire) {
+    loop {
         let number = client.get_block_number().await?;
         if block_number.saturating_add(num_confirmations) <= number.as_u64() {
             // TODO: Handle sending error here.
@@ -358,6 +357,4 @@ where
             interval.tick().await;
         }
     }
-    actions_channel.closed().await;
-    Ok(())
 }
