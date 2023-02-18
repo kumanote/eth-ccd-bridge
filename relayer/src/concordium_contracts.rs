@@ -6,6 +6,7 @@ use anyhow::Context;
 use concordium_rust_sdk::{
     cis2::{self, TokenId},
     common::types::{Amount, TransactionTime},
+    endpoints::QueryError,
     smart_contracts::common as contracts_common,
     types::{
         hashes::TransactionHash,
@@ -421,26 +422,17 @@ impl BridgeManagerClient {
 
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
-    /// Error establishing connection.
-    #[error("Error connecting to the node {0}.")]
-    ConnectionError(tonic::transport::Error),
     /// No finalization in some time.
     #[error("Timeout.")]
     Timeout,
-    /// Error establishing connection.
-    #[error("Error during query {0}.")]
-    NetworkError(#[from] v2::Status),
     /// Query error.
     #[error("Error querying the node {0}.")]
     QueryError(#[from] v2::QueryError),
-    /// Query errors, etc.
-    #[error("Error querying the node {0}.")]
-    OtherError(#[from] anyhow::Error),
+    /// Internal error. This is a configuration issue.
+    #[error("Internal error: {0}.")]
+    Internal(anyhow::Error),
 }
 
-/// Return Err if querying the node failed.
-/// Return Ok(()) if the channel to the database was closed.
-/// TODO: Documentation and retries here.
 pub async fn listen_concordium(
     // The client used to query the chain.
     mut bridge_manager: BridgeManagerClient,
@@ -450,17 +442,80 @@ pub async fn listen_concordium(
     mut height: AbsoluteBlockHeight, // start height
     // Maximum number of parallel queries to make. This speeds up initial catchup.
     max_parallel: u32,
-    // Flag to signal stopping the task gracefully.
-    stop_flag: Arc<AtomicBool>,
     // Maximum number of seconds to wait for a new finalized block.
-    max_behind: u32, 
+    max_behind: u32,
+) -> anyhow::Result<()> {
+    let mut retry_attempt = 0;
+    loop {
+        match listen_concordium_worker(
+            &mut bridge_manager,
+            &sender,
+            &mut height,
+            max_parallel,
+            max_behind,
+        )
+        .await
+        {
+            Ok(()) => {
+                retry_attempt = 0;
+                log::info!("Terminated listening for new Concordium events.")
+            }
+            Err(e) => match e {
+                NodeError::Timeout => {
+                    retry_attempt += 1;
+                    if retry_attempt > 6 {
+                        log::error!("Too many failures attempting to reconnect. Aborting.");
+                        anyhow::bail!("Too many failures attempting to reconnect. Aborting.");
+                    }
+                    let delay = std::time::Duration::from_secs(5 << retry_attempt);
+                    log::error!(
+                        "Querying the node timed out. Will attempt again in {} seconds..",
+                        delay.as_secs()
+                    );
+                }
+                NodeError::QueryError(e) => {
+                    retry_attempt += 1;
+                    if retry_attempt > 6 {
+                        log::error!("Too many failures attempting to reconnect. Aborting.");
+                        anyhow::bail!("Too many failures attempting to reconnect. Aborting.");
+                    }
+                    let delay = std::time::Duration::from_secs(5 << retry_attempt);
+                    log::error!(
+                        "Querying the node failed due to {:#}. Will attempt again in {} seconds.",
+                        e,
+                        delay.as_secs()
+                    );
+                }
+                NodeError::Internal(e) => {
+                    log::error!("Internal configuration error: {e}. Terminating the query task.");
+                    return Err(e);
+                }
+            },
+        }
+    }
+}
+
+/// Return Err if querying the node failed.
+/// Return Ok(()) if the channel to the database was closed.
+/// TODO: Documentation and retries here.
+async fn listen_concordium_worker(
+    // The client used to query the chain.
+    bridge_manager: &mut BridgeManagerClient,
+    // A channel used to insert into the database.
+    sender: &tokio::sync::mpsc::Sender<db::DatabaseOperation>,
+    // Height at which to start querying.
+    height: &mut AbsoluteBlockHeight, // start height
+    // Maximum number of parallel queries to make. This speeds up initial catchup.
+    max_parallel: u32,
+    // Maximum number of seconds to wait for a new finalized block.
+    max_behind: u32,
 ) -> Result<(), NodeError> {
     let mut finalized_blocks = bridge_manager
         .client
-        .get_finalized_blocks_from(height)
+        .get_finalized_blocks_from(*height)
         .await?;
     let timeout = std::time::Duration::from_secs(max_behind.into());
-    while !stop_flag.load(Ordering::Acquire) {
+    loop {
         let (error, chunk) = finalized_blocks
             .next_chunk_timeout(max_parallel as usize, timeout)
             .await
@@ -479,7 +534,7 @@ pub async fn listen_concordium(
                         .try_collect()
                         .await?
                 };
-                Ok::<(BlockInfo, Vec<BlockItemSummary>), anyhow::Error>((binfo.response, events))
+                Ok::<(BlockInfo, Vec<BlockItemSummary>), QueryError>((binfo.response, events))
             });
         }
 
@@ -487,7 +542,9 @@ pub async fn listen_concordium(
             let (block, summaries) = result?;
             let mut transaction_events = Vec::new();
             for summary in summaries {
-                let events = bridge_manager.extract_events(&summary)?;
+                let events = bridge_manager
+                    .extract_events(&summary)
+                    .map_err(NodeError::Internal)?;
                 if !events.is_empty() {
                     transaction_events.push((summary.hash, events));
                 }
@@ -503,17 +560,16 @@ pub async fn listen_concordium(
                 log::error!("The channel to the database writer has been closed.");
                 return Ok(());
             }
-            height = height.next();
+            *height = height.next();
         }
         if error {
             // we have processed the blocks we can, but further queries on the same stream
             // will fail since the stream signalled an error.
-            return Err(NodeError::OtherError(anyhow::anyhow!(
-                "Finalized block stream dropped."
+            return Err(NodeError::QueryError(v2::QueryError::RPCError(
+                v2::Status::unavailable("No more blocks are available to process.").into(),
             )));
         }
     }
-    Ok(())
 }
 
 /// A worker that sends transactions to the Concordium node.
@@ -523,6 +579,8 @@ pub async fn listen_concordium(
 pub async fn concordium_tx_sender(
     mut client: v2::Client,
     mut receiver: tokio::sync::mpsc::Receiver<BlockItem<EncodedPayload>>,
+    // Flag to signal stopping the task gracefully.
+    stop: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
     // Process the response.
     // Return an error if submitting this transaction failed and this cannot be
@@ -561,6 +619,12 @@ pub async fn concordium_tx_sender(
             // Retry at most 5 times, waiting at most 32 * 5 = 160s
             let mut success = false;
             for i in 0..6 {
+                // if the stop sender has been dropped we should terminate since that
+                // should be the last thing that happens in the program.
+                if stop.has_changed().unwrap_or(true) {
+                    log::info!("The service is requesting to terminate. Not retrying.");
+                    return Ok(());
+                }
                 let delay = std::time::Duration::from_secs(5 << i);
                 log::error!(
                     "Waiting for {} seconds before resubmitting {hash}.",
@@ -576,5 +640,6 @@ pub async fn concordium_tx_sender(
             anyhow::ensure!(success, "Unable to reconnect in 6 attempts.");
         }
     }
+    log::info!("Concordium transaction sender terminated.");
     Ok(())
 }

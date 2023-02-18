@@ -364,6 +364,7 @@ async fn main() -> anyhow::Result<()> {
     let tx_sender_handle = tokio::spawn(concordium_contracts::concordium_tx_sender(
         concordium_client.clone(),
         ccd_transaction_receiver,
+        stop_receiver.clone(),
     ));
 
     let db_task_handle = spawn_report(
@@ -391,7 +392,6 @@ async fn main() -> anyhow::Result<()> {
             db_sender.clone(),
             concordium_start_height,
             app.max_parallel,
-            stop_flag.clone(),
             app.max_behind,
         ),
     );
