@@ -1,8 +1,3 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
-
 use anyhow::Context;
 use concordium_rust_sdk as concordium;
 use ethabi::{
@@ -106,7 +101,7 @@ impl EthEvent {
 }
 
 impl TryFrom<LockedTokenFilter> for EthEvent {
-    type Error = anyhow::Error;
+    type Error = ethers::core::abi::Error;
 
     fn try_from(value: LockedTokenFilter) -> Result<Self, Self::Error> {
         Ok(Self::TokenLocked {
@@ -115,18 +110,15 @@ impl TryFrom<LockedTokenFilter> for EthEvent {
             deposit_receiver: concordium::id::types::AccountAddress(value.deposit_receiver),
             root_token:       value.root_token,
             vault:            value.vault,
-            amount:           U256::decode(value.deposit_data)?,
+            amount:           U256::decode(value.deposit_data)
+                .map_err(|_| ethers::core::abi::Error::InvalidData)?,
         })
     }
 }
 
-impl TryFrom<(TokenMapAddedFilter, String, u8)> for EthEvent {
-    type Error = anyhow::Error;
-
-    fn try_from(
-        (value, name, decimals): (TokenMapAddedFilter, String, u8),
-    ) -> Result<Self, Self::Error> {
-        Ok(Self::TokenMapped {
+impl From<(TokenMapAddedFilter, String, u8)> for EthEvent {
+    fn from((value, name, decimals): (TokenMapAddedFilter, String, u8)) -> Self {
+        Self::TokenMapped {
             id: value.id,
             root_token: value.root_token,
             child_token: concordium::types::ContractAddress::new(
@@ -136,7 +128,7 @@ impl TryFrom<(TokenMapAddedFilter, String, u8)> for EthEvent {
             token_type: value.token_type,
             name,
             decimals,
-        })
+        }
     }
 }
 
@@ -182,7 +174,17 @@ async fn get_eth_block_events<M: Middleware + 'static>(
     loop {
         match get_eth_block_events_worker(contract, block_number, upper_block).await {
             Ok(x) => return Ok(x),
-            Err(e) => {
+            Err(EthereumQueryError::Inconsistency) => {
+                anyhow::bail!(
+                    "An inconsistency is discovered when querying Ethereum events. Aborting."
+                );
+            }
+            Err(EthereumQueryError::UnexpectedData(e)) => {
+                anyhow::bail!(
+                    "Unexpected data received when querying Ethereum events: {e:#}. Aborting."
+                );
+            }
+            Err(EthereumQueryError::Retryable(e)) => {
                 if retry_num > 6 {
                     log::error!("Too many failures attempting to query Ethereum events. Aborting.");
                     anyhow::bail!(
@@ -201,11 +203,23 @@ async fn get_eth_block_events<M: Middleware + 'static>(
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+enum EthereumQueryError {
+    /// An inconsistency in data from the provider. The service should shut
+    /// down.
+    #[error("Inconsistent data from the provider.")]
+    Inconsistency,
+    #[error("Cannot parse expected logs from Ethereum contracts.")]
+    UnexpectedData(#[from] ethers::core::abi::Error),
+    #[error("An error occurred querying the data from the Ethereum provider: {0}.")]
+    Retryable(#[from] anyhow::Error),
+}
+
 async fn get_eth_block_events_worker<M: Middleware + 'static>(
     contract: &StateSender<M>,
     block_number: u64,
     upper_block: u64,
-) -> anyhow::Result<EthBlockEvents>
+) -> Result<EthBlockEvents, EthereumQueryError>
 where
     M::Error: 'static, {
     log::debug!("Getting block events for block at height {}.", block_number);
@@ -223,7 +237,7 @@ where
             // TODO: If log.removed is true do something.
             if log.removed.unwrap_or(true) {
                 log::error!("An event in a confirmed block was removed.");
-                // TODO: Raise an error.
+                return Err(EthereumQueryError::Inconsistency);
             }
             let decoded = LockedTokenFilter::decode_log(&RawLog {
                 topics: log.topics,
@@ -260,7 +274,7 @@ where
             // TODO: If log.removed is true do something.
             if log.removed.unwrap_or(true) {
                 log::error!("An event in a confirmed block was removed.");
-                // TODO: Raise an error.
+                return Err(EthereumQueryError::Inconsistency);
             }
             let decoded = TokenMapAddedFilter::decode_log(&RawLog {
                 topics: log.topics,
@@ -272,8 +286,16 @@ where
             } else {
                 log::debug!("New mapping for ERC20 token at {:#x}.", decoded.root_token);
                 let contract = crate::erc20::Erc20::new(decoded.root_token, client.clone());
-                let name = contract.name().call().await?;
-                let decimals = contract.decimals().call().await?;
+                let name = contract
+                    .name()
+                    .call()
+                    .await
+                    .context("Unable to get name of a token.")?;
+                let decimals = contract
+                    .decimals()
+                    .call()
+                    .await
+                    .context("Unable to get decimals of a token.")?;
                 (name, decimals)
             };
             let event = EthBlockEvent {
@@ -284,7 +306,7 @@ where
                     .block_number
                     .context("Transaction is confirmed, so must have block number.")?
                     .as_u64(),
-                event:        (decoded, name, decimals).try_into()?,
+                event:        (decoded, name, decimals).into(),
             };
             log::debug!(
                 "Discovered new `TokenMapAdded` event emitted by {:#x} in block {}.",
@@ -304,7 +326,7 @@ where
         for log in logs {
             if log.removed.unwrap_or(true) {
                 log::error!("An event in a confirmed block was removed.");
-                // TODO: Raise an error.
+                return Err(EthereumQueryError::Inconsistency);
             }
             let decoded = TokenMapRemovedFilter::decode_log(&RawLog {
                 topics: log.topics,
@@ -318,7 +340,7 @@ where
                     .block_number
                     .context("Transaction is confirmed, so must have block number.")?
                     .as_u64(),
-                event:        decoded.try_into()?,
+                event:        decoded.into(),
             };
             log::debug!(
                 "Discovered new `TokenMapRemoved` event emitted by {:#x} in block {}.",
@@ -338,8 +360,8 @@ where
         for log in logs {
             if log.removed.unwrap_or(true) {
                 log::error!("An event in a confirmed block was removed.");
+                return Err(EthereumQueryError::Inconsistency);
             }
-            // TODO: If log.removed is true do something.
             let decoded = WithdrawEventFilter::decode_log(&RawLog {
                 topics: log.topics,
                 data:   log.data.0.into(),
@@ -385,7 +407,6 @@ where
     loop {
         let number = client.get_block_number().await?;
         if block_number.saturating_add(num_confirmations) <= number.as_u64() {
-            // TODO: Handle sending error here.
             let block_events = get_eth_block_events(&contract, block_number, upper_block).await?;
             actions_channel
                 .send(DatabaseOperation::EthereumEvents {

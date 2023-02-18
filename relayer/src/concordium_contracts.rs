@@ -613,7 +613,7 @@ pub async fn concordium_tx_sender(
     mut client: v2::Client,
     mut receiver: tokio::sync::mpsc::Receiver<BlockItem<EncodedPayload>>,
     // Flag to signal stopping the task gracefully.
-    stop: tokio::sync::watch::Receiver<()>,
+    mut stop: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
     // Process the response.
     // Return an error if submitting this transaction failed and this cannot be
@@ -645,7 +645,15 @@ pub async fn concordium_tx_sender(
         }
     };
 
-    while let Some(bi) = receiver.recv().await {
+    while let Some(bi) = tokio::select! {
+        // Make sure to process all events that are in the queue before shutting down.
+        // Thus prioritize getting things from the channel.
+        // This only works in combination with the fact that we shut down senders
+        // upon receving a kill signal, so the receiver will be drained eventually.
+        biased;
+            x = receiver.recv() => x,
+            _ = stop.changed() => None,
+    } {
         let hash = bi.hash();
         let retry = process_response(hash, client.send_block_item(&bi).await)?;
         if retry {

@@ -358,8 +358,14 @@ where
         stop.clone(),
     ));
     while let Some(mu) = tokio::select! {
+        // Make sure to process all events that are in the queue before shutting down.
+        // Thus prioritize getting things from the channel.
+        // This only works in combination with the fact that we shut down senders
+        // upon receving a kill signal, so the receiver will be drained eventually.
+        biased;
+
+        v = receiver.recv() => v,
         _ = stop.changed() => None,
-        v = receiver.recv() => v
     } {
         match mu {
             MerkleUpdate::NewWithdraws { withdraws } => {
@@ -411,7 +417,7 @@ where
         client.update_interval.to_std()?,
     );
     send_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    'outer: while !stop.has_changed().unwrap_or(true) {
+    'outer: loop {
         // Handle followup for any pending transaction firs.
         if pending.is_some() {
             let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
@@ -453,8 +459,8 @@ where
                             log::info!("Withdrawal transaction confirmed in block number {bn}.");
                             if !found {
                                 log::error!(
-                                    "A transaction with hash {pending_hash} did not set a Merkle \
-                                     root."
+                                    "A transaction with hash {pending_hash:#x} did not set a \
+                                     Merkle root."
                                 )
                             };
                             let (response, receiver) = tokio::sync::oneshot::channel();
@@ -481,7 +487,7 @@ where
                             pending = None;
                         } else {
                             log::debug!(
-                                "Ethereum transaction {pending_hash} is in block {bn}, but not \
+                                "Ethereum transaction {pending_hash:#x} is in block {bn}, but not \
                                  yet confirmed."
                             );
                             pending = Some((pending_hash, root, ids));
@@ -492,7 +498,7 @@ where
                         );
                     }
                 } else {
-                    log::debug!("Ethereum transaction {pending_hash} is pending.");
+                    log::debug!("Ethereum transaction {pending_hash:#x} is pending.");
                     pending = Some((pending_hash, root, ids));
                 }
             }
@@ -528,7 +534,7 @@ where
                         .await?;
                     let (raw_tx, ids) = receiver.await?;
                     let ethereum_client = client.root_manager.client();
-                    log::debug!("Sending SetMerkleRoot transaction.");
+                    log::debug!("Sending SetMerkleRoot transaction with hash {tx_hash:#x}.");
                     let pending_tx = ethereum_client.send_raw_transaction(raw_tx).await?;
                     pending = Some((pending_tx.tx_hash(), root, ids));
                 }

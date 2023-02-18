@@ -16,6 +16,7 @@ use ethabi::ethereum_types::U256;
 use ethers::prelude::{
     Http, HttpRateLimitRetryPolicy, LocalWallet, Middleware, Provider, RetryClient, Signer,
 };
+use futures::StreamExt;
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Parser, Debug)]
@@ -192,6 +193,23 @@ async fn find_concordium_start_height(
     }
 }
 
+fn spawn_cancel<T>(
+    died_sender: tokio::sync::broadcast::Sender<()>,
+    future: T,
+) -> tokio::task::JoinHandle<T::Output>
+where
+    T: futures::Future + Send + 'static,
+    T::Output: Send + 'static, {
+    tokio::spawn(async move {
+        let res = future.await;
+        // We ignore errors here since this always happens at the end of a task.
+        // Since we keep one receiver alive until the end of the `main` function
+        // the error should not happen anyhow.
+        let _ = died_sender.send(());
+        res
+    })
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let app: Relayer = Relayer::parse();
@@ -216,7 +234,6 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let provider = Provider::new(ethereum_client);
-
     let ethereum_client = Arc::new(provider);
 
     // Transactions will be signed with the private key below and will be broadcast
@@ -236,7 +253,11 @@ async fn main() -> anyhow::Result<()> {
     // of graceful shut down during initial database lookups and pending
     // transaction sends.
     let (stop_sender, mut stop_receiver) = tokio::sync::watch::channel(());
-    let shutdown_handler_handle = tokio::spawn(set_shutdown(stop_sender));
+    let (died_sender, died_receiver) = tokio::sync::broadcast::channel(10);
+    let shutdown_handler_handle = spawn_cancel(
+        died_sender.clone(),
+        set_shutdown(stop_sender, died_sender.subscribe()),
+    );
 
     // ethers::prelude::Abigen::new("BridgeManager", "abis/root-chain-manager.json")
     //     .unwrap()
@@ -357,20 +378,26 @@ async fn main() -> anyhow::Result<()> {
     //   opportunity to shut down gracefully by sending a signal on the
     //   stop_sender/stop_receiver channel. The same broadcast channel is shared by
     //   all tasks, and the only sender is the signal handler.
-    let tx_sender_handle = tokio::spawn(concordium_contracts::concordium_tx_sender(
-        concordium_client.clone(),
-        ccd_transaction_receiver,
-        stop_receiver.clone(),
-    ));
-    let db_task_handle = tokio::spawn(db::handle_database(
-        app.db_config,
-        db,
-        db_receiver,
-        bridge_manager,
-        ccd_transaction_sender,
-        merkle_setter_sender,
-        stop_receiver.clone(),
-    ));
+    let tx_sender_handle = spawn_cancel(
+        died_sender.clone(),
+        concordium_contracts::concordium_tx_sender(
+            concordium_client.clone(),
+            ccd_transaction_receiver,
+            stop_receiver.clone(),
+        ),
+    );
+    let db_task_handle = spawn_cancel(
+        died_sender.clone(),
+        db::handle_database(
+            app.db_config,
+            db,
+            db_receiver,
+            bridge_manager,
+            ccd_transaction_sender,
+            merkle_setter_sender,
+            stop_receiver.clone(),
+        ),
+    );
     let merkle_updater_handle = {
         let merkle_client = MerkleSetterClient::new(
             root_chain_manager_contract,
@@ -384,31 +411,40 @@ async fn main() -> anyhow::Result<()> {
             max_marked_event_index,
         )?;
 
-        tokio::spawn(merkle::send_merkle_root_updates(
-            merkle_client,
-            pending_merkle_set,
-            merkle_setter_receiver,
-            db_sender.clone(),
-            app.num_confirmations,
-            stop_receiver.clone(),
-        ))
+        spawn_cancel(
+            died_sender.clone(),
+            merkle::send_merkle_root_updates(
+                merkle_client,
+                pending_merkle_set,
+                merkle_setter_receiver,
+                db_sender.clone(),
+                app.num_confirmations,
+                stop_receiver.clone(),
+            ),
+        )
     };
 
     // The remaining tasks only watch so they are aborted on on signal received.
-    let watch_concordium_handle = tokio::spawn(concordium_contracts::listen_concordium(
-        bridge_manager_client.clone(),
-        db_sender.clone(),
-        concordium_start_height,
-        app.max_parallel,
-        app.max_behind,
-    ));
-    let watch_ethereum_handle = tokio::spawn(ethereum::watch_eth_blocks(
-        state_sender_contract,
-        db_sender.clone(),
-        start_number,
-        upper_number,
-        app.num_confirmations,
-    ));
+    let watch_concordium_handle = spawn_cancel(
+        died_sender.clone(),
+        concordium_contracts::listen_concordium(
+            bridge_manager_client.clone(),
+            db_sender.clone(),
+            concordium_start_height,
+            app.max_parallel,
+            app.max_behind,
+        ),
+    );
+    let watch_ethereum_handle = spawn_cancel(
+        died_sender.clone(),
+        ethereum::watch_eth_blocks(
+            state_sender_contract,
+            db_sender.clone(),
+            start_number,
+            upper_number,
+            app.num_confirmations,
+        ),
+    );
 
     // Wait for signal to be received.
     if let Err(e) = stop_receiver.changed().await {
@@ -418,14 +454,22 @@ async fn main() -> anyhow::Result<()> {
     // Stop watcher tasks.
     watch_concordium_handle.abort();
     watch_ethereum_handle.abort();
-
     // And wait for all of them to terminate.
-    await_and_report("merkle updater", merkle_updater_handle).await;
-    await_and_report("watch Ethereum", watch_ethereum_handle).await;
-    await_and_report("watch Concordium", watch_concordium_handle).await;
-    await_and_report("database handler", db_task_handle).await;
-    await_and_report("concordium transaction sender", tx_sender_handle).await;
+    let shutdown = [
+        await_and_report("merkle updater", merkle_updater_handle),
+        await_and_report("watch Ethereum", watch_ethereum_handle),
+        await_and_report("watch Concordium", watch_concordium_handle),
+        await_and_report("database handler", db_task_handle),
+        await_and_report("concordium transaction sender", tx_sender_handle),
+    ];
+    shutdown
+        .into_iter()
+        .collect::<futures::stream::FuturesUnordered<_>>()
+        .collect::<()>()
+        .await;
     await_and_report("shutdown handler", shutdown_handler_handle).await;
+    drop(died_sender); // keep the sender alive until here explicitly so that we don't have spurious
+                       // errors when the last task is dying.
     Ok(())
 }
 
@@ -455,7 +499,10 @@ async fn await_and_report<E: std::fmt::Display>(
 /// Construct a future for shutdown signals (for unix: SIGINT and SIGTERM) (for
 /// windows: ctrl c and ctrl break). The signal handler is set when the future
 /// is polled and until then the default signal handler.
-async fn set_shutdown(stop: tokio::sync::watch::Sender<()>) -> anyhow::Result<()> {
+async fn set_shutdown(
+    stop_sender: tokio::sync::watch::Sender<()>,
+    mut task_died: tokio::sync::broadcast::Receiver<()>,
+) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         use tokio::signal::unix as unix_signal;
@@ -463,8 +510,9 @@ async fn set_shutdown(stop: tokio::sync::watch::Sender<()>) -> anyhow::Result<()
         let mut interrupt_stream = unix_signal::signal(unix_signal::SignalKind::interrupt())?;
         let terminate = Box::pin(terminate_stream.recv());
         let interrupt = Box::pin(interrupt_stream.recv());
-        futures::future::select(terminate, interrupt).await;
-        if stop.send(()).is_err() {
+        let task_died = Box::pin(task_died.recv());
+        futures::future::select(task_died, futures::future::select(terminate, interrupt)).await;
+        if stop_sender.send(()).is_err() {
             log::error!("Unable to send stop signal.");
         }
     }
@@ -475,8 +523,9 @@ async fn set_shutdown(stop: tokio::sync::watch::Sender<()>) -> anyhow::Result<()
         let mut ctrl_c_stream = windows_signal::ctrl_c()?;
         let ctrl_break = Box::pin(ctrl_break_stream.recv());
         let ctrl_c = Box::pin(ctrl_c_stream.recv());
-        futures::future::select(ctrl_break, ctrl_c).await;
-        if stop.send(()).is_err() {
+        let task_died = Box::pin(task_died.recv());
+        futures::future::select(task_died, futures::future::select(ctrl_break, ctrl_c)).await;
+        if stop_sender.send(()).is_err() {
             log::error!("Unable to send stop signal.");
         }
     }

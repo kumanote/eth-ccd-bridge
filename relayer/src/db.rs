@@ -216,6 +216,24 @@ pub struct Database {
     prepared_statements: PreparedStatements,
 }
 
+impl Database {
+    pub(crate) async fn stop(self) {
+        self.connection_handle.abort();
+        match self.connection_handle.await {
+            Ok(v) => {
+                if let Err(e) = v {
+                    log::error!("Database connection task terminated with an error {e:#}.");
+                }
+            }
+            Err(e) => {
+                if !e.is_cancelled() {
+                    log::error!("Error {e:#} shutting down database connection task.");
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum DatabaseOperation {
     ConcordiumEvents {
@@ -543,7 +561,7 @@ impl Database {
             let data: Vec<u8> = row.try_get("event_data")?;
             let we: WithdrawEvent = contracts_common::from_bytes(&mut &data[..])?;
             let status = client.client.get_block_item_status(&tx_hash).await?;
-            if let Some((block, summary)) = status.is_finalized() {
+            if let Some((_block, summary)) = status.is_finalized() {
                 let chain_events = client.extract_events(summary)?;
                 // Find the event with the given event index. We trust the contract
                 // to only have one event for each event index, so using find is safe.
@@ -881,17 +899,25 @@ pub async fn handle_database(
     mut bridge_manager: BridgeManager,
     ccd_transaction_sender: tokio::sync::mpsc::Sender<BlockItem<EncodedPayload>>,
     merkle_setter_sender: tokio::sync::mpsc::Sender<MerkleUpdate>,
-    stop_flag: tokio::sync::watch::Receiver<()>,
+    mut stop_flag: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
     let mut retry = None;
 
     // Loop until told to stop. If the stop sender has been dropped
     // treat that as if we need to stop as well.
-    while !stop_flag.has_changed().unwrap_or(true) {
+    loop {
         let next_item = if let Some(v) = retry.take() {
             Some(v)
         } else {
-            blocks.recv().await
+            tokio::select! {
+                // Make sure to process all events that are in the queue before shutting down.
+                // Thus prioritize getting things from the channel.
+                // This only works in combination with the fact that we shut down senders
+                // upon receving a kill signal, so the receiver will be drained eventually.
+                biased;
+                x = blocks.recv() => x,
+                _ = stop_flag.changed() => None,
+            }
         };
         if let Some(action) = next_item {
             match insert_into_db(
@@ -917,8 +943,7 @@ pub async fn handle_database(
                         Ok(db) => db.2,
                         Err(e) => {
                             blocks.close();
-                            db.connection_handle.abort();
-                            db.connection_handle.await??;
+                            db.stop().await;
                             return Err(e);
                         }
                     };
@@ -938,9 +963,9 @@ pub async fn handle_database(
                             if e.is_panic() {
                                 log::warn!(
                                     "Could not correctly stop the old database connection. The \
-                                     connection thread panicked."
+                                     connection thread panicked: {e:#}."
                                 );
-                            } else {
+                            } else if !e.is_cancelled() {
                                 log::warn!("Could not correctly stop the old database connection.");
                             }
                         }
@@ -962,8 +987,7 @@ pub async fn handle_database(
         }
     }
     blocks.close();
-    db.connection_handle.abort();
-    db.connection_handle.await??;
+    db.stop().await;
     Ok(())
 }
 
@@ -992,12 +1016,16 @@ async fn insert_into_db(
                 .await
             {
                 if !withdraws.is_empty() {
-                    merkle_setter_sender
+                    if merkle_setter_sender
                         .send(MerkleUpdate::NewWithdraws { withdraws })
                         .await
-                        .map_err(|_| {
-                            anyhow::anyhow!("Error sending merkle update. The channel is closed.")
-                        })?
+                        .is_err()
+                    {
+                        log::warn!(
+                            "Unable to send new withdraw events to the Merkle updated since the \
+                             channel is closed."
+                        )
+                    }
                 }
             } else {
                 return Err(InsertError::Retry(DatabaseOperation::ConcordiumEvents {
@@ -1095,13 +1123,21 @@ async fn insert_into_db(
                 .is_ok()
             {
                 for (_, _, _, _, _, receiver, we) in wes {
-                    merkle_setter_sender
+                    if merkle_setter_sender
                         .send(MerkleUpdate::WithdrawalCompleted {
                             original_event_index: we,
                             receiver,
                         })
                         .await
-                        .map_err(|_| anyhow::anyhow!("Merkle channel closed"))?;
+                        .is_err()
+                    {
+                        {
+                            log::warn!(
+                                "Unable to send completed withdrawal to the Merkle updater. The \
+                                 channel is closed."
+                            )
+                        }
+                    }
                 }
             } else {
                 return Err(InsertError::Retry(DatabaseOperation::EthereumEvents {
@@ -1113,11 +1149,16 @@ async fn insert_into_db(
             // the Concordium node.
             for (_, tx) in txs {
                 let hash = tx.hash();
-                ccd_transaction_sender
-                    .send(tx)
-                    .await
-                    .map_err(|_| anyhow::anyhow!("Transaction sender channel closed."))?;
-                log::info!("Enqueued transaction {}.", hash);
+                if ccd_transaction_sender.send(tx).await.is_err() {
+                    {
+                        log::warn!(
+                            "Unable to send transctions stored in the database to the node since \
+                             the channel is closed."
+                        )
+                    }
+                } else {
+                    log::info!("Enqueued transaction {}.", hash);
+                }
             }
         }
         DatabaseOperation::MarkConcordiumTransaction { tx_hash, state } => {
@@ -1131,7 +1172,7 @@ async fn insert_into_db(
         DatabaseOperation::GetPendingConcordiumTransactions { response } => {
             if let Ok(txs) = db.pending_concordium_txs().await {
                 if response.send(txs).is_err() {
-                    log::error!(
+                    log::warn!(
                         "Unable to send response to the sender of \
                          GetPendingConcordiumTransactions, indicating they have stopped."
                     );
@@ -1155,7 +1196,7 @@ async fn insert_into_db(
                 .is_ok()
             {
                 if response.send((tx, ids)).is_err() {
-                    log::error!("Unable to send response StoreEthereumTransaction. Continuing.");
+                    log::warn!("Unable to send response StoreEthereumTransaction. Continuing.");
                 }
             } else {
                 return Err(InsertError::Retry(
@@ -1181,8 +1222,8 @@ async fn insert_into_db(
                 .await
                 .is_ok()
             {
-                if let Err(e) = response.send(()) {
-                    log::error!("Unable to send response MarkSetMerkleCompleted. Continuing.")
+                if response.send(()).is_err() {
+                    log::warn!("Unable to send response MarkSetMerkleCompleted. Continuing.")
                 }
             } else {
                 return Err(InsertError::Retry(
