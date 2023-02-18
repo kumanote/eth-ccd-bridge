@@ -440,13 +440,20 @@ pub enum NodeError {
 
 /// Return Err if querying the node failed.
 /// Return Ok(()) if the channel to the database was closed.
-pub async fn use_node(
+/// TODO: Documentation and retries here.
+pub async fn listen_concordium(
+    // The client used to query the chain.
     mut bridge_manager: BridgeManagerClient,
+    // A channel used to insert into the database.
     sender: tokio::sync::mpsc::Sender<db::DatabaseOperation>,
+    // Height at which to start querying.
     mut height: AbsoluteBlockHeight, // start height
+    // Maximum number of parallel queries to make. This speeds up initial catchup.
     max_parallel: u32,
+    // Flag to signal stopping the task gracefully.
     stop_flag: Arc<AtomicBool>,
-    max_behind: u32, // maximum number of seconds a node can be behind before it is deemed "behind"
+    // Maximum number of seconds to wait for a new finalized block.
+    max_behind: u32, 
 ) -> Result<(), NodeError> {
     let mut finalized_blocks = bridge_manager
         .client

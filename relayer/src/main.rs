@@ -386,7 +386,7 @@ async fn main() -> anyhow::Result<()> {
 
     let watch_concordium_handle = spawn_report(
         "Watch concordium",
-        concordium_contracts::use_node(
+        concordium_contracts::listen_concordium(
             bridge_manager_client.clone(),
             db_sender.clone(),
             concordium_start_height,
