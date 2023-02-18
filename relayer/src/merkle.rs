@@ -187,10 +187,13 @@ impl<M, S> MerkleSetterClient<M, S> {
         max_marked_event_index: Option<u64>,
     ) -> anyhow::Result<Self> {
         let next_nonce = if let Some((_, bytes, _, _, _)) = pending_merkle_set {
-            log::debug!("There is a pending Ethereum transaction.");
-            let (tx, _) = ethers::types::transaction::eip2718::TypedTransaction::decode_signed(
+            let (tx, sig) = ethers::types::transaction::eip2718::TypedTransaction::decode_signed(
                 &Rlp::new(&bytes),
             )?;
+            log::debug!(
+                "There is a pending Ethereum transaction with hash {:#x}.",
+                tx.hash(&sig)
+            );
             std::cmp::max(
                 next_nonce,
                 tx.nonce().context("Nonce must have been set.")? + 1,
@@ -221,12 +224,11 @@ fn add_withdraw_event(
     leaves: &Arc<std::sync::Mutex<BTreeMap<u64, [u8; 32]>>>,
     event_index: u64,
     hash: [u8; 32],
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<[u8; 32]>> {
     let mut lock = leaves
         .lock()
         .map_err(|_| anyhow::anyhow!("Unable to acquire lock."))?;
-    lock.insert(event_index, hash);
-    Ok(())
+    Ok(lock.insert(event_index, hash))
 }
 
 fn remove_withdraw_event(
@@ -311,6 +313,15 @@ where
     }
 }
 
+/// A task that will send Merkle root updates.
+///
+/// Upon start it will check if it needs to resubmit any pending transactions.
+///
+/// After that a background task [`ethereum_tx_sender`] is started that sends
+/// updates to the Ethereum chain. See its documentation for details.
+///
+/// This worker instead monitors the provided `receiver` channel for new Merkle
+/// tree updates to update its in-memory state.
 pub async fn send_merkle_root_updates<M: Middleware + 'static, S: Signer + 'static>(
     client: MerkleSetterClient<M, S>,
     pending_merkle_set: Option<(H256, ethers::prelude::Bytes, u64, [u8; 32], Vec<u64>)>,
@@ -354,7 +365,11 @@ where
             MerkleUpdate::NewWithdraws { withdraws } => {
                 for (event_index, merkle_hash) in withdraws {
                     log::debug!("New withdraw event with index {event_index}.");
-                    add_withdraw_event(&leaves, event_index, merkle_hash)?;
+                    if add_withdraw_event(&leaves, event_index, merkle_hash)?.is_some() {
+                        log::warn!(
+                            "Duplicate event index {event_index} added to the withdraw events."
+                        );
+                    }
                 }
             }
             MerkleUpdate::WithdrawalCompleted {
@@ -369,11 +384,18 @@ where
             }
         }
     }
-    // TODO: Handle stop flag.
-    let () = sender_handle.await??;
+    sender_handle.await??;
     Ok(())
 }
 
+/// The task that sends updates to the Ethereum chain.
+/// - Check if there are any non-approved withdrawals, and if so makes a merkle
+///   proof and submits it to the Ethereum chain. Before transaction submission
+///   the transaction is stored in the database, and we mark the withdrawals
+///   that are to be approved in the database as "tentatively approved".
+/// - After that it waits until the transaction is confirmed on the chain. When
+///   this is done, i.e., the transaction is confirmed, it uses the provided
+///   `db_sender` channel to notify the database to mark the
 async fn ethereum_tx_sender<M: Middleware, S: Signer>(
     mut client: MerkleSetterClient<M, S>,
     db_sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
@@ -453,7 +475,7 @@ where
                                     TransactionHash::from(root)
                                 );
                                 // Assuming that the order is preserved by the channel.
-                                // Mark the high watermark of processd ids.
+                                // Mark the high watermark of processed ids.
                                 client.max_marked_event_index = last_id;
                             }
                             pending = None;

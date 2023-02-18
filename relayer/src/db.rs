@@ -371,7 +371,7 @@ impl Database {
         ids: &[u64],
     ) -> anyhow::Result<u64> {
         let timestamp = chrono::Utc::now().timestamp();
-        log::debug!("Inserting Ethereum transaction {}.", tx_hash);
+        log::debug!("Inserting Ethereum transaction {:#x}.", tx_hash);
         let statements = &self.prepared_statements;
         let db_tx = self.client.transaction().await?;
         let row = db_tx
@@ -1130,7 +1130,7 @@ async fn insert_into_db(
         }
         DatabaseOperation::GetPendingConcordiumTransactions { response } => {
             if let Ok(txs) = db.pending_concordium_txs().await {
-                if let Err(e) = response.send(txs) {
+                if response.send(txs).is_err() {
                     log::error!(
                         "Unable to send response to the sender of \
                          GetPendingConcordiumTransactions, indicating they have stopped."
@@ -1154,7 +1154,7 @@ async fn insert_into_db(
                 .await
                 .is_ok()
             {
-                if let Err(e) = response.send((tx, ids)) {
+                if response.send((tx, ids)).is_err() {
                     log::error!("Unable to send response StoreEthereumTransaction. Continuing.");
                 }
             } else {

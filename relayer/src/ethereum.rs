@@ -209,10 +209,10 @@ where
                 event:        decoded.try_into()?,
             };
             log::debug!(
-                "Discovered new `Locked` event emitted by {} in block number {}. Token = {}.",
-                log.address.to_string(),
+                "Discovered new `Locked` event emitted by {:#x} in block number {}. Token = {:#x}.",
+                log.address,
                 event.block_number,
-                root_token.to_string(),
+                root_token,
             );
             events.push(event);
         }
@@ -234,7 +234,7 @@ where
                 log::debug!("New mapping for ETH.");
                 ("ETH".into(), 18)
             } else {
-                log::debug!("New mapping for ERC20 token at {}.", decoded.root_token);
+                log::debug!("New mapping for ERC20 token at {:#x}.", decoded.root_token);
                 let contract = crate::erc20::Erc20::new(decoded.root_token, client.clone());
                 let name = contract.name().call().await?;
                 let decimals = contract.decimals().call().await?;
@@ -251,7 +251,7 @@ where
                 event:        (decoded, name, decimals).try_into()?,
             };
             log::debug!(
-                "Discovered new `TokenMapAdded` event emitted by {} in block {}.",
+                "Discovered new `TokenMapAdded` event emitted by {:#x} in block {}.",
                 log.address,
                 event.block_number
             );
@@ -282,7 +282,7 @@ where
                 event:        decoded.try_into()?,
             };
             log::debug!(
-                "Discovered new `TokenMapRemoved` event emitted by {} in block {}.",
+                "Discovered new `TokenMapRemoved` event emitted by {:#x} in block {}.",
                 log.address,
                 event.block_number
             );
@@ -313,7 +313,7 @@ where
                 event:        decoded.try_into()?,
             };
             log::debug!(
-                "Discovered new `WithdrawEvent` event emitted by {} in block {}.",
+                "Discovered new `WithdrawEvent` event emitted by {:#x} in block {}.",
                 log.address,
                 event.block_number
             );
