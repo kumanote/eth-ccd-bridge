@@ -149,7 +149,7 @@ pub struct MerkleSetterClient<M, S> {
     pub max_gas:                U256,
     pub next_nonce:             U256,
     /// Minimum number of seconds between merkle root updates.
-    pub update_interval:        chrono::Duration,
+    pub update_interval:        std::time::Duration,
     /// List of event indices and the hashes
     pub current_leaves:         Arc<std::sync::Mutex<BTreeMap<u64, [u8; 32]>>>,
     pub max_marked_event_index: Option<u64>,
@@ -182,7 +182,7 @@ impl<M, S> MerkleSetterClient<M, S> {
         max_gas: U256,
         next_nonce: U256,
         pending_merkle_set: &Option<(H256, ethers::prelude::Bytes, u64, [u8; 32], Vec<u64>)>,
-        update_interval: chrono::Duration,
+        update_interval: std::time::Duration,
         pending_withdrawals: Vec<(TransactionHash, WithdrawEvent)>,
         max_marked_event_index: Option<u64>,
     ) -> anyhow::Result<Self> {
@@ -394,6 +394,14 @@ where
     Ok(())
 }
 
+#[derive(Debug, thiserror::Error)]
+enum EthereumSenderError {
+    #[error("A network error occurred: {0}")]
+    Retryable(#[from] anyhow::Error),
+    #[error("An internal error occurred.")]
+    Internal,
+}
+
 /// The task that sends updates to the Ethereum chain.
 /// - Check if there are any non-approved withdrawals, and if so makes a merkle
 ///   proof and submits it to the Ethereum chain. Before transaction submission
@@ -413,12 +421,13 @@ where
     M::Error: 'static,
     S::Error: 'static, {
     let mut send_interval = tokio::time::interval_at(
-        tokio::time::Instant::now() + client.update_interval.to_std()?,
-        client.update_interval.to_std()?,
+        tokio::time::Instant::now() + client.update_interval,
+        client.update_interval,
     );
     send_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // TODO: Retry on connection failures here.
     'outer: loop {
-        // Handle followup for any pending transaction firs.
+        // Handle followup for any pending transaction first.
         if pending.is_some() {
             let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
             check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);

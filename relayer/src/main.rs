@@ -256,7 +256,7 @@ async fn main() -> anyhow::Result<()> {
     let (died_sender, died_receiver) = tokio::sync::broadcast::channel(10);
     let shutdown_handler_handle = spawn_cancel(
         died_sender.clone(),
-        set_shutdown(stop_sender, died_sender.subscribe()),
+        set_shutdown(stop_sender, died_receiver),
     );
 
     // ethers::prelude::Abigen::new("BridgeManager", "abis/root-chain-manager.json")
@@ -406,7 +406,7 @@ async fn main() -> anyhow::Result<()> {
             app.max_gas.into(),
             ethereum_nonce,
             &pending_merkle_set,
-            chrono::Duration::seconds(app.merkle_update_interval.try_into()?),
+            std::time::Duration::from_secs(app.merkle_update_interval),
             leaves,
             max_marked_event_index,
         )?;
