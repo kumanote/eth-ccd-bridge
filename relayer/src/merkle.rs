@@ -145,13 +145,21 @@ pub struct MerkleSetterClient<M, S> {
     /// The client used for setting merkle roots.
     pub root_manager:           BridgeManager<M>,
     pub signer:                 S,
+    /// Maximum gas price allowed. If the current gas price is above this
+    /// the sending will be skipped for this iteration.
     pub max_gas_price:          U256,
+    /// Maximum gas for sending the set merkle root transaction.
     pub max_gas:                U256,
+    /// Next nonce used for sending transactions. This is updated **after** a
+    /// pending transaction is confirmed.
     pub next_nonce:             U256,
     /// Minimum number of seconds between merkle root updates.
     pub update_interval:        std::time::Duration,
     /// List of event indices and the hashes
     pub current_leaves:         Arc<std::sync::Mutex<BTreeMap<u64, [u8; 32]>>>,
+    /// The high water mark. The last event that was set in the merkle root.
+    /// This is used to skip sending updates when there are no new
+    /// withdrawals to be approved.
     pub max_marked_event_index: Option<u64>,
 }
 
@@ -191,13 +199,11 @@ impl<M, S> MerkleSetterClient<M, S> {
                 &Rlp::new(&bytes),
             )?;
             log::debug!(
-                "There is a pending Ethereum transaction with hash {:#x}.",
+                "There is a pending Ethereum transaction with hash {:#x}. Using it's nonce as the \
+                 next nonce.",
                 tx.hash(&sig)
             );
-            std::cmp::max(
-                next_nonce,
-                tx.nonce().context("Nonce must have been set.")? + 1,
-            )
+            *tx.nonce().context("Nonce must have been set.")?
         } else {
             next_nonce
         };
@@ -357,6 +363,10 @@ where
             .await
             .context("Unable to get transaction status.")?;
         if status.is_none() {
+            log::info!(
+                "Transaction with hash {tx_hash:#x} is in the database, but not known to the \
+                 Ethereum chain. Submitting it."
+            );
             let _pending_tx = ethereum_client
                 .send_raw_transaction(raw_tx)
                 .await
@@ -489,6 +499,11 @@ where
 /// - After that it waits until the transaction is confirmed on the chain. When
 ///   this is done, i.e., the transaction is confirmed, it uses the provided
 ///   `db_sender` channel to notify the database to mark the
+///
+/// The response is `Ok(())` if the service was asked to stop, otherwise it is
+/// one of the errors if some part of the job was interrupted.
+/// The client and `pending` are always left in a consistent state, so that a
+/// retry can be made.
 async fn ethereum_tx_sender_worker<M: Middleware, S: Signer>(
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
@@ -596,6 +611,9 @@ where
                                 // Mark the high watermark of processed ids.
                                 client.max_marked_event_index = last_id;
                             }
+                            // Transaction is confirmed, update the nonce for the next iteration
+                            // of sending.
+                            client.next_nonce += 1.into();
                             *pending = None;
                         } else {
                             log::warn!(
