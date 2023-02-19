@@ -126,7 +126,7 @@ describe('RootChainManager', () => {
         userWallet: depositReceiver.address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 1,
         tokenId: 0
@@ -138,7 +138,7 @@ describe('RootChainManager', () => {
         userWallet: depositReceiverEth.address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 1,
         tokenId: 0
@@ -149,7 +149,7 @@ describe('RootChainManager', () => {
         userWallet: accounts[2].address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 1,
         tokenId: 0
@@ -160,7 +160,7 @@ describe('RootChainManager', () => {
         userWallet: accounts[2].address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 2,
         tokenId: 0
@@ -171,7 +171,7 @@ describe('RootChainManager', () => {
         userWallet: accounts[2].address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 3,
         tokenId: 0
@@ -199,7 +199,7 @@ describe('RootChainManager', () => {
         userWallet: depositReceiver.address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 1,
         tokenId: 0
@@ -216,7 +216,7 @@ describe('RootChainManager', () => {
         userWallet: depositReceiver.address,
         ccdTxHash: [
           55, 162, 168, 229, 46, 250, 217, 117, 219, 246, 88, 14, 119, 52, 228, 242, 73, 234, 165,
-          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153,
+          234, 138, 118, 62, 147, 74, 134, 113, 205, 126, 68, 100, 153
         ],
         ccdEventIndex: 1,
         tokenId: 0
@@ -321,7 +321,7 @@ describe('RootChainManager', () => {
           {
             value: withdrawFee.div(2)
           }),
-          'Not enough ether for withdraw fee')
+        'Not enough ether for withdraw fee')
       })
       it('transaction should work', async () => {
         await contracts.rootChainManager.withdraw(
