@@ -105,14 +105,15 @@ impl PreparedStatements {
         Ok(res.get::<_, i64>(0))
     }
 
+    /// Insert the event. If the event is a Withdraw event
+    /// return whether it has already been processed or not.
     pub async fn insert_concordium_event<'a, 'b>(
         &'a self,
         db_tx: &Transaction<'b>,
         tx_hash: &TransactionHash,
         event: &BridgeEvent,
-        merkle_event_hash: Option<[u8; 32]>,
-    ) -> anyhow::Result<i64> {
-        let (event_type, index, subindex, receiver, amount, data) = match event {
+    ) -> anyhow::Result<bool> {
+        let (event_type, origin_event_index, data) = match event {
             BridgeEvent::TokenMap(tm) => {
                 let rows = db_tx
                     .query(&self.mark_concordium_tx, &[
@@ -128,14 +129,12 @@ impl PreparedStatements {
                 }
                 (
                     ConcordiumEventType::TokenMap,
-                    None,
-                    None,
-                    None,
-                    None,
+                    Some(tm.id as i64),
                     contracts_common::to_bytes(tm),
                 )
             }
             BridgeEvent::Deposit(de) => {
+                log::debug!("Marking a deposit with event index {} as completed.", de.id);
                 let rows = db_tx
                     .query(
                         "UPDATE ethereum_deposit_events SET tx_hash = $2 WHERE origin_event_index \
@@ -160,34 +159,33 @@ impl PreparedStatements {
                 }
                 (
                     ConcordiumEventType::Deposit,
-                    None,
-                    None,
-                    None,
-                    None,
+                    Some(de.id as i64),
                     contracts_common::to_bytes(de),
                 )
             }
-            BridgeEvent::Withdraw(we) => (
-                ConcordiumEventType::Withdraw,
-                Some(we.contract.index as i64),
-                Some(we.contract.subindex as i64),
-                Some(we.eth_address),
-                Some(&we.amount),
-                contracts_common::to_bytes(we),
-            ),
+            BridgeEvent::Withdraw(we) => {
+                let res = db_tx
+                    .query_one(&self.insert_concordium_event, &[
+                        &&tx_hash.as_ref()[..],
+                        &Some(we.event_index as i64),
+                        &None::<i64>,
+                        &ConcordiumEventType::Withdraw,
+                        &Some(we.contract.index as i64),
+                        &Some(we.contract.subindex as i64),
+                        &Some(&we.eth_address[..]),
+                        &Some(&we.amount.to_string()),
+                        &contracts_common::to_bytes(we),
+                    ])
+                    .await?;
+                return Ok(res.get::<_, bool>(0));
+            }
             BridgeEvent::GrantRole(gr) => (
                 ConcordiumEventType::GrantRole,
-                None,
-                None,
-                None,
                 None,
                 contracts_common::to_bytes(gr),
             ),
             BridgeEvent::RevokeRole(rr) => (
                 ConcordiumEventType::RevokeRole,
-                None,
-                None,
-                None,
                 None,
                 contracts_common::to_bytes(rr),
             ),
@@ -196,17 +194,16 @@ impl PreparedStatements {
             .query_one(&self.insert_concordium_event, &[
                 &&tx_hash.as_ref()[..],
                 &event.event_index().map(|x| x as i64),
+                &origin_event_index,
                 &event_type,
-                &index,
-                &subindex,
-                &receiver.as_ref().map(|x| &x[..]),
-                &amount.map(|x| x.to_string()),
-                &data,
+                &None::<i64>,
+                &None::<i64>,
                 &None::<Vec<u8>>,
-                &merkle_event_hash.map(|x| x.to_vec()),
+                &None::<String>,
+                &data,
             ])
             .await?;
-        Ok(res.get::<_, i64>(0))
+        Ok(res.get::<_, bool>(0))
     }
 }
 
@@ -298,8 +295,8 @@ impl Database {
             .await?;
         let get_pending_concordium_txs = client
             .prepare(
-                "SELECT tx_hash, tx FROM concordium_transactions WHERE status = 'pending' ORDER \
-                 BY id ASC;",
+                "SELECT tx_hash, tx FROM concordium_transactions
+WHERE status = 'pending' ORDER BY id ASC;",
             )
             .await?;
         let get_pending_ethereum_txs = client
@@ -315,15 +312,21 @@ impl Database {
             .await?;
         let insert_ethereum_tx = client
             .prepare(
-                "INSERT INTO ethereum_transactions (tx_hash, tx, timestamp, status) VALUES ($1, \
-                 $2, $3, $4) RETURNING id",
+                "INSERT INTO ethereum_transactions (tx_hash, tx, timestamp, status)
+VALUES ($1, $2, $3, $4) RETURNING id",
             )
             .await?;
         let insert_concordium_event = client
             .prepare(
-                "INSERT INTO concordium_events (tx_hash, event_index, event_type, child_index, \
-                 child_subindex, receiver, amount, event_data, processed, event_merkle_hash) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+                "INSERT INTO concordium_events (tx_hash, event_index, origin_event_index, \
+                 event_type, child_index, child_subindex, receiver, amount, event_data, processed)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+        (CASE WHEN $4 = ('withdraw' :: concordium_event_type)
+              THEN (SELECT tx_hash FROM ethereum_withdraw_events
+                    WHERE ethereum_withdraw_events.origin_event_index = $2
+                    LIMIT 1)
+              ELSE NULL END))
+RETURNING (CASE WHEN processed IS NULL THEN FALSE ELSE TRUE END)",
             )
             .await?;
 
@@ -335,8 +338,8 @@ impl Database {
 
         let get_pending_withdrawals = client
             .prepare(
-                "SELECT tx_hash, event_index, event_data FROM concordium_events WHERE (processed \
-                 IS NULL) AND event_type = 'withdraw' ORDER BY id ASC;",
+                "SELECT tx_hash, event_index, event_data FROM concordium_events
+WHERE (processed IS NULL) AND event_type = 'withdraw' ORDER BY id ASC;",
             )
             .await?;
         let get_max_event_index = client
@@ -625,7 +628,10 @@ impl Database {
             db_tx
                 .query(
                     "INSERT INTO ethereum_deposit_events (origin_tx_hash, origin_event_index, \
-                     amount, depositor, root_token) VALUES ($1, $2, $3, $4, $5);",
+                     amount, depositor, root_token, tx_hash)
+VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
+                    WHERE concordium_events.origin_event_index = $2
+                    LIMIT 1));",
                     &[
                         &origin_tx_hash.as_bytes(),
                         &(*origin_event_index as i64),
@@ -715,16 +721,15 @@ impl Database {
         let mut withdraws = Vec::new();
         for (tx_hash, events) in events {
             for event in events {
-                let merkle_event_hash = if let BridgeEvent::Withdraw(we) = &event {
-                    let hash = crate::merkle::make_event_leaf_hash(*tx_hash, we)?;
-                    withdraws.push((we.event_index, hash));
-                    Some(hash)
-                } else {
-                    None
-                };
-                statements
-                    .insert_concordium_event(&db_tx, &tx_hash, &event, merkle_event_hash)
+                let processed = statements
+                    .insert_concordium_event(&db_tx, &tx_hash, &event)
                     .await?;
+                if !processed {
+                    if let BridgeEvent::Withdraw(we) = &event {
+                        let hash = crate::merkle::make_event_leaf_hash(*tx_hash, we)?;
+                        withdraws.push((we.event_index, hash));
+                    };
+                }
             }
         }
         db_tx
@@ -1011,27 +1016,31 @@ async fn insert_into_db(
             block,
             transaction_events,
         } => {
-            if let Ok(withdraws) = db
+            match db
                 .insert_concordium_events(&block, &transaction_events)
                 .await
             {
-                if !withdraws.is_empty() {
-                    if merkle_setter_sender
-                        .send(MerkleUpdate::NewWithdraws { withdraws })
-                        .await
-                        .is_err()
-                    {
-                        log::warn!(
-                            "Unable to send new withdraw events to the Merkle updated since the \
-                             channel is closed."
-                        )
+                Ok(withdraws) => {
+                    if !withdraws.is_empty() {
+                        if merkle_setter_sender
+                            .send(MerkleUpdate::NewWithdraws { withdraws })
+                            .await
+                            .is_err()
+                        {
+                            log::warn!(
+                                "Unable to send new withdraw events to the Merkle updated since \
+                                 the channel is closed."
+                            )
+                        }
                     }
                 }
-            } else {
-                return Err(InsertError::Retry(DatabaseOperation::ConcordiumEvents {
-                    block,
-                    transaction_events,
-                }));
+                Err(e) => {
+                    log::warn!("Database error when trying to insert Concordium events: {e}.");
+                    return Err(InsertError::Retry(DatabaseOperation::ConcordiumEvents {
+                        block,
+                        transaction_events,
+                    }));
+                }
             }
         }
         DatabaseOperation::EthereumEvents { events } => {
@@ -1117,32 +1126,35 @@ async fn insert_into_db(
                 }
             }
 
-            if db
+            match db
                 .insert_transactions(events.last_number, &txs, &wes, &deposits, &maps, &unmaps)
                 .await
-                .is_ok()
             {
-                for (_, _, _, _, _, receiver, we) in wes {
-                    if merkle_setter_sender
-                        .send(MerkleUpdate::WithdrawalCompleted {
-                            original_event_index: we,
-                            receiver,
-                        })
-                        .await
-                        .is_err()
-                    {
+                Ok(()) => {
+                    for (_, _, _, _, _, receiver, we) in wes {
+                        if merkle_setter_sender
+                            .send(MerkleUpdate::WithdrawalCompleted {
+                                original_event_index: we,
+                                receiver,
+                            })
+                            .await
+                            .is_err()
                         {
-                            log::warn!(
-                                "Unable to send completed withdrawal to the Merkle updater. The \
-                                 channel is closed."
-                            )
+                            {
+                                log::warn!(
+                                    "Unable to send completed withdrawal to the Merkle updater. \
+                                     The channel is closed."
+                                )
+                            }
                         }
                     }
                 }
-            } else {
-                return Err(InsertError::Retry(DatabaseOperation::EthereumEvents {
-                    events,
-                }));
+                Err(e) => {
+                    log::warn!("Database error when trying to insert transactions: {e}.");
+                    return Err(InsertError::Retry(DatabaseOperation::EthereumEvents {
+                        events,
+                    }));
+                }
             }
 
             // We have now written all the transactions to the database. Now send them to
@@ -1163,24 +1175,31 @@ async fn insert_into_db(
         }
         DatabaseOperation::MarkConcordiumTransaction { tx_hash, state } => {
             log::debug!("Marking {} as {:?}.", tx_hash, state);
-            if db.mark_concordium_tx(tx_hash, state).await.is_err() {
+            if let Err(e) = db.mark_concordium_tx(tx_hash, state).await {
+                log::warn!("Database error: {e}");
                 return Err(InsertError::Retry(
                     DatabaseOperation::MarkConcordiumTransaction { tx_hash, state },
                 ));
             }
         }
         DatabaseOperation::GetPendingConcordiumTransactions { response } => {
-            if let Ok(txs) = db.pending_concordium_txs().await {
-                if response.send(txs).is_err() {
-                    log::warn!(
-                        "Unable to send response to the sender of \
-                         GetPendingConcordiumTransactions, indicating they have stopped."
-                    );
+            match db.pending_concordium_txs().await {
+                Ok(txs) => {
+                    if response.send(txs).is_err() {
+                        log::warn!(
+                            "Unable to send response to the sender of \
+                             GetPendingConcordiumTransactions, indicating they have stopped."
+                        );
+                    }
                 }
-            } else {
-                return Err(InsertError::Retry(
-                    DatabaseOperation::GetPendingConcordiumTransactions { response },
-                ));
+                Err(e) => {
+                    log::warn!(
+                        "Database error when trying to get pending Concordium transactions: {e}."
+                    );
+                    return Err(InsertError::Retry(
+                        DatabaseOperation::GetPendingConcordiumTransactions { response },
+                    ));
+                }
             }
         }
         DatabaseOperation::StoreEthereumTransaction {
