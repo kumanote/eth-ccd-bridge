@@ -47,6 +47,10 @@ declare global {
              * URL of the bridge API.
              */
             NEXT_PUBLIC_API_URL: string;
+            /**
+             * URL of ccdscan for concordium network.
+             */
+            NEXT_PUBLIC_CCDSCAN_URL: string;
 
             // CCD contract schemas
             /**

@@ -5,6 +5,7 @@ import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import { Components } from "src/api-query/__generated__/AxiosClient";
+import { transactionUrl } from "src/helpers/ccdscan";
 import parseAmount from "src/helpers/parseAmount";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
 import { ButtonsContainer, GapWrapper, StyledContainer, Wrapper } from "./PendingTransactions.style";
@@ -141,11 +142,7 @@ const PendingTransactions: React.FC<Props> = ({
                             fontLetterSpacing="0"
                         >
                             {transaction.origin_tx_hash ? (
-                                <a
-                                    href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction.origin_tx_hash}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
+                                <a href={transactionUrl(transaction.origin_tx_hash)} target="_blank" rel="noreferrer">
                                     {parseHash(transaction.origin_tx_hash)}
                                 </a>
                             ) : (
