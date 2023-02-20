@@ -1529,7 +1529,7 @@ mod tests {
         let view_token_owners_result = contract_view_token_owners(&ctx, &mut host);
 
         let token_owners = view_token_owners_result
-            .expect_report("Expect some results")
+            .expect_report("Calling contract_view_token_owners expected to succeed")
             .token_owners;
 
         // Check the view_token_owners_result
@@ -1611,7 +1611,8 @@ mod tests {
         // Testing the `viewRoles` function
         let roles_result = contract_view_roles(&ctx, &mut host);
 
-        let roles = roles_result.expect_report("Expect some results.");
+        let roles =
+            roles_result.expect_report("Calling contract_view_roles expected to succeed");
 
         // Check the roles_result
         claim_eq!(

@@ -1225,7 +1225,7 @@ mod tests {
         // Testing the `viewRoles` function
         let roles_result = contract_view_roles(&ctx, &mut host);
 
-        let roles = roles_result.expect_report("Expect some results.");
+        let roles = roles_result.expect_report("Calling contract_view_roles expected to succeed.");
 
         // Check the roles_result
         claim_eq!(
@@ -1312,7 +1312,8 @@ mod tests {
         // Check `viewTokenMappings` function
         let token_mappings_result = contract_view_token_mappings(&ctx, &mut host);
 
-        let token_mappings = token_mappings_result.expect_report("Expect some results.");
+        let token_mappings = token_mappings_result
+            .expect_report("Calling contract_view_token_mappings expected to succeed.");
 
         claim_eq!(
             token_mappings.root_mappings,
