@@ -2,6 +2,7 @@ import Button from "@components/atoms/button/Button";
 import Text from "@components/atoms/text/text";
 import usePrice from "@hooks/use-price";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
+import moment from "moment";
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import { Components } from "src/api-query/__generated__/AxiosClient";
@@ -101,27 +102,26 @@ const PendingTransactions: React.FC<Props> = ({
                                 : "Token information not available"}
                         </Text>
                     </GapWrapper>
-                    {/* TODO: show timestamp? */}
-                    {/* <GapWrapper> */}
-                    {/*     <Text */}
-                    {/*         fontFamily="Roboto" */}
-                    {/*         fontSize="13" */}
-                    {/*         fontWeight="light" */}
-                    {/*         fontColor="TitleText" */}
-                    {/*         fontLetterSpacing="0" */}
-                    {/*     > */}
-                    {/*         Timestamp: */}
-                    {/*     </Text> */}
-                    {/*     <Text */}
-                    {/*         fontFamily="Roboto" */}
-                    {/*         fontSize="11" */}
-                    {/*         fontWeight="bold" */}
-                    {/*         fontColor="TitleText" */}
-                    {/*         fontLetterSpacing="0" */}
-                    {/*     > */}
-                    {/*         {moment(transaction.timestamp * 1000).fromNow()} */}
-                    {/*     </Text> */}
-                    {/* </GapWrapper> */}
+                    <GapWrapper>
+                        <Text
+                            fontFamily="Roboto"
+                            fontSize="13"
+                            fontWeight="light"
+                            fontColor="TitleText"
+                            fontLetterSpacing="0"
+                        >
+                            Timestamp:
+                        </Text>
+                        <Text
+                            fontFamily="Roboto"
+                            fontSize="11"
+                            fontWeight="bold"
+                            fontColor="TitleText"
+                            fontLetterSpacing="0"
+                        >
+                            {moment(transaction.timestamp * 1000).fromNow()}
+                        </Text>
+                    </GapWrapper>
                     <GapWrapper>
                         <Text
                             fontFamily="Roboto"
