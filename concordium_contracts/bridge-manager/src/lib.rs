@@ -236,7 +236,7 @@ fn contract_view_configuration<S: HasStateApi>(
     })
 }
 
-#[derive(Serialize, Debug, PartialEq, Eq, Reject, SchemaType, Clone, Copy)]
+#[derive(Serialize, PartialEq, Eq, Reject, SchemaType, Clone, Copy)]
 pub enum Roles {
     Admin,
     Mapper,
@@ -255,7 +255,7 @@ pub struct EthAddress {
     pub eth_address: [u8; 20],
 }
 
-#[derive(Serialize, Debug, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct DepositOperation {
     pub id: u64,
     pub user: Address,
@@ -264,13 +264,13 @@ pub struct DepositOperation {
     pub token_id: TokenIdU64,
 }
 
-#[derive(Serialize, Debug, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct TokenMapOperation {
     pub id: u64,
     pub root: EthAddress,
     pub child: ContractAddress,
 }
-#[derive(Serialize, Debug, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub enum StateUpdate {
     Deposit(DepositOperation),
     TokenMap(TokenMapOperation),
@@ -385,7 +385,7 @@ fn contract_init<S: HasStateApi>(
 
 /// The parameter type for the contract function `hasRole`.
 // Note: the order of the fields cannot be changed.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct HasRoleQueryParamaters {
     pub address: Address,
     pub role: Roles,
@@ -393,7 +393,7 @@ pub struct HasRoleQueryParamaters {
 
 /// The response which is sent back when calling the contract function
 /// `hasRole`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct HasRoleQueryResponse(pub bool);
 impl From<bool> for HasRoleQueryResponse {
     fn from(ok: bool) -> Self {
@@ -410,7 +410,7 @@ pub const WITHDRAW_EVENT_TAG: u8 = u8::MAX - 2;
 pub const GRANT_ROLE_EVENT_TAG: u8 = 0;
 pub const REVOKE_ROLE_EVENT_TAG: u8 = 1;
 /// Tagged event to be serialized for the event log.
-#[derive(Debug, SchemaType)]
+#[derive(SchemaType)]
 pub enum BridgeEvent {
     // TokenMapEvent
     TokenMap(TokenMapEvent),
@@ -461,14 +461,14 @@ impl Deserial for BridgeEvent {
     }
 }
 
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct TokenMapEvent {
     pub id: u64,
     pub root: EthAddress,
     pub child: ContractAddress,
 }
 
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct DepositEvent {
     pub id: u64,
     pub contract: ContractAddress,
@@ -476,7 +476,7 @@ pub struct DepositEvent {
     pub token_id: TokenIdU64,
 }
 
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct WithdrawEvent {
     pub id: u64,
     pub contract: ContractAddress,
@@ -487,14 +487,14 @@ pub struct WithdrawEvent {
 }
 
 // A GrantRoleEvent introduced by this smart contract.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct GrantRoleEvent {
     /// Address that has been given the role
     address: Address,
     role: Roles,
 }
 // A RevokeRoleEvent introduced by this smart contract.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct RevokeRoleEvent {
     /// Address that has been revoked the role
     address: Address,
@@ -524,7 +524,7 @@ fn contract_has_role<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `grantRole`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct GrantRoleParams {
     pub address: Address,
     pub role: Roles,
@@ -568,7 +568,7 @@ fn contract_grant_role<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `removeRole`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct RemoveRoleParams {
     pub address: Address,
     pub role: Roles,
@@ -618,7 +618,7 @@ fn contract_remove_role<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `setWithdrawFee`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct SetWithdrawFeeParams {
     pub amount: Amount,
 }
@@ -656,7 +656,7 @@ fn contract_set_withdraw_fee<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `setTreasurer`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct SetTreasurer {
     pub account: AccountAddress,
 }
@@ -698,7 +698,7 @@ fn contract_set_treasurer<S: HasStateApi>(
 /// after triggering the upgrade. The upgrade is reverted if the entrypoint
 /// fails. This is useful for doing migration in the same transaction triggering
 /// the upgrade.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 struct UpgradeParams {
     /// The new module reference.
     module: ModuleReference,
@@ -788,7 +788,7 @@ fn contract_set_paused<S: HasStateApi>(
     Ok(())
 }
 
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct DepositParams {
     pub address: Address,
     pub amount: ContractTokenAmount,
@@ -870,7 +870,7 @@ fn contract_receive_state_update<S: HasStateApi>(
     Ok(())
 }
 
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct WithdrawParams {
     pub eth_address: EthAddress,
     pub amount: ContractTokenAmount,
@@ -879,7 +879,7 @@ pub struct WithdrawParams {
 }
 
 // The parameter type for the contract function `withdraw`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct Cis2WithdrawParams {
     pub address: Address,
     pub amount: ContractTokenAmount,
@@ -1225,7 +1225,7 @@ mod tests {
         // Testing the `viewRoles` function
         let roles_result = contract_view_roles(&ctx, &mut host);
 
-        let roles = roles_result.unwrap();
+        let roles = roles_result.expect_report("Expect some results.");
 
         // Check the roles_result
         claim_eq!(
@@ -1312,7 +1312,7 @@ mod tests {
         // Check `viewTokenMappings` function
         let token_mappings_result = contract_view_token_mappings(&ctx, &mut host);
 
-        let token_mappings = token_mappings_result.unwrap();
+        let token_mappings = token_mappings_result.expect_report("Expect some results.");
 
         claim_eq!(
             token_mappings.root_mappings,

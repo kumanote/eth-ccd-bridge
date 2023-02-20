@@ -9,6 +9,10 @@
 //! address to another address. An address can enable and disable one or more
 //! addresses as operators. An operator of some token owner address is allowed
 //! to transfer any tokens of the owner.
+//!
+//! Besides the contract functions required for the CIS2 standard, this contract implements a
+//! `deposit` function that allows the `bridge-manager` smart contract to mint tokens and a `withdraw` function
+//! that allows the `bridge-manager` smart contract to burn tokens.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_cis2::{Cis2Event, *};
@@ -98,7 +102,7 @@ struct ViewAllRolesState {
 }
 
 /// The return type of the `viewTokenOwners` function.
-#[derive(Serialize, SchemaType, Debug)]
+#[derive(Serialize, SchemaType)]
 struct ViewTokenOwners {
     token_owners: Vec<Address>,
 }
@@ -228,7 +232,7 @@ impl schema::SchemaType for BridgeableEvent {
 /// The parameter type for the contract function `setImplementors`.
 /// Takes a standard identifier and list of contract addresses providing
 /// implementations of this standard.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 struct SetImplementorsParams {
     /// The identifier for the standard.
     id: StandardIdentifierOwned,
@@ -241,7 +245,7 @@ struct SetImplementorsParams {
 /// after triggering the upgrade. The upgrade is reverted if the entrypoint
 /// fails. This is useful for doing migration in the same transaction triggering
 /// the upgrade.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 struct UpgradeParams {
     /// The new module reference.
     module: ModuleReference,
@@ -324,7 +328,7 @@ impl From<CustomContractError> for ContractError {
     }
 }
 
-#[derive(Serialize, Debug, PartialEq, Eq, Reject, SchemaType, Clone, Copy)]
+#[derive(Serialize, PartialEq, Eq, Reject, SchemaType, Clone, Copy)]
 pub enum Roles {
     Admin,
     Manager,
@@ -1070,7 +1074,7 @@ fn contract_view_roles<S: HasStateApi>(
     name = "viewTokenOwners",
     return_value = "ViewTokenOwners"
 )]
-fn contract_view_token_state<S: HasStateApi>(
+fn contract_view_token_owners<S: HasStateApi>(
     _ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>,
 ) -> ReceiveResult<ViewTokenOwners> {
@@ -1085,7 +1089,7 @@ fn contract_view_token_state<S: HasStateApi>(
 
 /// The parameter type for the contract function `hasRole`.
 // Note: the order of the fields cannot be changed.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct HasRoleQueryParamaters {
     pub address: Address,
     pub role: Roles,
@@ -1093,7 +1097,7 @@ pub struct HasRoleQueryParamaters {
 
 /// The response which is sent back when calling the contract function
 /// `hasRole`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct HasRoleQueryResponse(pub bool);
 impl From<bool> for HasRoleQueryResponse {
     fn from(ok: bool) -> Self {
@@ -1126,7 +1130,7 @@ fn contract_has_role<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `grantRole`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct GrantRoleParams {
     pub address: Address,
     pub role: Roles,
@@ -1172,7 +1176,7 @@ fn contract_grant_role<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `removeRole`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct RemoveRoleParams {
     pub address: Address,
     pub role: Roles,
@@ -1224,7 +1228,7 @@ fn contract_remove_role<S: HasStateApi>(
 }
 
 /// The parameter type for the contract function `deposit`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct DepositParams {
     pub address: Address,
     pub amount: ContractTokenAmount,
@@ -1270,8 +1274,9 @@ fn contract_deposit<S: HasStateApi>(
 
     Ok(())
 }
+
 // The parameter type for the contract function `withdraw`.
-#[derive(Debug, Serialize, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct WithdrawParams {
     pub address: Address,
     pub amount: ContractTokenAmount,
@@ -1450,9 +1455,9 @@ mod tests {
         );
     }
 
-    /// Test `view_token_state` function to return the entire state setting of balances and operators.
+    /// Test `view_token_owners` function that returns all token owners.
     #[concordium_test]
-    fn test_view_token_state() {
+    fn test_view_token_owners() {
         let crypto: TestCryptoPrimitives = TestCryptoPrimitives::new();
 
         // Setup the context
@@ -1520,46 +1525,14 @@ mod tests {
         let result = contract_deposit(&ctx, &mut host, &mut logger);
         claim!(result.is_ok(), "ADDRESS_1 is allowed to deposit");
 
-        // Add ADDRESS_2 as an operator of ADDRESS_1
-        let update = UpdateOperator {
-            operator: ADDRESS_2,
-            update: OperatorUpdate::Add,
-        };
-        let parameter = UpdateOperatorParams(vec![update]);
-        let parameter_bytes = to_bytes(&parameter);
-        ctx.set_parameter(&parameter_bytes);
+        // Check `view_token_owners` function that returns all token owners.
+        let view_token_owners_result = contract_view_token_owners(&ctx, &mut host);
 
-        // Call the contract function.
-        let result: ContractResult<()> = contract_update_operator(&ctx, &mut host, &mut logger);
-        claim!(
-            result.is_ok(),
-            "ADDRESS_1 should be able to set ADDRESS_2 as operator"
-        );
+        let token_owners = view_token_owners_result
+            .expect_report("Expect some results")
+            .token_owners;
 
-        // Add ADDRESS_1 as an operator of ADDRESS_2
-        ctx.set_sender(ADDRESS_2);
-
-        let update = UpdateOperator {
-            operator: ADDRESS_1,
-            update: OperatorUpdate::Add,
-        };
-        let parameter = UpdateOperatorParams(vec![update]);
-        let parameter_bytes = to_bytes(&parameter);
-        ctx.set_parameter(&parameter_bytes);
-
-        // Call the contract function.
-        let result: ContractResult<()> = contract_update_operator(&ctx, &mut host, &mut logger);
-        claim!(
-            result.is_ok(),
-            "ADDRESS_2 should be able to set Address_1 as operator"
-        );
-
-        // Check `view_token_state` function returns the entire state setting of balances and operators.
-        let view_token_state_result = contract_view_token_state(&ctx, &mut host);
-
-        let token_owners = view_token_state_result.unwrap().token_owners;
-
-        // Check the view_token_state_result
+        // Check the view_token_owners_result
         claim_eq!(
             token_owners.len(),
             2,
@@ -1638,7 +1611,7 @@ mod tests {
         // Testing the `viewRoles` function
         let roles_result = contract_view_roles(&ctx, &mut host);
 
-        let roles = roles_result.unwrap();
+        let roles = roles_result.expect_report("Expect some results.");
 
         // Check the roles_result
         claim_eq!(
