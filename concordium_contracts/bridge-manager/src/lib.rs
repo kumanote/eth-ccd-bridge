@@ -165,7 +165,7 @@ fn contract_view_roles<S: HasStateApi>(
 }
 
 /// Return parameter of the `viewTokenMappings` function.
-#[derive(Serialize, SchemaType, PartialEq)]
+#[derive(Serialize, SchemaType)]
 struct ViewTokenMappings {
     /// Token mappings from ethereum address to concordium contract address.
     root_mappings: Vec<(EthAddress, ContractAddress)>,
@@ -242,7 +242,18 @@ pub enum Roles {
     Mapper,
     StateSyncer,
 }
-type EthAddress = [u8; 20];
+
+/// Manual implementation of the `EthAddressSchema` to display it in hex.
+impl schema::SchemaType for EthAddress {
+    fn get_type() -> schema::Type {
+        schema::Type::ByteArray(20)
+    }
+}
+
+#[derive(Serialize, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct EthAddress {
+    pub eth_address: [u8; 20],
+}
 
 #[derive(Serialize, Debug, SchemaType)]
 pub struct DepositOperation {
@@ -953,8 +964,13 @@ mod tests {
     const ADDRESS_2: Address = Address::Account(ACCOUNT_2);
     const TREASURY_ACCOUNT: AccountAddress = AccountAddress([3u8; 32]);
 
-    const ETH_ADDRESS: EthAddress = [1u8; 20];
-    const ETH_WALLET_ADDRESS: EthAddress = [2u8; 20];
+    const ETH_ADDRESS: EthAddress = EthAddress {
+        eth_address: [1u8; 20],
+    };
+    const ETH_WALLET_ADDRESS: EthAddress = EthAddress {
+        eth_address: [2u8; 20],
+    };
+
     const CIS2_ADDRESS: ContractAddress = ContractAddress {
         index: 42,
         subindex: 0,
