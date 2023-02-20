@@ -240,10 +240,9 @@ const History: React.FC<Props> = ({}) => {
                                                     </>
                                                 )}
                                                 <TableData>
-                                                    {/* TODO: Add timestamp? */}
-                                                    {/* <Text fontSize="10" fontWeight="light"> */}
-                                                    {/*     {moment(transaction.Deposit.timestamp * 1000).fromNow()} */}
-                                                    {/* </Text> */}
+                                                    <Text fontSize="10" fontWeight="light">
+                                                        {moment(transaction.Deposit.timestamp * 1000).fromNow()}
+                                                    </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
                                                             {transaction.Deposit.tx_hash ? (
@@ -372,10 +371,9 @@ const History: React.FC<Props> = ({}) => {
                                                     </>
                                                 )}
                                                 <TableData>
-                                                    {/* TODO: render timestamp? */}
-                                                    {/* <Text fontSize="10" fontWeight="light"> */}
-                                                    {/*     {moment(transaction.Withdraw.timestamp * 1000).fromNow()} */}
-                                                    {/* </Text> */}
+                                                    <Text fontSize="10" fontWeight="light">
+                                                        {moment(transaction.Withdraw.timestamp * 1000).fromNow()}
+                                                    </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
                                                             {transaction.Withdraw.tx_hash ? (

@@ -28,7 +28,7 @@ export declare namespace Components {
             eth_address?: string;
             eth_name: string;
         }
-        export type TransactionStatus = "transaction_pending" | "failed" | "processed" | "Missing";
+        export type TransactionStatus = "pending" | "failed" | "processed" | "missing";
         export interface WalletDepositTx {
             amount: string;
             origin_event_index: number; // int64
@@ -41,6 +41,7 @@ export declare namespace Components {
              */
             root_token?: string;
             status: TransactionStatus;
+            timestamp: number; // int64
             /**
              * Optional transaction hash
              */
@@ -66,10 +67,11 @@ export declare namespace Components {
              */
             origin_tx_hash?: string;
             status: WithdrawalStatus;
+            timestamp: number; // int64
             /**
-             * Hex string
+             * Optional transaction hash
              */
-            tx_hash?: string;
+            tx_hash?: string | null;
         }
         export interface WatchTxResponse {
             /**
