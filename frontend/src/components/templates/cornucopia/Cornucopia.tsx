@@ -264,7 +264,7 @@ const Cornucopia = () => {
             setTransferStatus("");
             setTransferStep(0);
             setDepositTx(undefined);
-            if (error.message.includes("User denied transaction signature")) {
+            if (error.message.includes("ACTION_REJECTED")) {
                 setError("Please confirm the transaction!");
             } else {
                 setError(error.message);
@@ -274,21 +274,23 @@ const Cornucopia = () => {
     const fetchGas = async (type: "deposit" | "withdraw") => {
         if (amount && selectedToken) {
             if (type === "deposit") {
-                const erc20PredicateAddress = await typeToVault(); //generate predicate address
                 try {
                     // if the token is ETH, you can estimate without allowance
                     if (selectedToken.eth_address === addresses.eth) {
                         const gas = await estimateGas(amount, selectedToken, "deposit");
                         setGasFee(parseFloat(gas as string));
                     } else {
+                        const erc20PredicateAddress = await typeToVault(); //generate predicate address
                         // try to check the allowance of the token (else you can't estimate gas)
                         const tx = await checkAllowance(erc20PredicateAddress);
+
                         if (tx) {
                             // if the tx is returned, the allowance was approved
                             // wait for the confirmation of approve()
                             // and estimate the gas
                             tx.wait(1);
                         }
+
                         // if the tx comes undefined, but no error was thrown
                         // the user already approved token spending
                         // then estimate the gas

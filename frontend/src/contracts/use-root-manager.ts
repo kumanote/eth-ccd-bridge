@@ -21,7 +21,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
         const typeToVault = await rootContract.typeToVault(
-            process.env.NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS //address to generate the predicate address
+            process.env.NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS //address to generate the predicate address
         );
 
         return typeToVault;
@@ -82,7 +82,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
             ccdSubIndex: params.ccd_sub_index,
             amount: params.amount,
             userWallet: params.user_wallet,
-            ccdTxHash: params.ccd_tx_hash,
+            ccdTxHash: "0x" + params.ccd_tx_hash,
             ccdEventIndex: params.ccd_event_index,
             tokenId: params.token_id,
         };
@@ -143,7 +143,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
                 ccdSubIndex: params!.ccd_sub_index,
                 amount: params!.amount,
                 userWallet: params!.user_wallet,
-                ccdTxHash: params!.ccd_tx_hash,
+                ccdTxHash: "0x" + params!.ccd_tx_hash,
                 ccdEventIndex: params!.ccd_event_index,
                 tokenId: params!.token_id,
             };
