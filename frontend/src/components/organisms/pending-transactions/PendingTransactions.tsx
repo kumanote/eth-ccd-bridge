@@ -63,10 +63,6 @@ const PendingTransactions: React.FC<Props> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    if (tokenQuery.status !== "success" || tokenQuery.token === undefined) {
-        return null; // TODO: handle properly
-    }
-
     return (
         <Wrapper>
             <StyledContainer>
@@ -98,9 +94,11 @@ const PendingTransactions: React.FC<Props> = ({
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {`${parseAmount(transaction.amount, tokenQuery.token.decimals)} ${
-                                tokenQuery.token.ccd_name
-                            }`}
+                            {tokenQuery.status === "success" && tokenQuery.token !== undefined
+                                ? `${parseAmount(transaction.amount, tokenQuery.token.decimals)} ${
+                                      tokenQuery.token.ccd_name
+                                  }`
+                                : "Token information not available"}
                         </Text>
                     </GapWrapper>
                     {/* TODO: show timestamp? */}
