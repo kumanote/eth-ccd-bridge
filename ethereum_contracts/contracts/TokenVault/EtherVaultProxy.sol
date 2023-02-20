@@ -3,6 +3,7 @@ pragma solidity ^0.8.16;
 
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
+// EtherVaultProxy
 contract EtherVaultProxy is TransparentUpgradeableProxy {
     constructor(
         address implementation,
