@@ -18,6 +18,7 @@ use ethers::prelude::{
 };
 use futures::StreamExt;
 use std::{path::PathBuf, sync::Arc};
+use tonic::transport::ClientTlsConfig;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -223,6 +224,7 @@ async fn main() -> anyhow::Result<()> {
         let network_client = reqwest::ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(app.ethereum_request_timeout))
             .connect_timeout(std::time::Duration::from_secs(10))
+            .https_only(true)
             .build()?;
         Http::new_with_client(app.ethereum_api, network_client)
     };
@@ -267,8 +269,19 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let mut concordium_client = {
-        let ep = app
+        // Use TLS if the URI scheme is HTTPS.
+        // This uses whatever system certificates have been installed as trusted roots.
+        let endpoint = if app
             .concordium_api
+            .uri()
+            .scheme()
+            .map_or(false, |x| x == &http::uri::Scheme::HTTPS)
+        {
+            app.concordium_api.tls_config(ClientTlsConfig::new())?
+        } else {
+            app.concordium_api
+        };
+        let ep = endpoint
             .timeout(std::time::Duration::from_secs(
                 app.concordium_request_timeout,
             ))
