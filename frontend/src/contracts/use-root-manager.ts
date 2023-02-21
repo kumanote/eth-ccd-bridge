@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { BigNumber, ContractFunction, ContractTransaction, ethers } from "ethers";
 import { toWei } from "../helpers/number";
 import useWallet from "../hooks/use-wallet";
 import ROOTMANAGER_ABI from "./abis/ROOTMANAGER_ABI.json";
@@ -27,14 +27,18 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
         return typeToVault;
     };
 
-    const depositFor = async (amount: string, selectedToken: Components.Schemas.TokenMapItem) => {
-        if (!context.library || !enabled || !ccdUser) return;
-        const signer = context.library.getSigner();
+    const depositFor = async (
+        amount: string,
+        selectedToken: Components.Schemas.TokenMapItem
+    ): Promise<ContractTransaction> => {
+        if (!context.library || !enabled || !ccdUser) {
+            throw new Error("Expected deposit dependecies to be available");
+        }
 
+        const signer = context.library.getSigner();
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
         let parsedAmount;
-
         if (selectedToken.decimals === 18) {
             parsedAmount = toWei(amount);
         } else {
@@ -43,32 +47,26 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
 
         const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
 
-        const depositFor = await rootContract.depositFor(
-            context.account,
-            ccdUser,
-            selectedToken.eth_address,
-            depositData
-        );
-
-        return depositFor;
+        return rootContract.depositFor(context.account, ccdUser, selectedToken.eth_address, depositData);
     };
 
-    const depositEtherFor = async (amount: string) => {
-        if (!context.library || !enabled || !ccdUser) return;
+    const depositEtherFor = async (amount: string): Promise<ContractTransaction> => {
+        if (!context.library || !enabled || !ccdUser) {
+            throw new Error("Expected deposit dependecies to be available");
+        }
+
         const signer = context.library.getSigner();
-
-        console.log("ccdUser", ccdUser);
-
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
-        const depositEtherFor = await rootContract.depositEtherFor(context.account, ccdUser, { value: toWei(amount) });
-        return depositEtherFor;
+        return rootContract.depositEtherFor(context.account, ccdUser, { value: toWei(amount) });
     };
 
-    const withdraw = async (params: Components.Schemas.WithdrawParams, proof: string) => {
-        if (!context.library) return;
-        const signer = context.library.getSigner();
+    const withdraw = async (params: Components.Schemas.WithdrawParams, proof: string): Promise<ContractTransaction> => {
+        if (!context.library) {
+            throw new Error("Expected withdraw dependecies to be available");
+        }
 
+        const signer = context.library.getSigner();
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
         const partsLength = proof.length / 64;
@@ -87,9 +85,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
             tokenId: params.token_id,
         };
 
-        const withdraw = await rootContract.withdraw(parsedParams, parts);
-
-        return withdraw;
+        return rootContract.withdraw(parsedParams, parts);
     };
 
     const estimateGas = async (
@@ -104,32 +100,29 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
 
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, provider);
 
-        let gasLimit;
-
-        let parsedAmount;
-
+        let gasLimit: BigNumber;
         if (type === "deposit") {
             if (selectedToken.eth_address === addresses.eth) {
                 console.log("depositEtherFor estimate", ccdUser);
-                gasLimit = (
-                    await rootContract.estimateGas.depositEtherFor(context.account, ccdUser, { value: toWei(amount) })
-                ).toNumber();
+                gasLimit = await rootContract.estimateGas.depositEtherFor(context.account, ccdUser, {
+                    value: toWei(amount),
+                });
             } else {
+                let parsedAmount;
                 if (selectedToken.decimals === 18) {
                     parsedAmount = toWei(amount);
                 } else {
                     parsedAmount = Number(amount) * 10 ** selectedToken.decimals;
                 }
-                const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
 
-                gasLimit = (
-                    await rootContract.estimateGas.depositFor(
-                        context.account,
-                        ccdUser,
-                        selectedToken.eth_address,
-                        depositData
-                    )
-                ).toNumber();
+                const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
+                gasLimit = await rootContract.estimateGas.depositFor(
+                    context.account,
+                    ccdUser,
+                    selectedToken.eth_address,
+                    depositData,
+                    {}
+                );
             }
         } else {
             const partsLength = proof!.length / 64;
@@ -148,17 +141,16 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
                 tokenId: params!.token_id,
             };
 
-            gasLimit = (await rootContract.estimateGas.withdraw(parsedParams, parts)).toNumber();
+            gasLimit = await rootContract.estimateGas.withdraw(parsedParams, parts);
         }
 
-        const gasPrice = (await provider?.getGasPrice())?.toNumber();
+        const gasPrice: BigNumber | undefined = await provider?.getGasPrice();
 
         if (!gasPrice) {
             throw new Error("Error getting gas price");
         }
 
-        const estimatedGasPrice = gasPrice * gasLimit;
-
+        const estimatedGasPrice = gasPrice.mul(gasLimit);
         return Number(ethers.utils.formatEther(estimatedGasPrice)).toFixed(7);
     };
 
