@@ -69,8 +69,8 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         }
         const allowResponse = await allowance(erc20PredicateAddress);
 
-        // Allowance has already been given
         if (allowResponse._hex !== "0x00") {
+            // Allowance has already been given
             return undefined;
         }
 

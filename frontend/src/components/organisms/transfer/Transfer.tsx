@@ -150,7 +150,7 @@ const Transfer: React.FC<Props> = ({
     const ethBalance = useAsyncMemo(
         async () => {
             if (!isLoggedIn || !selectedToken) {
-                return 0;
+                return undefined;
             }
 
             return getEthTokenBalance(selectedToken.decimals);
@@ -161,7 +161,7 @@ const Transfer: React.FC<Props> = ({
     const ccdBalance = useAsyncMemo(
         async () => {
             if (!isLoggedIn || !selectedToken) {
-                return 0;
+                return undefined;
             }
 
             return getCcdTokenBalance(selectedToken);
