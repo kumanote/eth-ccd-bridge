@@ -810,77 +810,6 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
     }
 }
 
-// // TODO: Revise this to do cleanup instead.
-// async fn mark_concordium_txs(
-//     db_actions: tokio::sync::mpsc::Sender<DatabaseOperation>,
-//     mut client: v2::Client,
-//     stop: tokio::sync::watch::Receiver<()>,
-// ) -> anyhow::Result<()> {
-//     // TODO: We could just be listening for blocks. But if there are no
-// pending     // transactions that is not efficient.
-//     let mut interval =
-// tokio::time::interval(std::time::Duration::from_millis(10000));     interval.
-// set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);     while !
-// stop.has_changed().unwrap_or(true) {         interval.tick().await;
-//         let (response, receiver) = tokio::sync::oneshot::channel();
-//         db_actions
-//             .send(DatabaseOperation::GetPendingConcordiumTransactions {
-// response })             .await?;
-//         let txs = receiver.await?;
-//         if !txs.is_empty() {
-//             log::debug!(
-//                 "There are {} pending transactions. Checking them.",
-//                 txs.len()
-//             );
-//         }
-//         for (tx_hash, _) in txs {
-//             let status = client.get_block_item_status(&tx_hash).await;
-//             match status {
-//                 Ok(s) => {
-//                     if let Some((block, outcome)) = s.is_finalized() {
-//                         if outcome.is_success() {
-//                             log::debug!("Transaction {} finalized in block
-// {}.", tx_hash, block);                             db_actions
-//
-// .send(DatabaseOperation::MarkConcordiumTransaction {
-// tx_hash,                                     state:
-// TransactionStatus::Finalized,                                 })
-//                                 .await?;
-//                         } else {
-//                             // TODO: Handle failure in some way.
-//                             // Transactions should generally not fail.
-//                             log::error!(
-//                                 "Transaction {} finalized in block {} but
-// failed.",                                 tx_hash,
-//                                 block
-//                             );
-//                             db_actions
-//
-// .send(DatabaseOperation::MarkConcordiumTransaction {
-// tx_hash,                                     state:
-// TransactionStatus::Failed,                                 })
-//                                 .await?;
-//                         }
-//                     } // else nothing to do, wait until next time.
-//                 }
-//                 Err(e) if e.is_not_found() => {
-//                     log::error!("A transaction has gone missing {}.",
-// tx_hash);                     // TODO: Figure out how to resume. Missing
-// transactions will mean failure.                     db_actions
-//                         .send(DatabaseOperation::MarkConcordiumTransaction {
-//                             tx_hash,
-//                             state: TransactionStatus::Missing,
-//                         })
-//                         .await?;
-//                 }
-//                 Err(e) => return Err(e.into()),
-//             }
-//         }
-//     }
-//     db_actions.closed().await;
-//     Ok(())
-// }
-
 fn convert_to_token_amount(a: U256) -> cis2::TokenAmount {
     let mut buf = [0u8; 32];
     a.to_little_endian(&mut buf);
@@ -973,7 +902,7 @@ pub async fn handle_database(
                     log::trace!("Processed database operation.");
                 }
                 Err(InsertError::Retry(action)) => {
-                    let delay = std::time::Duration::from_millis(2000);
+                    let delay = std::time::Duration::from_millis(5000);
                     log::error!(
                         "Could not insert into the database. Reconnecting in {}ms.",
                         delay.as_millis()
