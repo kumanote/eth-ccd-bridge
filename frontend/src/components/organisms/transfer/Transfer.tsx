@@ -4,12 +4,14 @@ import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Logo from "@components/molecules/logo/Logo";
 import useCCDWallet from "@hooks/use-ccd-wallet";
 import useWallet from "@hooks/use-wallet";
+import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useTokens from "src/api-query/use-tokens/useTokens";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import useGenerateContract from "src/contracts/use-generate-contract";
+import { noOp } from "src/helpers/basic";
 import parseWallet from "src/helpers/parseWallet";
 import ArrowDownIcon from "../../../../public/icons/arrow-down-icon.svg";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
@@ -77,7 +79,7 @@ const ChainBox: React.FC<ChainBoxProps> = ({ chain, text }) => {
                         <StyledCoinText fontWeight="light">{chain.name}</StyledCoinText>
                     </Coin>
                     {chain.account ? (
-                        <StyledWalletDisplay copied={copied} copyId={chain.id} onClick={walletCopyHandler}>
+                        <StyledWalletDisplay copied={copied} onClick={walletCopyHandler}>
                             {parseWallet(chain.account)}
                         </StyledWalletDisplay>
                     ) : (
@@ -126,11 +128,7 @@ const Transfer: React.FC<Props> = ({
     const [isDeposit, setIsDeposit] = useState(true);
     // introduced amount
     const [amount, setAmount] = useState("0");
-    // eth token balance
-    const [ethBalance, setEthBalance] = useState<string>("0");
-    // ccd token balance
-    const [ccdBalance, setCcdBalance] = useState<number>(0);
-
+    const [submitted, setSubmitted] = useState(false);
     // tokens available in the dropdown
     const [tokens, setTokens] = useState<Components.Schemas.TokenMapItem[]>();
     // state of the token dropdown
@@ -139,7 +137,6 @@ const Transfer: React.FC<Props> = ({
     const [selectedToken, setSelectedToken] = useState(token);
 
     // state dependent hooks
-
     const { getBalance: getEthTokenBalance } = useGenerateContract(
         selectedToken?.eth_address || "", // address or empty string because the address is undefined on first renders
         !!selectedToken // plus it's disabled on the first render anyway
@@ -148,6 +145,31 @@ const Transfer: React.FC<Props> = ({
 
     // constants
     const isLoggedIn = !!context?.account && !!ccdContext.account;
+    const transferButtonDisabled = !isLoggedIn || !selectedToken;
+
+    const ethBalance = useAsyncMemo(
+        async () => {
+            if (!isLoggedIn || !selectedToken) {
+                return 0;
+            }
+
+            return getEthTokenBalance(selectedToken.decimals);
+        },
+        noOp,
+        [isLoggedIn, selectedToken, getEthTokenBalance]
+    );
+    const ccdBalance = useAsyncMemo(
+        async () => {
+            if (!isLoggedIn || !selectedToken) {
+                return 0;
+            }
+
+            return getCcdTokenBalance(selectedToken);
+        },
+        noOp,
+        [isLoggedIn, selectedToken, getEthTokenBalance]
+    );
+
     const chains: ChainType[] = [
         {
             id: 1,
@@ -167,6 +189,20 @@ const Transfer: React.FC<Props> = ({
         },
     ];
 
+    const isValidAmount = useMemo(() => {
+        const nAmount = Number(amount);
+
+        if (nAmount <= 0 || Number.isNaN(nAmount)) {
+            return false;
+        }
+
+        if (isDeposit) {
+            return nAmount < Number(ethBalance);
+        }
+
+        return nAmount < Number(ccdBalance);
+    }, [amount, ccdBalance, ethBalance, isDeposit]);
+
     // handlers
     const historyClickHandler = () => {
         onHistoryClick();
@@ -182,27 +218,20 @@ const Transfer: React.FC<Props> = ({
         onSelectToken(token);
     };
 
-    const buttonHandler = async (amount: string) => {
+    const submitHandler = useCallback(() => {
+        setSubmitted(true);
+
+        if (!isValidAmount) {
+            // Abort.
+            return;
+        }
+
         if (isDeposit) {
             onDeposit(amount);
         } else {
             onWithdraw(amount);
         }
-    };
-
-    // functions
-    const fetchEthTokenBalance = async () => {
-        if (selectedToken) {
-            const balance = await getEthTokenBalance(selectedToken.decimals);
-            if (balance) setEthBalance(Number(balance.toFixed(4)).toString());
-        }
-    };
-    const fetchCcdTokenBalance = async () => {
-        if (selectedToken) {
-            const balance = await getCcdTokenBalance(selectedToken);
-            if (balance >= 0) setCcdBalance(Number(balance.toFixed(4)));
-        }
-    };
+    }, [isValidAmount, isDeposit, onDeposit, amount, onWithdraw]);
 
     // effects
     useEffect(() => {
@@ -210,19 +239,6 @@ const Transfer: React.FC<Props> = ({
     }, [isDeposit]);
 
     // tokens balance effects
-    useEffect(() => {
-        if (isLoggedIn && selectedToken) {
-            fetchEthTokenBalance();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedToken, isLoggedIn, transferStatus, isDeposit]);
-    useEffect(() => {
-        if (ccdContext.account && selectedToken) {
-            fetchCcdTokenBalance();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedToken, isLoggedIn, transferStatus, isDeposit]);
-
     useEffect(() => {
         if (tokensQuery.status === "error") {
             console.log(tokensQuery.error); // TODO: error handling
@@ -237,16 +253,6 @@ const Transfer: React.FC<Props> = ({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transferStatus]);
-
-    // button memo
-    const transferButtonDisabled = useMemo(() => {
-        if (!isLoggedIn) return true;
-        if (!selectedToken) return true;
-        if (!amount) return true;
-        if (!(parseFloat(amount) > 0)) return true;
-
-        return false;
-    }, [amount, isLoggedIn, selectedToken]);
 
     return (
         <PageWrapper>
@@ -279,7 +285,11 @@ const Transfer: React.FC<Props> = ({
                         </Dropdown>
                         <Button
                             variant="max"
-                            onClick={() => (isDeposit ? setAmount(ethBalance) : setAmount(ccdBalance.toString()))}
+                            onClick={() =>
+                                isDeposit
+                                    ? setAmount(ethBalance?.toString() ?? "")
+                                    : setAmount(ccdBalance?.toString() ?? "")
+                            }
                         >
                             <Text fontSize="10" fontWeight="light">
                                 Max
@@ -319,19 +329,16 @@ const Transfer: React.FC<Props> = ({
                             step="0.01"
                             min="0.0"
                             max={isDeposit ? ethBalance : ccdBalance}
+                            valid={isValidAmount || !submitted}
                         />
                         {isLoggedIn && selectedToken && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
-                                Balance:&nbsp;{isDeposit ? ethBalance : ccdBalance}
+                                Balance:&nbsp;{isDeposit ? ethBalance?.toFixed(4) : ccdBalance?.toFixed(4)}
                             </Text>
                         )}
                     </MaxGapRow>
                 </SecondRow>
-                <Button
-                    variant="primary"
-                    disabled={transferButtonDisabled}
-                    onClick={buttonHandler.bind(undefined, amount)}
-                >
+                <Button variant="primary" disabled={transferButtonDisabled} onClick={submitHandler}>
                     <div style={{ position: "relative" }}>
                         <Text fontSize="16" fontColor={transferButtonDisabled ? "White" : "Brown"} fontWeight="regular">
                             {isDeposit ? "Deposit" : "Withdraw"}
