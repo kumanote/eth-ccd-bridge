@@ -277,7 +277,7 @@ pub struct PendingEthereumTransaction {
     /// Hash of the transaction.
     pub tx_hash:   H256,
     /// The full transaction, signed.
-    pub raw_tx:      ethers::prelude::Bytes,
+    pub raw_tx:    ethers::prelude::Bytes,
     /// Timestamp (in seconds) of when the transaction was stored.
     pub timestamp: u64,
     /// The Merkle root set by this transaction.

@@ -62,3 +62,18 @@ e.g., using
 ```
 git submodule update --init --recursive
 ```
+
+## Generation of clients for Ethereum contracts.
+
+The relayer needs to interact with the root chain manager on Ethereum, and
+listen for events emitted by the state sender contract. The `ethers.rs` library
+can generate these clients from the ABI of those contracts (specifically
+`src/erc20.rs`, `src/root_chain_manager.rs` and `src/state_sender.rs` are
+generated). The build script for the relayer can be used to generate these
+clients if the build is run using `generate-client` feature, i.e., 
+
+```
+cargo build --feature=generate-client
+```
+
+This should only be necessary if the ABI of those contracts changes.

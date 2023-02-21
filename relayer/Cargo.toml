@@ -5,6 +5,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# Generate Ethereum clients in the build script.
+generate-client = []
+default = []
+
 [dependencies]
 anyhow = "1.0"
 base64 = "0.13"
@@ -33,3 +38,6 @@ tonic = "0.8"
 reqwest = "0.11"
 
 concordium-rust-sdk = { path = "../deps/concordium-rust-sdk/"}
+
+[build-dependencies]
+ethers = {version = "1", optional = true}

@@ -259,33 +259,6 @@ async fn main() -> anyhow::Result<()> {
         set_shutdown(stop_sender, died_receiver),
     );
 
-    // ethers::prelude::Abigen::new("BridgeManager", "abis/root-chain-manager.json")
-    //     .unwrap()
-    //     .generate()
-    //     .unwrap()
-    //     .write_to_file(format!("src/root_chain_manager.rs"))
-    //     .unwrap();
-
-    // ethers::prelude::Abigen::new("StateSender", "abis/state-sender.json")
-    //     .unwrap()
-    //     .generate()
-    //     .unwrap()
-    //     .write_to_file(format!("src/state_sender.rs"))
-    //     .unwrap();
-
-    // ethers::prelude::Abigen::new("Erc20", "abis/erc20.json")
-    //     .unwrap()
-    //     .generate()
-    //     .unwrap()
-    //     .write_to_file(format!("src/erc20.rs"))
-    //     .unwrap();
-
-    // return Ok(());
-
-    // let erc20 = ccdeth_relayer::erc20::Erc20::new(app.state_sender,
-    // ethereum_client.clone()); let name = erc20.name().call().await;
-    // let decimals = erc20.decimals().call().await?;
-
     let state_sender_contract = StateSender::new(app.state_sender, ethereum_client.clone());
 
     let root_chain_manager_contract = ccdeth_relayer::root_chain_manager::BridgeManager::new(
