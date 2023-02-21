@@ -7,6 +7,7 @@ import moment from "moment";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
+import { transactionUrl } from "src/helpers/ccdscan";
 import isDeposit from "src/helpers/checkTransaction";
 import parseAmount from "src/helpers/parseAmount";
 import parseTxHash from "src/helpers/parseTxHash";
@@ -29,14 +30,13 @@ interface Props {}
 const History: React.FC<Props> = ({}) => {
     const { context } = useWallet();
     const router = useRouter();
-    const { data, isLoading } = useWalletTransactions(
+    const { data: history, isLoading } = useWalletTransactions(
         { wallet: context?.account || "" },
         { enabled: !!context.account }
     );
     const isMobile = useMediaQuery("(max-width: 540px)");
 
     const [open, setOpen] = useState<number | undefined>();
-    const [history, setHistory] = useState(data);
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
     const getTransactionToken = useGetTransactionToken();
@@ -61,10 +61,6 @@ const History: React.FC<Props> = ({}) => {
             setOpen(index);
         }
     };
-
-    useEffect(() => {
-        setHistory(data);
-    }, [data]);
 
     useEffect(() => {
         if (isMobile) {
@@ -228,7 +224,9 @@ const History: React.FC<Props> = ({}) => {
                                                             <Text fontSize="10" fontWeight="light">
                                                                 {transaction.Deposit.tx_hash ? (
                                                                     <a
-                                                                        href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction.Deposit.tx_hash}`}
+                                                                        href={transactionUrl(
+                                                                            transaction.Deposit.tx_hash
+                                                                        )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                     >
@@ -242,15 +240,14 @@ const History: React.FC<Props> = ({}) => {
                                                     </>
                                                 )}
                                                 <TableData>
-                                                    {/* TODO: Add timestamp? */}
-                                                    {/* <Text fontSize="10" fontWeight="light"> */}
-                                                    {/*     {moment(transaction.Deposit.timestamp * 1000).fromNow()} */}
-                                                    {/* </Text> */}
+                                                    <Text fontSize="10" fontWeight="light">
+                                                        {moment(transaction.Deposit.timestamp * 1000).fromNow()}
+                                                    </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
                                                             {transaction.Deposit.tx_hash ? (
                                                                 <a
-                                                                    href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction.Deposit.tx_hash}`}
+                                                                    href={transactionUrl(transaction.Deposit.tx_hash)}
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                 >
@@ -305,7 +302,9 @@ const History: React.FC<Props> = ({}) => {
                                                         <Text fontSize="10" fontWeight="light">
                                                             {transaction.Withdraw.origin_tx_hash ? (
                                                                 <a
-                                                                    href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction.Withdraw.origin_tx_hash}`}
+                                                                    href={transactionUrl(
+                                                                        transaction.Withdraw.origin_tx_hash
+                                                                    )}
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                 >
@@ -333,7 +332,9 @@ const History: React.FC<Props> = ({}) => {
                                                             <Text fontSize="10" fontWeight="light">
                                                                 {transaction.Withdraw.origin_tx_hash ? (
                                                                     <a
-                                                                        href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction.Withdraw.origin_tx_hash}`}
+                                                                        href={transactionUrl(
+                                                                            transaction.Withdraw.origin_tx_hash
+                                                                        )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                     >
@@ -370,10 +371,9 @@ const History: React.FC<Props> = ({}) => {
                                                     </>
                                                 )}
                                                 <TableData>
-                                                    {/* TODO: render timestamp? */}
-                                                    {/* <Text fontSize="10" fontWeight="light"> */}
-                                                    {/*     {moment(transaction.Withdraw.timestamp * 1000).fromNow()} */}
-                                                    {/* </Text> */}
+                                                    <Text fontSize="10" fontWeight="light">
+                                                        {moment(transaction.Withdraw.timestamp * 1000).fromNow()}
+                                                    </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
                                                             {transaction.Withdraw.tx_hash ? (

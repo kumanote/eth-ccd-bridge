@@ -3,7 +3,7 @@ set +x
 # Install typegen code generator
 npm install --global openapi-client-axios-typegen
 #Run typegen on the swagger json specs, write to AxiosClient class file
-typegen public/openapi.json > ./src/api-query/__generated__/AxiosClient.ts
+typegen src/api-query/__generated__/openapi.json > ./src/api-query/__generated__/AxiosClient.ts
 
 # Edit client
 sed -i -e "s/export type Client/export type AxiosClient/"  ./src/api-query/__generated__/AxiosClient.ts
