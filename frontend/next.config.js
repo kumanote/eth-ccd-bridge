@@ -20,8 +20,6 @@ const nextConfig = {
         ],
     },
     webpack(config, { isServer }) {
-        config.devtool = "source-map";
-
         if (isServer) {
             // Replace browser only dependencies with node correspondants
             config.resolve = config.resolve ?? {};
