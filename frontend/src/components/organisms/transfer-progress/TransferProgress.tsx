@@ -103,7 +103,7 @@ export const TransferProgress: React.FC<Props> = ({
                                 Transfer Amount:&nbsp;
                             </Text>
                             <Text fontSize="16" fontColor="White" fontWeight="bold">
-                                {amount} {isWithdraw ? token?.ccd_token?.name : token?.eth_token?.name}
+                                {amount} {isWithdraw ? token?.ccd_name : token?.eth_name}
                             </Text>
                         </TransferAmountWrapper>
                     </div>

@@ -32,13 +32,16 @@ The `pages/api` directory is mapped to `/api/*`. Files in this directory are tre
 
 The project depends on a number of configuration options that can be set through environment variables.
 
+**For Ethereum**
+- `NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK`: Ethereum network to use.
 - `NEXT_PUBLIC_ROOT_MANAGER_ADDRESS`: Address of main Ethereum contract [RootChainManager](../ethereum_contracts/contracts/root).
 - `NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS`: Address of Ethereum contract for generating predicate addresses for ETH.
 - `NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS`: Address of Ethereum contract for generating predicate addresses for ERC20 tokens.
-- `NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK`: Ethereum network to use.
-- `NEXT_PUBLIC_BRIDGE_MANAGER_INDEX`: Index of the Concordium [bridge manager contract](../concordium_contracts/bridge-manager).
 - `NEXT_PUBLIC_WETH_TOKEN_ADDRESS`: Ethereum contract address for wETH token.
-- `NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH`: Hex encoded block hash of testnet genesis block.
+
+**For Concordium**
+- `NEXT_PUBLIC_NETWORK_GENESIS_BLOCK_HASH`: Hex encoded block hash of the genesis block of the target Concordium network.
+- `NEXT_PUBLIC_BRIDGE_MANAGER_INDEX`: Index of the Concordium [bridge manager contract](../concordium_contracts/bridge-manager).
 - `NEXT_PUBLIC_API_URL`: URL of the Concordium bridge API.
 - `NEXT_PUBLIC_BRIDGE_MANAGER`: Hex encoded contract schema for Concordium [bridge manager contract](../concordium_contracts/bridge-manager).
 - `NEXT_PUBLIC_CIS2_BRIDGEABLE`: Hex encoded contract schema for Concordium [cis2-bridgeable contract](../concordium_contracts/cis2-bridgeable).

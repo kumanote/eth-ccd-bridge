@@ -10,7 +10,6 @@ import useTokens from "src/api-query/use-tokens/useTokens";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import useGenerateContract from "src/contracts/use-generate-contract";
-import isError from "src/helpers/checkError";
 import parseWallet from "src/helpers/parseWallet";
 import ArrowDownIcon from "../../../../public/icons/arrow-down-icon.svg";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
@@ -69,7 +68,7 @@ const Transfer: React.FC<Props> = ({
     isTablet,
 }) => {
     // hooks
-    const { data: tokensData } = useTokens();
+    const tokensQuery = useTokens();
     const { context, connect, disconnect } = useWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
 
@@ -84,7 +83,7 @@ const Transfer: React.FC<Props> = ({
     const [ccdBalance, setCcdBalance] = useState<number>(0);
 
     // tokens available in the dropdown
-    const [tokens, setTokens] = useState<Components.Schemas.ListTokensResponse>();
+    const [tokens, setTokens] = useState<Components.Schemas.TokenMapItem[]>();
     // state of the token dropdown
     const [dropdown, setDropdown] = useState(false);
     // current selected token
@@ -99,7 +98,7 @@ const Transfer: React.FC<Props> = ({
     // state dependent hooks
 
     const { getBalance: getEthTokenBalance } = useGenerateContract(
-        selectedToken?.eth_token?.contract || "", // address or empty string because the address is undefined on first renders
+        selectedToken?.eth_address || "", // address or empty string because the address is undefined on first renders
         !!selectedToken // plus it's disabled on the first render anyway
     );
     const { balanceOf: getCcdTokenBalance } = useCCDContract(ccdContext.account, ccdContext.isActive);
@@ -174,13 +173,13 @@ const Transfer: React.FC<Props> = ({
     // functions
     const fetchEthTokenBalance = async () => {
         if (selectedToken) {
-            const balance = await getEthTokenBalance(selectedToken?.eth_token?.decimals);
+            const balance = await getEthTokenBalance(selectedToken.decimals);
             if (balance) setEthBalance(Number(balance.toFixed(4)).toString());
         }
     };
     const fetchCcdTokenBalance = async () => {
         if (selectedToken) {
-            const balance = await getCcdTokenBalance(selectedToken?.ccd_token);
+            const balance = await getCcdTokenBalance(selectedToken);
             if (balance >= 0) setCcdBalance(Number(balance.toFixed(4)));
         }
     };
@@ -202,15 +201,12 @@ const Transfer: React.FC<Props> = ({
     }, [selectedToken, isLoggedIn, transferStatus, order]);
 
     useEffect(() => {
-        if (tokensData && !isError(tokensData)) {
-            setTokens(tokensData);
-        } else {
-            if (tokensData) {
-                //when the data comes undefined, the message is also empty, so we check for the data before tring to log the message
-                console.log(tokensData?.message);
-            }
+        if (tokensQuery.status === "error") {
+            console.log(tokensQuery.error); // TODO: error handling
+        } else if (tokensQuery.status === "success") {
+            setTokens(tokensQuery.data);
         }
-    }, [tokensData]);
+    }, [tokensQuery]);
 
     useEffect(() => {
         if (transferStatus === "Transaction processed!") {
@@ -288,8 +284,8 @@ const Transfer: React.FC<Props> = ({
                         <Text fontWeight="light" onClick={dropdownHandler}>
                             {selectedToken
                                 ? order === 1
-                                    ? selectedToken?.eth_token.name
-                                    : selectedToken?.ccd_token.name
+                                    ? selectedToken?.eth_name
+                                    : selectedToken?.ccd_name
                                 : "Select Token"}
                         </Text>
                         <Dropdown onClick={dropdownHandler}>
@@ -306,16 +302,15 @@ const Transfer: React.FC<Props> = ({
                             </Text>
                         </Button>
                         <DropdownList open={dropdown}>
-                            {tokens?.tokens?.map((token) => {
-                                const { name: ethName, contract: ethContract } = token.eth_token;
-                                const { name: ccdName, contract_index, contract_subindex } = token.ccd_token;
+                            {tokens?.map((token) => {
+                                const { ccd_name, ccd_contract, eth_name, eth_address } = token;
                                 return (
                                     <Coin
                                         onClick={selectTokenHandler.bind(undefined, token)}
                                         key={
                                             order === 1
-                                                ? `${ethName + ethContract}`
-                                                : `${ccdName + contract_index + contract_subindex}`
+                                                ? `${eth_name + eth_address}`
+                                                : `${ccd_name + ccd_contract?.index + ccd_contract?.subindex}`
                                         }
                                     >
                                         <Image
@@ -325,7 +320,7 @@ const Transfer: React.FC<Props> = ({
                                             width="23.13"
                                         />
                                         <StyledCoinText fontWeight="light">
-                                            {order === 1 ? ethName : ccdName}
+                                            {order === 1 ? eth_name : ccd_name}
                                         </StyledCoinText>
                                     </Coin>
                                 );

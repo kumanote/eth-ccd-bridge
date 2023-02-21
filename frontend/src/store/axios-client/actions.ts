@@ -1,14 +1,15 @@
 import OpenAPIClientAxios from "openapi-client-axios";
 import { GetState, SetState } from "zustand";
-import { Client } from "../../api-query/__generated__/AxiosClient";
+import { AxiosClient as Client } from "../../api-query/__generated__/AxiosClient";
 import { AxiosClientActions, AxiosClientStore } from "../../types/store/axios-client";
+import openApiDefinition from "../../api-query/__generated__/openapi.json";
 
 const axiosClientActions = (set: SetState<AxiosClientStore>, get: GetState<AxiosClientStore>): AxiosClientActions => ({
     getClient: async () => {
         let client = get().client;
         if (!client) {
             const api = new OpenAPIClientAxios({
-                definition: `${process.env.NEXT_PUBLIC_API_URL}/openapi.json`,
+                definition: openApiDefinition as any,
                 axiosConfigDefaults: {
                     baseURL: process.env.NEXT_PUBLIC_API_URL,
                 },

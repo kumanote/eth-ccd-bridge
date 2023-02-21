@@ -1,12 +1,13 @@
 import InfoArrow from "@components/atoms/info-arrow/InfoArrow";
 import Text from "@components/atoms/text/text";
-import useCCDWallet from "@hooks/use-ccd-wallet";
 import useMediaQuery from "@hooks/use-media-query";
+import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import useWallet from "@hooks/use-wallet";
 import moment from "moment";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
+import { transactionUrl } from "src/helpers/ccdscan";
 import isDeposit from "src/helpers/checkTransaction";
 import parseAmount from "src/helpers/parseAmount";
 import parseTxHash from "src/helpers/parseTxHash";
@@ -28,18 +29,17 @@ interface Props {}
 
 const History: React.FC<Props> = ({}) => {
     const { context } = useWallet();
-    const { ccdContext } = useCCDWallet();
     const router = useRouter();
-    const { data, isLoading } = useWalletTransactions(
+    const { data: history, isLoading } = useWalletTransactions(
         { wallet: context?.account || "" },
         { enabled: !!context.account }
     );
     const isMobile = useMediaQuery("(max-width: 540px)");
 
     const [open, setOpen] = useState<number | undefined>();
-    const [history, setHistory] = useState(data);
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
+    const getTransactionToken = useGetTransactionToken();
 
     const transferClickHandler = () => {
         router.push("/");
@@ -61,10 +61,6 @@ const History: React.FC<Props> = ({}) => {
             setOpen(index);
         }
     };
-
-    useEffect(() => {
-        setHistory(data);
-    }, [data]);
 
     useEffect(() => {
         if (isMobile) {
@@ -102,7 +98,7 @@ const History: React.FC<Props> = ({}) => {
     if (!context.account) {
         return <></>;
     }
-    if (!history?.transactions) {
+    if (!history) {
         return (
             <ContentWrapper>
                 <Text>Loading...</Text>
@@ -141,22 +137,27 @@ const History: React.FC<Props> = ({}) => {
                                 </TableRow>
                             </thead>
                             <tbody>
-                                {history?.transactions.map((transaction, index) => {
+                                {history.map((transaction, index) => {
                                     const isOpen = open === index;
+                                    const tokenReponse = getTransactionToken(transaction);
+
+                                    if (tokenReponse.status !== "success" || tokenReponse.token === undefined) {
+                                        return null; // TODO: handle this properly
+                                    }
                                     {
                                         /* check if the transaction is a deposit or withdraw, then render based on that */
                                     }
                                     if (isDeposit(transaction) && tab === "deposit") {
-                                        const processed = transaction?.Deposit?.status.includes("processed");
+                                        const processed = transaction.Deposit.status.includes("processed");
 
                                         const parsedAmount = parseAmount(
-                                            transaction?.Deposit?.amount,
-                                            transaction?.Deposit?.eth_token?.decimals
+                                            transaction.Deposit.amount,
+                                            tokenReponse.token.decimals
                                         );
 
                                         return (
                                             <TableRow
-                                                key={transaction?.Deposit?.eth_tx_hash}
+                                                key={transaction.Deposit.origin_tx_hash}
                                                 onClick={rowClickHandler.bind(undefined, index)}
                                             >
                                                 <TableData>
@@ -176,13 +177,13 @@ const History: React.FC<Props> = ({}) => {
                                                     </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
-                                                            {transaction?.Deposit?.eth_tx_hash ? (
+                                                            {transaction.Deposit.origin_tx_hash ? (
                                                                 <a
-                                                                    href={`https://goerli.etherscan.io/tx/${transaction?.Deposit?.eth_tx_hash}`}
+                                                                    href={`https://goerli.etherscan.io/tx/${transaction.Deposit.origin_tx_hash}`}
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                 >
-                                                                    {parseTxHash(transaction?.Deposit?.eth_tx_hash)}
+                                                                    {parseTxHash(transaction.Deposit.origin_tx_hash)}
                                                                 </a>
                                                             ) : (
                                                                 "Processing..."
@@ -192,7 +193,7 @@ const History: React.FC<Props> = ({}) => {
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {`${parsedAmount} ${transaction?.Deposit?.eth_token?.name}`}
+                                                        {`${parsedAmount} ${tokenReponse.token.eth_name}`}
                                                     </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="11" fontColor="Black" fontWeight="bold">
@@ -204,13 +205,15 @@ const History: React.FC<Props> = ({}) => {
                                                     <>
                                                         <TableData>
                                                             <Text fontSize="10" fontWeight="light">
-                                                                {transaction?.Deposit?.eth_tx_hash ? (
+                                                                {transaction.Deposit.origin_tx_hash ? (
                                                                     <a
-                                                                        href={`https://goerli.etherscan.io/tx/${transaction?.Deposit?.eth_tx_hash}`}
+                                                                        href={`https://goerli.etherscan.io/tx/${transaction.Deposit.origin_tx_hash}`}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                     >
-                                                                        {parseTxHash(transaction?.Deposit?.eth_tx_hash)}
+                                                                        {parseTxHash(
+                                                                            transaction.Deposit.origin_tx_hash
+                                                                        )}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -219,13 +222,15 @@ const History: React.FC<Props> = ({}) => {
                                                         </TableData>
                                                         <TableData>
                                                             <Text fontSize="10" fontWeight="light">
-                                                                {transaction?.Deposit?.ccd_tx_hash ? (
+                                                                {transaction.Deposit.tx_hash ? (
                                                                     <a
-                                                                        href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction?.Deposit?.ccd_tx_hash}`}
+                                                                        href={transactionUrl(
+                                                                            transaction.Deposit.tx_hash
+                                                                        )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                     >
-                                                                        {parseTxHash(transaction?.Deposit?.ccd_tx_hash)}
+                                                                        {parseTxHash(transaction.Deposit.tx_hash)}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -236,17 +241,17 @@ const History: React.FC<Props> = ({}) => {
                                                 )}
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {moment(transaction?.Deposit?.timestamp * 1000).fromNow()}
+                                                        {moment(transaction.Deposit.timestamp * 1000).fromNow()}
                                                     </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
-                                                            {transaction?.Deposit?.ccd_tx_hash ? (
+                                                            {transaction.Deposit.tx_hash ? (
                                                                 <a
-                                                                    href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction?.Deposit?.ccd_tx_hash}`}
+                                                                    href={transactionUrl(transaction.Deposit.tx_hash)}
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                 >
-                                                                    {parseTxHash(transaction?.Deposit?.ccd_tx_hash)}
+                                                                    {parseTxHash(transaction.Deposit.tx_hash)}
                                                                 </a>
                                                             ) : (
                                                                 "Processing..."
@@ -266,16 +271,16 @@ const History: React.FC<Props> = ({}) => {
                                             </TableRow>
                                         );
                                     } else if (!isDeposit(transaction) && tab === "withdraw") {
-                                        const processed = transaction?.Withdraw?.status.includes("processed");
+                                        const processed = transaction.Withdraw.status.includes("processed");
 
                                         const parsedAmount = parseAmount(
-                                            transaction?.Withdraw?.amount,
-                                            transaction?.Withdraw?.ccd_token?.decimals
+                                            transaction.Withdraw.amount,
+                                            tokenReponse.token.decimals
                                         );
 
                                         return (
                                             <TableRow
-                                                key={transaction?.Withdraw?.ccd_tx_hash}
+                                                key={transaction.Withdraw.origin_tx_hash}
                                                 onClick={rowClickHandler.bind(undefined, index)}
                                             >
                                                 <TableData>
@@ -295,13 +300,15 @@ const History: React.FC<Props> = ({}) => {
                                                     </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
-                                                            {transaction?.Withdraw?.ccd_tx_hash ? (
+                                                            {transaction.Withdraw.origin_tx_hash ? (
                                                                 <a
-                                                                    href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction?.Withdraw?.ccd_tx_hash}`}
+                                                                    href={transactionUrl(
+                                                                        transaction.Withdraw.origin_tx_hash
+                                                                    )}
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                 >
-                                                                    {parseTxHash(transaction?.Withdraw?.ccd_tx_hash)}
+                                                                    {parseTxHash(transaction.Withdraw.origin_tx_hash)}
                                                                 </a>
                                                             ) : (
                                                                 "Processing..."
@@ -311,7 +318,7 @@ const History: React.FC<Props> = ({}) => {
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {`${parsedAmount} ${transaction?.Withdraw?.ccd_token?.name}`}
+                                                        {`${parsedAmount} ${tokenReponse.token.ccd_name}`}
                                                     </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="11" fontColor="Black" fontWeight="bold">
@@ -323,14 +330,16 @@ const History: React.FC<Props> = ({}) => {
                                                     <>
                                                         <TableData>
                                                             <Text fontSize="10" fontWeight="light">
-                                                                {transaction?.Withdraw?.ccd_tx_hash ? (
+                                                                {transaction.Withdraw.origin_tx_hash ? (
                                                                     <a
-                                                                        href={`https://testnet.ccdscan.io/?dcount=1&dentity=transaction&dhash=${transaction?.Withdraw?.ccd_tx_hash}`}
+                                                                        href={transactionUrl(
+                                                                            transaction.Withdraw.origin_tx_hash
+                                                                        )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                     >
                                                                         {parseTxHash(
-                                                                            transaction?.Withdraw?.ccd_tx_hash
+                                                                            transaction.Withdraw.origin_tx_hash
                                                                         )}
                                                                     </a>
                                                                 ) : (
@@ -343,20 +352,16 @@ const History: React.FC<Props> = ({}) => {
                                                                 fontSize="10"
                                                                 fontWeight="light"
                                                                 fontColor={
-                                                                    transaction?.Withdraw?.eth_tx_hash
-                                                                        ? "Black"
-                                                                        : "Yellow"
+                                                                    transaction.Withdraw.tx_hash ? "Black" : "Yellow"
                                                                 }
                                                             >
-                                                                {transaction?.Withdraw?.eth_tx_hash ? (
+                                                                {transaction.Withdraw.tx_hash ? (
                                                                     <a
-                                                                        href={`https://goerli.etherscan.io/tx/${transaction?.Withdraw?.eth_tx_hash}`}
+                                                                        href={`https://goerli.etherscan.io/tx/${transaction.Withdraw.tx_hash}`}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                     >
-                                                                        {parseTxHash(
-                                                                            transaction?.Withdraw?.eth_tx_hash
-                                                                        )}
+                                                                        {parseTxHash(transaction.Withdraw.tx_hash)}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -367,17 +372,17 @@ const History: React.FC<Props> = ({}) => {
                                                 )}
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {moment(transaction?.Withdraw?.timestamp * 1000).fromNow()}
+                                                        {moment(transaction.Withdraw.timestamp * 1000).fromNow()}
                                                     </Text>
                                                     {isMobile && isOpen && (
                                                         <Text fontSize="10" fontWeight="light">
-                                                            {transaction?.Withdraw?.eth_tx_hash ? (
+                                                            {transaction.Withdraw.tx_hash ? (
                                                                 <a
-                                                                    href={`https://goerli.etherscan.io/tx/${transaction?.Withdraw?.eth_tx_hash}`}
+                                                                    href={`https://goerli.etherscan.io/tx/${transaction.Withdraw.tx_hash}`}
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                 >
-                                                                    {parseTxHash(transaction?.Withdraw?.eth_tx_hash)}
+                                                                    {parseTxHash(transaction.Withdraw.tx_hash)}
                                                                 </a>
                                                             ) : (
                                                                 "Processing..."

@@ -20,7 +20,7 @@ const usePendingTransactions = (
             const { data } = await client?.wallet_txs(params);
 
             // filter the pending withdraws
-            const pending = data.transactions.filter((transaction) => {
+            const pending = data.filter((transaction) => {
                 if (!isDeposit(transaction)) {
                     return transaction.Withdraw.status === "pending";
                 }
@@ -29,19 +29,11 @@ const usePendingTransactions = (
             // map the withdraws so the function does not return in the transaction.Withdraw form
             // and sort them by timestamp (older transactions should be verified first)
 
-            return pending
-                .map((transaction) => {
-                    if (!isDeposit(transaction)) {
-                        return transaction.Withdraw;
-                    }
-                })
-                .sort((a, b) => {
-                    if (a?.timestamp && b?.timestamp) {
-                        return a.timestamp - b.timestamp;
-                    } else {
-                        return 0;
-                    }
-                });
+            return pending.map((transaction) => {
+                if (!isDeposit(transaction)) {
+                    return transaction.Withdraw;
+                }
+            });
         },
         { ...options }
     );

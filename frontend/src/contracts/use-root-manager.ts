@@ -21,7 +21,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
         const typeToVault = await rootContract.typeToVault(
-            process.env.NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS //address to generate the predicate address
+            process.env.NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS //address to generate the predicate address
         );
 
         return typeToVault;
@@ -35,10 +35,10 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
 
         let parsedAmount;
 
-        if (selectedToken.eth_token.decimals === 18) {
+        if (selectedToken.decimals === 18) {
             parsedAmount = toWei(amount);
         } else {
-            parsedAmount = Number(amount) * 10 ** selectedToken.eth_token.decimals;
+            parsedAmount = Number(amount) * 10 ** selectedToken.decimals;
         }
 
         const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
@@ -46,7 +46,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
         const depositFor = await rootContract.depositFor(
             context.account,
             ccdUser,
-            selectedToken.eth_token.contract,
+            selectedToken.eth_address,
             depositData
         );
 
@@ -82,7 +82,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
             ccdSubIndex: params.ccd_sub_index,
             amount: params.amount,
             userWallet: params.user_wallet,
-            ccdTxHash: params.ccd_tx_hash,
+            ccdTxHash: "0x" + params.ccd_tx_hash,
             ccdEventIndex: params.ccd_event_index,
             tokenId: params.token_id,
         };
@@ -109,16 +109,16 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
         let parsedAmount;
 
         if (type === "deposit") {
-            if (selectedToken.eth_token.contract === addresses.eth) {
+            if (selectedToken.eth_address === addresses.eth) {
                 console.log("depositEtherFor estimate", ccdUser);
                 gasLimit = (
                     await rootContract.estimateGas.depositEtherFor(context.account, ccdUser, { value: toWei(amount) })
                 ).toNumber();
             } else {
-                if (selectedToken.eth_token.decimals === 18) {
+                if (selectedToken.decimals === 18) {
                     parsedAmount = toWei(amount);
                 } else {
-                    parsedAmount = Number(amount) * 10 ** selectedToken.eth_token.decimals;
+                    parsedAmount = Number(amount) * 10 ** selectedToken.decimals;
                 }
                 const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
 
@@ -126,7 +126,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
                     await rootContract.estimateGas.depositFor(
                         context.account,
                         ccdUser,
-                        selectedToken.eth_token.contract,
+                        selectedToken.eth_address,
                         depositData
                     )
                 ).toNumber();
@@ -143,7 +143,7 @@ const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => 
                 ccdSubIndex: params!.ccd_sub_index,
                 amount: params!.amount,
                 userWallet: params!.user_wallet,
-                ccdTxHash: params!.ccd_tx_hash,
+                ccdTxHash: "0x" + params!.ccd_tx_hash,
                 ccdEventIndex: params!.ccd_event_index,
                 tokenId: params!.token_id,
             };
