@@ -356,7 +356,7 @@ WHERE (processed IS NULL) AND event_type = 'withdraw' ORDER BY id ASC;",
         let set_expected_merkle_time = client
             .prepare(
                 "INSERT INTO expected_merkle_update (expected_time) VALUES ($1)
-ON CONFLICT (unit) DO UPDATE SET expected_time = $1;
+ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
 ",
             )
             .await?;
