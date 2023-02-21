@@ -15,6 +15,7 @@ type Props = {
     gasFee: number;
     energyFee: number;
     error: string;
+    pendingSubmission: boolean;
     withdrawApproveFee?: number;
 };
 
@@ -25,6 +26,7 @@ export const TransferOverview: React.FC<Props> = ({
     gasFee,
     error,
     withdrawApproveFee,
+    pendingSubmission,
 }) => {
     const getPrice = usePrice();
 
@@ -179,7 +181,7 @@ export const TransferOverview: React.FC<Props> = ({
                             </Text>
                         </div>
                     </Button>
-                    <Button variant="primary" onClick={continueHandler}>
+                    <Button variant="primary" disabled={pendingSubmission} onClick={continueHandler}>
                         <div style={{ position: "relative" }}>
                             <Text fontSize="16" fontColor="Black" fontWeight="bold">
                                 Continue

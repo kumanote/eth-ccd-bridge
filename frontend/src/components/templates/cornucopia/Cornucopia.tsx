@@ -37,7 +37,7 @@ const Cornucopia = () => {
     // status states
     const [transferStatus, setTransferStatus] = useState("");
     const [transferStep, setTransferStep] = useState(0);
-    const [overviewContinueClicked, setOverviewContinueClicked] = useState(false);
+    const [overviewPendingSubmission, setOverviewPendingSubmission] = useState(false);
     const [pendingContinueClicked, setPendingContinueClicked] = useState(false);
     const [isPending, setIsPending] = useState(false);
 
@@ -161,8 +161,12 @@ const Cornucopia = () => {
     };
 
     const overviewContinueHandler = async () => {
-        if (!selectedToken || overviewContinueClicked) return;
-        setOverviewContinueClicked(true);
+        if (!selectedToken) {
+            throw new Error("Expected selected token to be available");
+        }
+
+        setOverviewPendingSubmission(true);
+
         if (step?.includes("withdraw")) {
             try {
                 //if already approved
@@ -198,6 +202,8 @@ const Cornucopia = () => {
             setTransferStep(1);
             await deposit(amount);
         }
+
+        setOverviewPendingSubmission(false);
     };
     const overviewCancelHandler = () => {
         setError("");
@@ -256,13 +262,8 @@ const Cornucopia = () => {
                 }
 
                 setStep("progress-deposit"); // track deposit progress
-
                 await tx.wait(1); // wait for confirmed transaction
                 setDepositTx(tx.hash); // set the hash to fetch status
-
-                if (selectedToken.eth_address !== addresses.eth) {
-                    setOverviewContinueClicked(false);
-                }
             }
         } catch (error: any) {
             console.dir("Deposit error:", error);
@@ -555,6 +556,7 @@ const Cornucopia = () => {
                 isWithdraw={step.includes("withdraw")}
                 onContinue={overviewContinueHandler}
                 onCancel={overviewCancelHandler}
+                pendingSubmission={overviewPendingSubmission}
             />
         );
     }
