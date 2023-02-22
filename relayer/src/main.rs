@@ -21,15 +21,7 @@ use std::{path::PathBuf, sync::Arc};
 use tonic::transport::ClientTlsConfig;
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about)]
-struct Relayer {
-    #[clap(
-        long = "log-level",
-        default_value = "info",
-        help = "Maximum log level.",
-        env = "ETHCCD_RELAYER_LOG_LEVEL"
-    )]
-    log_level: log::LevelFilter,
+struct EthereumConfig {
     #[clap(
         long = "state-sender-address",
         help = "Address of the StateSender proxy instance on Ethereum.",
@@ -50,62 +42,11 @@ struct Relayer {
     )]
     state_sender_creation_block_number: u64,
     #[clap(
-        long = "bridge-manager-address",
-        help = "Address of the BridgeManger contract instance on Concordium.",
-        env = "ETHCCD_RELAYER_BRIDGE_MANAGER"
-    )]
-    bridge_manager: ContractAddress,
-    #[clap(
-        long = "concordium-wallet-file",
-        help = "File with the Concordium wallet in the browser extension wallet export format.",
-        env = "ETHCCD_RELAYER_CONCORDIUM_WALLET_FILE"
-    )]
-    concordium_wallet: PathBuf,
-    #[clap(
-        long = "concordium-api",
-        help = "GRPC V2 interface of the Concordium node.",
-        env = "ETHCCD_RELAYER_CONCORDIUM_API",
-        default_value = "http://localhost:20000"
-    )]
-    concordium_api: v2::Endpoint,
-    #[clap(
         long = "ethereum-api",
         help = "JSON-RPC interface of an Ethereum node. Only HTTPS is supported as transport.",
         env = "ETHCCD_RELAYER_ETHEREUM_API"
     )]
-    ethereum_api: url::Url,
-    #[clap(
-        long = "db",
-        default_value = "host=localhost dbname=relayer user=postgres password=password port=5432",
-        help = "Database connection string.",
-        env = "ETHCCD_RELAYER_DB_STRING"
-    )]
-    db_config: tokio_postgres::Config,
-    #[clap(
-        long,
-        help = "Private key used to sign Merkle update tranasctions on Ethereum. The address \
-                derived from this key must have the MERKLE_UPDATER role.",
-        env = "ETHCCD_RELAYER_ETH_PRIVATE_KEY"
-    )]
-    eth_private_key: LocalWallet,
-    #[clap(
-        long,
-        help = "Maximum number of parallel queries of the Concordium node. This is only useful in \
-                initial catchup if the relayer is started a long time after the bridge contracts \
-                are in operation.",
-        env = "ETHCCD_RELAYER_MAX_PARALLEL_QUERIES_CONCORDIUM",
-        default_value = "1"
-    )]
-    max_parallel: u32,
-    // Maximum number of seconds a concordium node can be behind before it is deemed "behind".
-    #[clap(
-        long,
-        help = "Maximum number of seconds the Concordium node's last finalized block can be \
-                behind before we log warnings.",
-        env = "ETHCCD_RELAYER_CONCORDIUM_MAX_BEHIND",
-        default_value = "240"
-    )]
-    max_behind: u32,
+    api: url::Url,
     // Maximum gas price.
     #[clap(
         long,
@@ -148,14 +89,6 @@ struct Relayer {
         default_value = "10"
     )]
     num_confirmations: u64,
-    /// Request timeout for Concordium node requests.
-    #[clap(
-        long,
-        help = "Timeout for requests to the Concordium node.",
-        env = "ETHCCD_RELAYER_CONCORDIUM_REQUEST_TIMEOUT",
-        default_value = "10"
-    )]
-    concordium_request_timeout: u64,
     /// Request timeout for Ethereum node requests.
     #[clap(
         long,
@@ -164,6 +97,85 @@ struct Relayer {
         default_value = "10"
     )]
     ethereum_request_timeout: u64,
+}
+
+#[derive(Debug, Parser)]
+struct ConcordiumConfig {
+    #[clap(
+        long = "concordium-api",
+        help = "GRPC V2 interface of the Concordium node.",
+        env = "ETHCCD_RELAYER_CONCORDIUM_API",
+        default_value = "http://localhost:20000"
+    )]
+    api:             v2::Endpoint,
+    #[clap(
+        long = "concordium-max-parallel",
+        help = "Maximum number of parallel queries of the Concordium node. This is only useful in \
+                initial catchup if the relayer is started a long time after the bridge contracts \
+                are in operation.",
+        env = "ETHCCD_RELAYER_MAX_PARALLEL_QUERIES_CONCORDIUM",
+        default_value = "1"
+    )]
+    max_parallel:               u32,
+    // Maximum number of seconds a concordium node can be behind before it is deemed "behind".
+    #[clap(
+        long = "concordium-max-behind",
+        help = "Maximum number of seconds the Concordium node's last finalized block can be \
+                behind before we log warnings.",
+        env = "ETHCCD_RELAYER_CONCORDIUM_MAX_BEHIND",
+        default_value = "240"
+    )]
+    max_behind:                 u32,
+    /// Request timeout for Concordium node requests.
+    #[clap(
+        long,
+        help = "Timeout for requests to the Concordium node.",
+        env = "ETHCCD_RELAYER_CONCORDIUM_REQUEST_TIMEOUT",
+        default_value = "10"
+    )]
+    request_timeout: u64,
+    #[clap(
+        long = "bridge-manager-address",
+        help = "Address of the BridgeManger contract instance on Concordium.",
+        env = "ETHCCD_RELAYER_BRIDGE_MANAGER"
+    )]
+    bridge_manager:    ContractAddress,
+}
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about)]
+struct Relayer {
+    #[clap(
+        long = "log-level",
+        default_value = "info",
+        help = "Maximum log level.",
+        env = "ETHCCD_RELAYER_LOG_LEVEL"
+    )]
+    log_level:         log::LevelFilter,
+    #[clap(flatten)]
+    ethereum_config:   EthereumConfig,
+    #[clap(flatten)]
+    concordium_config:   ConcordiumConfig,
+    #[clap(
+        long = "concordium-wallet-file",
+        help = "File with the Concordium wallet in the browser extension wallet export format.",
+        env = "ETHCCD_RELAYER_CONCORDIUM_WALLET_FILE"
+    )]
+    concordium_wallet: PathBuf,
+    #[clap(
+        long,
+        help = "Private key used to sign Merkle update tranasctions on Ethereum. The address \
+                derived from this key must have the MERKLE_UPDATER role.",
+        env = "ETHCCD_RELAYER_ETH_PRIVATE_KEY"
+    )]
+    eth_private_key:   LocalWallet,
+    #[clap(
+        long = "db",
+        default_value = "host=localhost dbname=relayer user=postgres password=password port=5432",
+        help = "Database connection string.",
+        env = "ETHCCD_RELAYER_DB_STRING"
+    )]
+    db_config:         tokio_postgres::Config,
 }
 
 async fn find_start_ethereum_config<M: Middleware>(
@@ -233,15 +245,17 @@ async fn main() -> anyhow::Result<()> {
 
     let inner_ethereum_client = {
         let network_client = reqwest::ClientBuilder::new()
-            .timeout(std::time::Duration::from_secs(app.ethereum_request_timeout))
+            .timeout(std::time::Duration::from_secs(
+                app.ethereum_config.ethereum_request_timeout,
+            ))
             .connect_timeout(std::time::Duration::from_secs(10))
             .https_only(true)
             .build()?;
-        Http::new_with_client(app.ethereum_api, network_client)
+        Http::new_with_client(app.ethereum_config.api, network_client)
     };
     let ethereum_client = RetryClient::new(
         inner_ethereum_client,
-        Box::<HttpRateLimitRetryPolicy>::default(), // new(HttpRateLimitRetryPolicy::default()),
+        Box::<HttpRateLimitRetryPolicy>::default(),
         5,
         3000,
     );
@@ -251,16 +265,21 @@ async fn main() -> anyhow::Result<()> {
 
     // Transactions will be signed with the private key below and will be broadcast
     // via the eth_sendRawTransaction API)
-    let wallet: LocalWallet = app.eth_private_key.with_chain_id(app.chain_id);
+    let wallet: LocalWallet = app
+        .eth_private_key
+        .with_chain_id(app.ethereum_config.chain_id);
     let sender = wallet.address();
 
     let balance = ethereum_client.get_balance(sender, None).await?;
     log::info!("Balance of the Ethereum sender account is {balance}.");
     let ethereum_nonce = ethereum_client.get_transaction_count(sender, None).await?;
     log::info!("Nonce of the Ethereum sender account is {ethereum_nonce}.");
-    log::info!("Using max gas price bound = {}.", app.max_gas_price);
-    log::info!("Using max gas bound = {}.", app.max_gas);
-    log::info!("Using chain id = {}.", app.chain_id);
+    log::info!(
+        "Using max gas price bound = {}.",
+        app.ethereum_config.max_gas_price
+    );
+    log::info!("Using max gas bound = {}.", app.ethereum_config.max_gas);
+    log::info!("Using chain id = {}.", app.ethereum_config.chain_id);
 
     // Set up signal handlers before doing anything non-trivial so we have some sort
     // of graceful shut down during initial database lookups and pending
@@ -272,10 +291,11 @@ async fn main() -> anyhow::Result<()> {
         set_shutdown(stop_sender, died_receiver),
     );
 
-    let state_sender_contract = StateSender::new(app.state_sender, ethereum_client.clone());
+    let state_sender_contract =
+        StateSender::new(app.ethereum_config.state_sender, ethereum_client.clone());
 
     let root_chain_manager_contract = ccdeth_relayer::root_chain_manager::BridgeManager::new(
-        app.root_chain_manager,
+        app.ethereum_config.root_chain_manager,
         Arc::new(ethereum_client.clone()),
     );
 
@@ -283,18 +303,18 @@ async fn main() -> anyhow::Result<()> {
         // Use TLS if the URI scheme is HTTPS.
         // This uses whatever system certificates have been installed as trusted roots.
         let endpoint = if app
-            .concordium_api
+            .concordium_config.api
             .uri()
             .scheme()
             .map_or(false, |x| x == &http::uri::Scheme::HTTPS)
         {
-            app.concordium_api.tls_config(ClientTlsConfig::new())?
+            app.concordium_config.api.tls_config(ClientTlsConfig::new())?
         } else {
-            app.concordium_api
+            app.concordium_config.api
         };
         let ep = endpoint
             .timeout(std::time::Duration::from_secs(
-                app.concordium_request_timeout,
+                app.concordium_config.request_timeout,
             ))
             .connect_timeout(std::time::Duration::from_secs(10));
         v2::Client::new(ep).await?
@@ -306,12 +326,12 @@ async fn main() -> anyhow::Result<()> {
             .last_finalized_block;
         let bi = concordium_client.get_block_info(lfb).await?.response;
         if chrono::Utc::now().signed_duration_since(bi.block_slot_time)
-            > chrono::Duration::seconds(app.max_behind.into())
+            > chrono::Duration::seconds(app.concordium_config.max_behind.into())
         {
             anyhow::bail!(
                 "Unable to start. The last finalized time of the Concordium node is more than {}s \
                  in the past.",
-                app.max_behind,
+                app.concordium_config.max_behind,
             );
         }
     }
@@ -324,7 +344,7 @@ async fn main() -> anyhow::Result<()> {
     let bridge_manager_client = BridgeManagerClient::new(
         concordium_client.clone(),
         concordium_wallet.address,
-        app.bridge_manager,
+        app.concordium_config.bridge_manager,
     );
 
     let bridge_manager = concordium_contracts::BridgeManager::new(
@@ -338,8 +358,8 @@ async fn main() -> anyhow::Result<()> {
     let (start_number, upper_number) = find_start_ethereum_config(
         ethereum_client.clone(),
         last_ethereum,
-        app.state_sender_creation_block_number,
-        app.num_confirmations,
+        app.ethereum_config.state_sender_creation_block_number,
+        app.ethereum_config.num_confirmations,
     )
     .await?;
     log::info!(
@@ -348,7 +368,7 @@ async fn main() -> anyhow::Result<()> {
     let concordium_start_height = find_concordium_start_height(
         concordium_client.clone(),
         last_concordium,
-        app.bridge_manager,
+        app.concordium_config.bridge_manager,
     )
     .await?;
 
@@ -398,11 +418,11 @@ async fn main() -> anyhow::Result<()> {
         let merkle_client = MerkleSetterClient::new(
             root_chain_manager_contract,
             wallet,
-            app.max_gas_price,
-            app.max_gas,
+            app.ethereum_config.max_gas_price,
+            app.ethereum_config.max_gas,
             ethereum_nonce,
             &pending_merkle_set,
-            std::time::Duration::from_secs(app.merkle_update_interval),
+            std::time::Duration::from_secs(app.ethereum_config.merkle_update_interval),
             leaves,
             max_marked_event_index,
         )?;
@@ -414,7 +434,7 @@ async fn main() -> anyhow::Result<()> {
                 pending_merkle_set,
                 merkle_setter_receiver,
                 db_sender.clone(),
-                app.num_confirmations,
+                app.ethereum_config.num_confirmations,
                 stop_receiver.clone(),
             ),
         )
@@ -427,8 +447,8 @@ async fn main() -> anyhow::Result<()> {
             bridge_manager_client.clone(),
             db_sender.clone(),
             concordium_start_height,
-            app.max_parallel,
-            app.max_behind,
+            app.concordium_config.max_parallel,
+            app.concordium_config.max_behind,
         ),
     );
     let watch_ethereum_handle = spawn_cancel(
@@ -438,7 +458,7 @@ async fn main() -> anyhow::Result<()> {
             db_sender.clone(),
             start_number,
             upper_number,
-            app.num_confirmations,
+            app.ethereum_config.num_confirmations,
         ),
     );
 
