@@ -215,8 +215,8 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             return;
         }
 
-        push({ pathname: nextRoute, query: { amount } });
-    }, [isValidAmount, push, nextRoute, amount]);
+        push({ pathname: nextRoute });
+    }, [isValidAmount, push, nextRoute]);
 
     return (
         <PageWrapper>
