@@ -686,7 +686,6 @@ where
                             "Ethereum transaction {pending_hash:#x} is in block {bn}, but not yet \
                              confirmed."
                         );
-                        *pending = Some((*pending_hash, *root, std::mem::take(ids)));
                     }
                 } else {
                     return Err(EthereumSenderError::Internal(anyhow::anyhow!(
@@ -696,7 +695,6 @@ where
                 }
             } else {
                 log::debug!("Ethereum transaction {pending_hash:#x} is pending.");
-                *pending = Some((*pending_hash, *root, std::mem::take(ids)));
             }
         }
     }
