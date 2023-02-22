@@ -3,6 +3,7 @@ import theme from "../../../theme/theme";
 import Text from "../../atoms/text/text";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Container from "@components/atoms/container/Container";
+import Link from "next/link";
 
 export const StyledWrapper = styled(PageWrapper)``;
 
@@ -97,13 +98,14 @@ export const StyledCoinText = styled(Text)`
     margin-left: 7px;
 `;
 
-export const SwapContainer = styled.div`
+export const SwapLink = styled.a`
     position: absolute;
     top: calc(50% + 13px);
     left: 50%;
     transform: translate(-50%, -50%);
     height: 25px;
     width: 25px;
+    display: block;
     background: ${theme.colors.DarkYellow};
     border-radius: 13px;
     display: flex;

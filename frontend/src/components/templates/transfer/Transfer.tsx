@@ -6,13 +6,17 @@ import useCCDWallet from "@hooks/use-ccd-wallet";
 import useWallet from "@hooks/use-wallet";
 import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import useTokens from "src/api-query/use-tokens/useTokens";
 import { Components } from "src/api-query/__generated__/AxiosClient";
+import { routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import useGenerateContract from "src/contracts/use-generate-contract";
 import { noOp } from "src/helpers/basic";
 import parseWallet from "src/helpers/parseWallet";
+import { appContext } from "src/root/app-context";
 import ArrowDownIcon from "../../../../public/icons/arrow-down-icon.svg";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
@@ -35,7 +39,7 @@ import {
     StyledCoinText,
     StyledContainer,
     StyledWalletDisplay,
-    SwapContainer,
+    SwapLink,
 } from "./Transfer.style";
 
 interface ChainType {
@@ -99,21 +103,16 @@ const ChainBox: React.FC<ChainBoxProps> = ({ chain, text }) => {
 };
 
 interface Props {
-    onSelectToken: Function;
-    transferStatus: string;
-    onDepositCompleted: Function;
-    token?: Components.Schemas.TokenMapItem;
-    isTablet: boolean;
-    isMobile: boolean;
+    isDeposit?: boolean;
 }
 
-const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCompleted, token, isTablet }) => {
-    // hooks
+const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const tokensQuery = useTokens();
     const { context, connect, disconnect } = useWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
+    const { push } = useRouter();
 
-    const [isDeposit, setIsDeposit] = useState(true);
+    const { isMobile, isTablet } = useContext(appContext);
     // introduced amount
     const [amount, setAmount] = useState("0");
     const [submitted, setSubmitted] = useState(false);
@@ -122,7 +121,7 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
     // state of the token dropdown
     const [dropdown, setDropdown] = useState(false);
     // current selected token
-    const [selectedToken, setSelectedToken] = useState(token);
+    const [selectedToken, setSelectedToken] = useState<Components.Schemas.TokenMapItem>();
 
     // state dependent hooks
     const { getBalance: getEthTokenBalance } = useGenerateContract(
@@ -134,6 +133,7 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
     // constants
     const isLoggedIn = !!context?.account && !!ccdContext.account;
     const transferButtonDisabled = !isLoggedIn || !selectedToken;
+    const nextRoute = useMemo(() => (isDeposit ? routes.deposit.overview : routes.withdraw.overview), [isDeposit]);
 
     const ethBalance = useAsyncMemo(
         async () => {
@@ -191,11 +191,6 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
         return nAmount < Number(ccdBalance);
     }, [amount, ccdBalance, ethBalance, isDeposit]);
 
-    // handlers
-    const historyClickHandler = () => {
-        onHistoryClick();
-    };
-
     const dropdownHandler = () => {
         setDropdown((prev) => !prev);
     };
@@ -203,7 +198,6 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
     const selectTokenHandler = (token: Components.Schemas.TokenMapItem) => {
         setSelectedToken(token);
         setDropdown(false);
-        onSelectToken(token);
     };
 
     const submitHandler = useCallback(() => {
@@ -214,12 +208,8 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
             return;
         }
 
-        if (isDeposit) {
-            onDeposit(amount);
-        } else {
-            onWithdraw(amount);
-        }
-    }, [isValidAmount, isDeposit, onDeposit, amount, onWithdraw]);
+        push({ pathname: nextRoute, query: { amount } });
+    }, [isValidAmount, push, nextRoute, amount]);
 
     // effects
     useEffect(() => {
@@ -235,13 +225,6 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
         }
     }, [tokensQuery]);
 
-    useEffect(() => {
-        if (transferStatus === "Transaction processed!") {
-            onDepositCompleted();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [transferStatus]);
-
     return (
         <PageWrapper>
             <StyledContainer>
@@ -255,9 +238,11 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
                         .map((chain, index) => (
                             <ChainBox key={chain.id} chain={chain} text={index === 0 ? "From" : "To"} />
                         ))}
-                    <SwapContainer onClick={() => setIsDeposit((v) => !v)}>
-                        <Image src={SwapIcon.src} alt="swap icon" width="14.4" height="11.52" />
-                    </SwapContainer>
+                    <Link href={isDeposit ? routes.withdraw.path : routes.deposit.path} passHref legacyBehavior>
+                        <SwapLink>
+                            <Image src={SwapIcon.src} alt="swap icon" width="14.4" height="11.52" />
+                        </SwapLink>
+                    </Link>
                 </FirstRow>
                 <SecondRow>
                     <MaxGapRow>
@@ -338,7 +323,8 @@ const Transfer: React.FC<Props> = ({ onSelectToken, transferStatus, onDepositCom
             </StyledContainer>
             {context?.account && (
                 <LinkWrapper>
-                    <Text fontSize="12" fontFamily="Roboto" fontColor="Brown" onClick={historyClickHandler}>
+                    {/* TODO change to link... */}
+                    <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
                         Transaction History
                     </Text>
                 </LinkWrapper>
