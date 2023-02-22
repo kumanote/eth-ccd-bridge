@@ -281,7 +281,7 @@ where
                 topics: log.topics,
                 data:   log.data.0.into(),
             })?;
-            let (name, decimals) = if decoded.token_type == &sha3::Keccak256::digest("Ether")[..] {
+            let (name, decimals) = if decoded.token_type == sha3::Keccak256::digest("Ether")[..] {
                 log::debug!("New mapping for ETH.");
                 ("ETH".into(), 18)
             } else {

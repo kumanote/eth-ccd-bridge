@@ -241,7 +241,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let ethereum_client = RetryClient::new(
         inner_ethereum_client,
-        Box::new(HttpRateLimitRetryPolicy::default()),
+        Box::<HttpRateLimitRetryPolicy>::default(), // new(HttpRateLimitRetryPolicy::default()),
         5,
         3000,
     );
@@ -398,8 +398,8 @@ async fn main() -> anyhow::Result<()> {
         let merkle_client = MerkleSetterClient::new(
             root_chain_manager_contract,
             wallet,
-            app.max_gas_price.into(),
-            app.max_gas.into(),
+            app.max_gas_price,
+            app.max_gas,
             ethereum_nonce,
             &pending_merkle_set,
             std::time::Duration::from_secs(app.merkle_update_interval),

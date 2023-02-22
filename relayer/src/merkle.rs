@@ -198,7 +198,7 @@ impl<M, S> MerkleSetterClient<M, S> {
             pending_merkle_set
         {
             let (tx, sig) = ethers::types::transaction::eip2718::TypedTransaction::decode_signed(
-                &Rlp::new(&data),
+                &Rlp::new(data),
             )?;
             log::debug!(
                 "There is a pending Ethereum transaction with hash {:#x}. Using it's nonce as the \
@@ -325,10 +325,10 @@ where
                     ids,
                 })
             } else {
-                return Ok(SetMerkleRootResult::GasTooHigh {
+                Ok(SetMerkleRootResult::GasTooHigh {
                     max_gas_price: self.max_gas_price,
                     current_gas_price,
-                });
+                })
             }
         } else {
             Ok(SetMerkleRootResult::NoPendingWithdrawals)
@@ -493,7 +493,7 @@ where
                 log::error!(
                     "An unrecoverable error occurred when sending transactions to Ethereum: {e:#}."
                 );
-                return Err(e.into());
+                return Err(e);
             }
         }
     }
@@ -616,7 +616,7 @@ where
                         .get_block_number()
                         .await
                         .map_err(EthereumSenderError::Retryable)?;
-                    if bn.saturating_add(num_confirmations.into()) <= current_block.into() {
+                    if bn.saturating_add(num_confirmations.into()) <= current_block {
                         let mut found = false;
                         for log in receipt.logs {
                             use ethers::contract::EthEvent;
@@ -721,7 +721,7 @@ where
             root,
             ids,
         } => {
-            log::debug!("New merkle root to be set using transaction {tx_hash}.");
+            log::debug!("New merkle root to be set using transaction {tx_hash:#x}.");
             let (response, receiver) = tokio::sync::oneshot::channel();
             if db_sender
                 .send(DatabaseOperation::StoreEthereumTransaction {

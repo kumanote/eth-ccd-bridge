@@ -96,7 +96,7 @@ impl PreparedStatements {
         let tx_bytes = to_bytes(bi);
         let res = db_tx
             .query_one(&self.insert_concordium_tx, &[
-                &&hash.as_ref()[..],
+                &hash.as_ref(),
                 &tx_bytes,
                 &origin_tx_hash.as_bytes(),
                 &timestamp,
@@ -141,7 +141,7 @@ impl PreparedStatements {
                     .query(
                         "UPDATE ethereum_deposit_events SET tx_hash = $2 WHERE origin_event_index \
                          = $1 RETURNING id",
-                        &[&(de.id as i64), &&tx_hash.as_ref()[..]],
+                        &[&(de.id as i64), &tx_hash.as_ref()],
                     )
                     .await?;
                 if rows.len() != 1 {
@@ -168,7 +168,7 @@ impl PreparedStatements {
             BridgeEvent::Withdraw(we) => {
                 let res = db_tx
                     .query_one(&self.insert_concordium_event, &[
-                        &&tx_hash.as_ref()[..],
+                        &tx_hash.as_ref(),
                         &Some(we.event_index as i64),
                         &None::<i64>,
                         &ConcordiumEventType::Withdraw,
@@ -195,7 +195,7 @@ impl PreparedStatements {
         };
         let res = db_tx
             .query_one(&self.insert_concordium_event, &[
-                &&tx_hash.as_ref()[..],
+                &tx_hash.as_ref(),
                 &event.event_index().map(|x| x as i64),
                 &origin_event_index,
                 &event_type,
@@ -590,7 +590,7 @@ ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
             let event_index: i64 = row.try_get("event_index")?;
             let event_index = event_index as u64;
             let data: Vec<u8> = row.try_get("event_data")?;
-            let we: WithdrawEvent = contracts_common::from_bytes(&mut &data[..])?;
+            let we: WithdrawEvent = contracts_common::from_bytes(&data[..])?;
             let status = client.client.get_block_item_status(&tx_hash).await?;
             if let Some((_block, summary)) = status.is_finalized() {
                 let chain_events = client.extract_events(summary)?;
@@ -689,11 +689,11 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
                      receiver, origin_tx_hash, origin_event_index) VALUES ($1, $2, $3, $4, $5, \
                      $6);",
                     &[
-                        &&tx_hash.as_ref()[..],
+                        &tx_hash.as_ref(),
                         &(*id as i64),
                         &amount.to_string(),
                         &receiver.as_bytes(),
-                        &&origin_tx_hash.as_ref()[..],
+                        &origin_tx_hash.as_ref(),
                         &(*origin_event_id as i64),
                     ],
                 )
@@ -758,7 +758,7 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
                     None
                 };
                 let processed = statements
-                    .insert_concordium_event(&db_tx, &tx_hash, &event, mh.map(|x| x.1))
+                    .insert_concordium_event(&db_tx, tx_hash, event, mh.map(|x| x.1))
                     .await?;
                 if !processed {
                     if let Some(p) = mh {
@@ -985,17 +985,16 @@ async fn insert_into_db(
                 .await
             {
                 Ok(withdraws) => {
-                    if !withdraws.is_empty() {
-                        if merkle_setter_sender
+                    if !withdraws.is_empty()
+                        && merkle_setter_sender
                             .send(MerkleUpdate::NewWithdraws { withdraws })
                             .await
                             .is_err()
-                        {
-                            log::warn!(
-                                "Unable to send new withdraw events to the Merkle updated since \
-                                 the channel is closed."
-                            )
-                        }
+                    {
+                        log::warn!(
+                            "Unable to send new withdraw events to the Merkle updated since the \
+                             channel is closed."
+                        )
                     }
                 }
                 Err(e) => {

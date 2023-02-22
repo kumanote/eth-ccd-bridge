@@ -233,7 +233,7 @@ impl BridgeManager {
         execution_energy: Energy,
         update: &StateUpdate,
     ) -> anyhow::Result<TransactionHash> {
-        let bi = self.make_state_update_tx(execution_energy, &update);
+        let bi = self.make_state_update_tx(execution_energy, update);
         let hash = self.client.client.send_block_item(&bi).await?;
         Ok(hash)
     }
