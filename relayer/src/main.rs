@@ -43,6 +43,7 @@ struct EthereumConfig {
     state_sender_creation_block_number: u64,
     #[clap(
         long = "ethereum-api",
+        name = "ethereum-api",
         help = "JSON-RPC interface of an Ethereum node. Only HTTPS is supported as transport.",
         env = "ETHCCD_RELAYER_ETHEREUM_API"
     )]
@@ -103,6 +104,7 @@ struct EthereumConfig {
 struct ConcordiumConfig {
     #[clap(
         long = "concordium-api",
+        name = "concordium-api",
         help = "GRPC V2 interface of the Concordium node.",
         env = "ETHCCD_RELAYER_CONCORDIUM_API",
         default_value = "http://localhost:20000"
@@ -116,7 +118,7 @@ struct ConcordiumConfig {
         env = "ETHCCD_RELAYER_MAX_PARALLEL_QUERIES_CONCORDIUM",
         default_value = "1"
     )]
-    max_parallel:               u32,
+    max_parallel:    u32,
     // Maximum number of seconds a concordium node can be behind before it is deemed "behind".
     #[clap(
         long = "concordium-max-behind",
@@ -125,7 +127,7 @@ struct ConcordiumConfig {
         env = "ETHCCD_RELAYER_CONCORDIUM_MAX_BEHIND",
         default_value = "240"
     )]
-    max_behind:                 u32,
+    max_behind:      u32,
     /// Request timeout for Concordium node requests.
     #[clap(
         long,
@@ -139,7 +141,7 @@ struct ConcordiumConfig {
         help = "Address of the BridgeManger contract instance on Concordium.",
         env = "ETHCCD_RELAYER_BRIDGE_MANAGER"
     )]
-    bridge_manager:    ContractAddress,
+    bridge_manager:  ContractAddress,
 }
 
 #[derive(Parser, Debug)]
@@ -155,7 +157,7 @@ struct Relayer {
     #[clap(flatten)]
     ethereum_config:   EthereumConfig,
     #[clap(flatten)]
-    concordium_config:   ConcordiumConfig,
+    concordium_config: ConcordiumConfig,
     #[clap(
         long = "concordium-wallet-file",
         help = "File with the Concordium wallet in the browser extension wallet export format.",
@@ -303,12 +305,15 @@ async fn main() -> anyhow::Result<()> {
         // Use TLS if the URI scheme is HTTPS.
         // This uses whatever system certificates have been installed as trusted roots.
         let endpoint = if app
-            .concordium_config.api
+            .concordium_config
+            .api
             .uri()
             .scheme()
             .map_or(false, |x| x == &http::uri::Scheme::HTTPS)
         {
-            app.concordium_config.api.tls_config(ClientTlsConfig::new())?
+            app.concordium_config
+                .api
+                .tls_config(ClientTlsConfig::new())?
         } else {
             app.concordium_config.api
         };
