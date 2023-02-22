@@ -265,6 +265,10 @@ async fn find_concordium_start_height(
     }
 }
 
+/// Like `tokio::spawn` but the provided future is modified so that
+/// once it terminates it sends a message on the provided channel.
+/// This is sent regardless of how the future terminates, as long as it
+/// terminates normally (i.e., does not panic).
 fn spawn_cancel<T>(
     died_sender: tokio::sync::broadcast::Sender<()>,
     future: T,
@@ -295,6 +299,12 @@ async fn main() -> anyhow::Result<()> {
     app.ethereum_config.log();
     app.concordium_config.log();
 
+    let concordium_wallet = WalletAccount::from_json_file(app.concordium_wallet)?;
+    log::info!(
+        "Using {} as the sender of Concordium transactions.",
+        concordium_wallet.address
+    );
+
     let inner_ethereum_client = {
         let network_client = reqwest::ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(
@@ -321,6 +331,7 @@ async fn main() -> anyhow::Result<()> {
         .eth_private_key
         .with_chain_id(app.ethereum_config.chain_id);
     let sender = wallet.address();
+    log::info!("Using {sender:#x} as the Ethereum wallet.");
 
     let balance = ethereum_client.get_balance(sender, None).await?;
     log::info!("Balance of the Ethereum sender account is {balance}.");
@@ -330,6 +341,7 @@ async fn main() -> anyhow::Result<()> {
     // Set up signal handlers before doing anything non-trivial so we have some sort
     // of graceful shut down during initial database lookups and pending
     // transaction sends.
+    log::info!("Setting up signal handlers.");
     let (stop_sender, mut stop_receiver) = tokio::sync::watch::channel(());
     let (died_sender, died_receiver) = tokio::sync::broadcast::channel(10);
     let shutdown_handler_handle = spawn_cancel(
@@ -388,8 +400,6 @@ async fn main() -> anyhow::Result<()> {
     let (last_ethereum, last_concordium, db) = Database::new(&app.db_config).await?;
     let start_nonce = db.submit_missing_txs(concordium_client.clone()).await?;
 
-    let concordium_wallet = WalletAccount::from_json_file(app.concordium_wallet)?;
-
     let bridge_manager_client = BridgeManagerClient::new(
         concordium_client.clone(),
         concordium_wallet.address,
@@ -412,7 +422,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
     log::info!(
-        "Found starting point on Ethereum chain at start = {start_number}, end ={upper_number})"
+        "Found starting point on Ethereum chain at start = {start_number}, end = {upper_number})"
     );
     let concordium_start_height = find_concordium_start_height(
         concordium_client.clone(),
@@ -489,7 +499,7 @@ async fn main() -> anyhow::Result<()> {
         )
     };
 
-    // The remaining tasks only watch so they are aborted on on signal received.
+    // The remaining tasks only watch so they are aborted on signal received.
     let watch_concordium_handle = spawn_cancel(
         died_sender.clone(),
         concordium_contracts::listen_concordium(
@@ -538,6 +548,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Await the task to terminate. When terminated, if it raised an error,
+/// report it together with the `descr` of the task.
 async fn await_and_report<E: std::fmt::Display>(
     descr: &str,
     handle: tokio::task::JoinHandle<Result<(), E>>,
