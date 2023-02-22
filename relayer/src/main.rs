@@ -32,37 +32,32 @@ struct Relayer {
     log_level: log::LevelFilter,
     #[clap(
         long = "state-sender-address",
-        help = "Address of the StateSender proxy instance.",
+        help = "Address of the StateSender proxy instance on Ethereum.",
         env = "ETHCCD_RELAYER_STATE_SENDER_PROXY"
     )]
     state_sender: ethers::core::types::Address,
     #[clap(
         long = "root-chain-manager-address",
-        help = "Address of the RootChainManager proxy instance.",
+        help = "Address of the RootChainManager proxy instance on Ethereum.",
         env = "ETHCCD_RELAYER_ROOT_CHAIN_MANAGER_PROXY"
     )]
     root_chain_manager: ethers::core::types::Address,
     #[clap(
         long = "state-sender-creation-height",
-        help = "Block number when the state sender instance was created.",
+        help = "Block number when the state sender instance was created. This is used as a \
+                starting point for monitoring the Ethereum chain.",
         env = "ETHCCD_RELAYER_STATE_SENDER_CREATION_BLOCK_NUMBER"
     )]
     state_sender_creation_block_number: u64,
     #[clap(
-        long = "start-block",
-        help = "Where to start monitoring if no activity is yet detected on the state manager.",
-        env = "ETHCCD_RELAYER_ETH_START_BLOCK"
-    )]
-    start_block: u64,
-    #[clap(
         long = "bridge-manager-address",
-        help = "Address of the BridgeManger contract on Concordium.",
+        help = "Address of the BridgeManger contract instance on Concordium.",
         env = "ETHCCD_RELAYER_BRIDGE_MANAGER"
     )]
     bridge_manager: ContractAddress,
     #[clap(
         long = "concordium-wallet-file",
-        help = "File with the Concordium wallet.",
+        help = "File with the Concordium wallet in the browser extension wallet export format.",
         env = "ETHCCD_RELAYER_CONCORDIUM_WALLET_FILE"
     )]
     concordium_wallet: PathBuf,
@@ -75,7 +70,7 @@ struct Relayer {
     concordium_api: v2::Endpoint,
     #[clap(
         long = "ethereum-api",
-        help = "JSON-RPC interface.",
+        help = "JSON-RPC interface of an Ethereum node. Only HTTPS is supported as transport.",
         env = "ETHCCD_RELAYER_ETHEREUM_API"
     )]
     ethereum_api: url::Url,
@@ -86,17 +81,27 @@ struct Relayer {
         env = "ETHCCD_RELAYER_DB_STRING"
     )]
     db_config: tokio_postgres::Config,
-    #[clap(long, env = "ETH_KEY")]
+    #[clap(
+        long,
+        help = "Private key used to sign Merkle update tranasctions on Ethereum. The address \
+                derived from this key must have the MERKLE_UPDATER role.",
+        env = "ETHCCD_RELAYER_ETH_PRIVATE_KEY"
+    )]
     eth_private_key: LocalWallet,
     #[clap(
         long,
+        help = "Maximum number of parallel queries of the Concordium node. This is only useful in \
+                initial catchup if the relayer is started a long time after the bridge contracts \
+                are in operation.",
         env = "ETHCCD_RELAYER_MAX_PARALLEL_QUERIES_CONCORDIUM",
-        default_value = "8"
+        default_value = "1"
     )]
     max_parallel: u32,
     // Maximum number of seconds a concordium node can be behind before it is deemed "behind".
     #[clap(
         long,
+        help = "Maximum number of seconds the Concordium node's last finalized block can be \
+                behind before we log warnings.",
         env = "ETHCCD_RELAYER_CONCORDIUM_MAX_BEHIND",
         default_value = "240"
     )]
@@ -105,16 +110,22 @@ struct Relayer {
     #[clap(
         long,
         env = "ETHCCD_RELAYER_MAX_GAS_PRICE",
+        help = "Maximum gas price allowed for Ethereum transactions. If the current gas price is higher then the Merkle updates will be skipped.",
         value_parser = U256::from_dec_str,
         default_value = "1000000000",
     )]
     max_gas_price: U256,
     // Maximum gas for setting merkle roots.
-    #[clap(long, env = "ETHCCD_RELAYER_MAX_GAS", value_parser = U256::from_dec_str, default_value = "100000")]
+    #[clap(long,
+           help = "Maximum gas allowed for setting the Merkle root on Ethereum.",
+           env = "ETHCCD_RELAYER_MAX_GAS",
+           value_parser = U256::from_dec_str,
+           default_value = "100000")]
     max_gas: U256,
     // Maximum gas for setting merkle roots.
     #[clap(
         long,
+        help = "How often to approve new withdrawals on Ethereum.",
         env = "ETHCCD_RELAYER_MERKLE_UPDATE_INTERVAL",
         default_value = "600"
     )]
