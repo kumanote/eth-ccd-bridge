@@ -21,10 +21,12 @@ const nextConfig = {
     },
     webpack(config, { isServer }) {
         if (isServer) {
+            // Replace browser only dependencies with node correspondants
             config.resolve = config.resolve ?? {};
             config.resolve.alias = config.resolve.alias ?? {};
             config.resolve.alias = { ...config.resolve.alias, "@concordium/web-sdk": "@concordium/node-sdk" };
         }
+
         return config;
     },
 };

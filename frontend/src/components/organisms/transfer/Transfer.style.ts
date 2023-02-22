@@ -174,8 +174,7 @@ export const LinkWrapper = styled.div`
 `;
 
 export const StyledWalletDisplay = styled.div<{
-    copied?: number;
-    copyId: number;
+    copied: boolean;
 }>`
     padding: 4px 8px;
     border: 1px solid grey;
@@ -192,8 +191,8 @@ export const StyledWalletDisplay = styled.div<{
         opacity: 0;
         transition: opacity 0.2s ease-in-out;
     }
-    ${({ copied, copyId }) =>
-        copied === copyId &&
+    ${({ copied }) =>
+        copied &&
         `&::before {
   opacity: 1;
 }`}
