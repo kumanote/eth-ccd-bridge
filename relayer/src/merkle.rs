@@ -591,111 +591,101 @@ where
     M::Error: 'static,
     S::Error: 'static, {
     // Handle followup for any pending transaction first.
-    if pending.is_some() {
-        let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
-        check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        while let Some((pending_hash, root, ids)) = pending {
-            let stop = tokio::select! {
-                _ = stop.changed() => true,
-                _ = check_interval.tick() => false,
+    let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
+    check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    while let Some((pending_hash, root, ids)) = pending {
+        let stop = tokio::select! {
+            _ = stop.changed() => true,
+            _ = check_interval.tick() => false,
+        };
+        if stop {
+            return Ok(true);
+        }
+        let result = client
+            .root_manager
+            .client()
+            .get_transaction_receipt(*pending_hash)
+            .await
+            .map_err(EthereumSenderError::Retryable)?;
+        let Some(receipt) = result else {
+                log::debug!("Ethereum transaction {pending_hash:#x} is pending.");
+                return Ok(false);
             };
-            if stop {
+        let Some(bn) = receipt.block_number else {
+                return Err(EthereumSenderError::Internal(anyhow::anyhow!(
+                    "A submitted transaction is confirmed, but without a block hash. This \
+                     indicates a configuration error."
+                )));
+            };
+        let current_block = client
+            .root_manager
+            .client()
+            .get_block_number()
+            .await
+            .map_err(EthereumSenderError::Retryable)?;
+        if bn.saturating_add(num_confirmations.into()) <= current_block {
+            let mut found = false;
+            for log in receipt.logs {
+                use ethers::contract::EthEvent;
+                let sig = state_sender::MerkleRootFilter::signature();
+                if log.topics.first().map_or(false, |s| s == &sig) {
+                    let emitted_root = state_sender::MerkleRootFilter::decode_log(&RawLog {
+                        topics: log.topics,
+                        data:   log.data.0.into(),
+                    })?;
+                    if emitted_root.root != *root {
+                        return Err(EthereumSenderError::Internal(anyhow::anyhow!(
+                            "Transaction {pending_hash:#x} emitted an incorrect Merkle root."
+                        )));
+                    }
+                    found = true;
+                }
+            }
+            log::info!("Withdrawal transaction confirmed in block number {bn}.");
+            if !found {
+                log::error!(
+                    "A transaction with hash {pending_hash:#x} did not set a Merkle root. This \
+                     means it failed."
+                )
+            };
+            let (response, receiver) = tokio::sync::oneshot::channel();
+            let last_id = ids.last().copied();
+            if db_sender
+                .send(DatabaseOperation::MarkSetMerkleCompleted {
+                    root: *root,
+                    ids: std::mem::take(ids),
+                    response,
+                    success: found,
+                    tx_hash: *pending_hash,
+                })
+                .await
+                .is_err()
+            {
+                log::debug!("The database has been shut down. Stopping the transaction sender.");
                 return Ok(true);
             }
-            let result = client
-                .root_manager
-                .client()
-                .get_transaction_receipt(*pending_hash)
-                .await
-                .map_err(EthereumSenderError::Retryable)?;
-            if let Some(receipt) = result {
-                if let Some(bn) = receipt.block_number {
-                    let current_block = client
-                        .root_manager
-                        .client()
-                        .get_block_number()
-                        .await
-                        .map_err(EthereumSenderError::Retryable)?;
-                    if bn.saturating_add(num_confirmations.into()) <= current_block {
-                        let mut found = false;
-                        for log in receipt.logs {
-                            use ethers::contract::EthEvent;
-                            let sig = state_sender::MerkleRootFilter::signature();
-                            if log.topics.first().map_or(false, |s| s == &sig) {
-                                let emitted_root =
-                                    state_sender::MerkleRootFilter::decode_log(&RawLog {
-                                        topics: log.topics,
-                                        data:   log.data.0.into(),
-                                    })?;
-                                if emitted_root.root != *root {
-                                    return Err(EthereumSenderError::Internal(anyhow::anyhow!(
-                                        "Transaction {pending_hash:#x} emitted an incorrect \
-                                         Merkle root."
-                                    )));
-                                }
-                                found = true;
-                            }
-                        }
-                        log::info!("Withdrawal transaction confirmed in block number {bn}.");
-                        if !found {
-                            log::error!(
-                                "A transaction with hash {pending_hash:#x} did not set a Merkle \
-                                 root. This means it failed."
-                            )
-                        };
-                        let (response, receiver) = tokio::sync::oneshot::channel();
-                        let last_id = ids.last().copied();
-                        if db_sender
-                            .send(DatabaseOperation::MarkSetMerkleCompleted {
-                                root: *root,
-                                ids: std::mem::take(ids),
-                                response,
-                                success: found,
-                                tx_hash: *pending_hash,
-                            })
-                            .await
-                            .is_err()
-                        {
-                            log::debug!(
-                                "The database has been shut down. Stopping the transaction sender."
-                            );
-                            return Ok(true);
-                        }
-                        // Wait until the database operation completes.
-                        if receiver.await.is_err() {
-                            log::warn!(
-                                "The database has been shut down. Stopping the transaction sender."
-                            );
-                            return Ok(true);
-                        }
-                        if found {
-                            log::info!(
-                                "New merkle root set to {} and marked in the database.",
-                                TransactionHash::from(*root)
-                            );
-                            // Assuming that the order is preserved by the channel.
-                            // Mark the high watermark of processed ids.
-                            client.max_marked_event_index = last_id;
-                        }
-                        // Transaction is confirmed, update the nonce for the next iteration
-                        // of sending.
-                        client.next_nonce += 1.into();
-                        *pending = None;
-                    } else {
-                        log::warn!(
-                            "Ethereum transaction {pending_hash:#x} is in block {bn}, but not yet \
-                             confirmed."
-                        );
-                    }
-                } else {
-                    return Err(EthereumSenderError::Internal(anyhow::anyhow!(
-                        "A submitted transaction is confirmed, but without a block hash. This \
-                         indicates a configuration error."
-                    )));
-                }
-            } else {
-                log::debug!("Ethereum transaction {pending_hash:#x} is pending.");
+            // Wait until the database operation completes.
+            if receiver.await.is_err() {
+                log::warn!("The database has been shut down. Stopping the transaction sender.");
+                return Ok(true);
             }
+            if found {
+                log::info!(
+                    "New merkle root set to {} and marked in the database.",
+                    TransactionHash::from(*root)
+                );
+                // Assuming that the order is preserved by the channel.
+                // Mark the high watermark of processed ids.
+                client.max_marked_event_index = last_id;
+            }
+            // Transaction is confirmed, update the nonce for the next iteration
+            // of sending.
+            client.next_nonce += 1.into();
+            *pending = None;
+        } else {
+            log::debug!(
+                "Ethereum transaction {pending_hash:#x} is in block {bn}, but not yet confirmed."
+            );
         }
     }
     Ok(false)
