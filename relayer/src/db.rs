@@ -592,28 +592,24 @@ ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
             let data: Vec<u8> = row.try_get("event_data")?;
             let we: WithdrawEvent = contracts_common::from_bytes(&data[..])?;
             let status = client.client.get_block_item_status(&tx_hash).await?;
-            if let Some((_block, summary)) = status.is_finalized() {
-                let chain_events = client.extract_events(summary)?;
-                // Find the event with the given event index. We trust the contract
-                // to only have one event for each event index, so using find is safe.
-                if let Some(crate::concordium_contracts::BridgeEvent::Withdraw(chain_we)) =
-                    chain_events
-                        .into_iter()
-                        .find(|e| e.event_index() == Some(event_index))
-                {
-                    anyhow::ensure!(
-                        chain_we == we,
-                        "Mismatching withdraw event. The database was tampered with. Aborting."
-                    );
-                    result.push((tx_hash, we))
-                } else {
-                    anyhow::bail!("Mismatching event. The database was tampered. Aborting.")
-                }
-            } else {
+            let Some((_block, summary)) = status.is_finalized() else {
                 anyhow::bail!(
                     "Events for a non-finalized transaction. This should not happen. Aborting."
                 )
-            }
+            };
+            let chain_events = client.extract_events(summary)?;
+            // Find the event with the given event index. We trust the contract
+            // to only have one event for each event index, so using find is safe.
+            let Some(crate::concordium_contracts::BridgeEvent::Withdraw(chain_we)) = chain_events
+                .into_iter()
+                .find(|e| e.event_index() == Some(event_index)) else {
+                    anyhow::bail!("Mismatching event. The database was tampered. Aborting.")
+                };
+            anyhow::ensure!(
+                chain_we == we,
+                "Mismatching withdraw event. The database was tampered with. Aborting."
+            );
+            result.push((tx_hash, we))
         }
         Ok((max_sent_event_index, result))
     }
@@ -888,71 +884,66 @@ pub async fn handle_database(
                 _ = stop_flag.changed() => None,
             }
         };
-        if let Some(action) = next_item {
-            match insert_into_db(
-                &mut db,
-                action,
-                &merkle_setter_sender,
-                &ccd_transaction_sender,
-                &mut bridge_manager,
-            )
-            .await
-            {
-                Ok(()) => {
-                    log::trace!("Processed database operation.");
-                }
-                Err(InsertError::Retry(action)) => {
-                    let delay = std::time::Duration::from_millis(5000);
-                    log::error!(
-                        "Could not insert into the database. Reconnecting in {}ms.",
-                        delay.as_millis()
-                    );
-                    tokio::time::sleep(delay).await;
-                    let new_db = match try_reconnect(&config, &stop_flag).await {
-                        Ok(db) => db.2,
-                        Err(e) => {
-                            blocks.close();
-                            db.stop().await;
-                            return Err(e);
-                        }
-                    };
-                    let old_db = std::mem::replace(&mut db, new_db);
-                    old_db.connection_handle.abort();
-                    match old_db.connection_handle.await {
-                        Ok(v) => {
-                            if let Err(e) = v {
-                                log::warn!(
-                                    "Could not correctly stop the old database connection due to: \
-                                     {}.",
-                                    e
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            if e.is_panic() {
-                                log::warn!(
-                                    "Could not correctly stop the old database connection. The \
-                                     connection thread panicked: {e:#}."
-                                );
-                            } else if !e.is_cancelled() {
-                                log::warn!("Could not correctly stop the old database connection.");
-                            }
+        let Some(action) = next_item else {break};
+        match insert_into_db(
+            &mut db,
+            action,
+            &merkle_setter_sender,
+            &ccd_transaction_sender,
+            &mut bridge_manager,
+        )
+        .await
+        {
+            Ok(()) => {
+                log::trace!("Processed database operation.");
+            }
+            Err(InsertError::Retry(action)) => {
+                let delay = std::time::Duration::from_millis(5000);
+                log::error!(
+                    "Could not insert into the database. Reconnecting in {}ms.",
+                    delay.as_millis()
+                );
+                tokio::time::sleep(delay).await;
+                let new_db = match try_reconnect(&config, &stop_flag).await {
+                    Ok(db) => db.2,
+                    Err(e) => {
+                        blocks.close();
+                        db.stop().await;
+                        return Err(e);
+                    }
+                };
+                let old_db = std::mem::replace(&mut db, new_db);
+                old_db.connection_handle.abort();
+                match old_db.connection_handle.await {
+                    Ok(v) => {
+                        if let Err(e) = v {
+                            log::warn!(
+                                "Could not correctly stop the old database connection due to: {}.",
+                                e
+                            );
                         }
                     }
-                    retry = Some(action);
+                    Err(e) => {
+                        if e.is_panic() {
+                            log::warn!(
+                                "Could not correctly stop the old database connection. The \
+                                 connection thread panicked: {e:#}."
+                            );
+                        } else if !e.is_cancelled() {
+                            log::warn!("Could not correctly stop the old database connection.");
+                        }
+                    }
                 }
-                Err(other) => {
-                    log::debug!(
-                        "One of the internal channels was closed ({:#}). Closing the database \
-                         worker.",
-                        other
-                    );
-                    // One of the channels closed. Terminate.
-                    break;
-                }
+                retry = Some(action);
             }
-        } else {
-            break;
+            Err(other) => {
+                log::debug!(
+                    "One of the internal channels was closed ({:#}). Closing the database worker.",
+                    other
+                );
+                // One of the channels closed. Terminate.
+                break;
+            }
         }
     }
     blocks.close();

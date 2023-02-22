@@ -590,7 +590,6 @@ async fn wait_pending_ethereum_tx<M: Middleware, S: Signer>(
 where
     M::Error: 'static,
     S::Error: 'static, {
-    // Handle followup for any pending transaction first.
     let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
     check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     while let Some((pending_hash, root, ids)) = pending {
@@ -609,7 +608,7 @@ where
             .map_err(EthereumSenderError::Retryable)?;
         let Some(receipt) = result else {
                 log::debug!("Ethereum transaction {pending_hash:#x} is pending.");
-                return Ok(false);
+                continue;
             };
         let Some(bn) = receipt.block_number else {
                 return Err(EthereumSenderError::Internal(anyhow::anyhow!(

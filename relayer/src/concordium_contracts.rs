@@ -156,11 +156,10 @@ impl BridgeManager {
         match result.response {
             InvokeContractResult::Success { return_value, .. } => {
                 let rv = return_value.context("Unexpected response.")?.value;
-                if let Some(&first) = rv.first() {
-                    Ok(first == 1)
-                } else {
+                let Some(&first) = rv.first() else {
                     anyhow::bail!("Invocation returned no data.")
-                }
+                };
+                Ok(first == 1)
             }
             InvokeContractResult::Failure { .. } => {
                 anyhow::bail!("Invocation failed.")
