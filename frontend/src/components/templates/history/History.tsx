@@ -4,9 +4,10 @@ import useMediaQuery from "@hooks/use-media-query";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import useWallet from "@hooks/use-wallet";
 import moment from "moment";
-import { useRouter } from "next/router";
+import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
+import { BridgeDirection, routes } from "src/constants/routes";
 import { transactionUrl } from "src/helpers/ccdscan";
 import isDeposit from "src/helpers/checkTransaction";
 import parseAmount from "src/helpers/parseAmount";
@@ -25,11 +26,12 @@ import {
     TabsWrapper,
 } from "./History.style";
 
-interface Props {}
+type Props = {
+    depositSelected: boolean;
+};
 
-const History: React.FC<Props> = ({}) => {
+const History = ({ depositSelected }: Props) => {
     const { context } = useWallet();
-    const router = useRouter();
     const { data: history, isLoading } = useWalletTransactions(
         { wallet: context?.account || "" },
         { enabled: !!context.account }
@@ -38,18 +40,7 @@ const History: React.FC<Props> = ({}) => {
 
     const [open, setOpen] = useState<number | undefined>();
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
-    const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
     const getTransactionToken = useGetTransactionToken();
-
-    const transferClickHandler = () => {
-        router.push("/");
-    };
-    const depositClickHandler = () => {
-        setTab("deposit");
-    };
-    const withdrawClickHandler = () => {
-        setTab("withdraw");
-    };
 
     const rowClickHandler = (index: number) => {
         if (!isMobile) {
@@ -66,13 +57,13 @@ const History: React.FC<Props> = ({}) => {
         if (isMobile) {
             setHeaders(["From", "To", "Amount", "Time", "Status"]);
         } else {
-            if (tab === "deposit") {
+            if (depositSelected) {
                 setHeaders(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
             } else {
                 setHeaders(["From", "To", "Amount", "CCD Trans.", "ETH Trans.", "Time", "Status"]);
             }
         }
-    }, [tab, isMobile]);
+    }, [depositSelected, isMobile]);
 
     useEffect(() => {
         moment.locale("en", {
@@ -115,12 +106,16 @@ const History: React.FC<Props> = ({}) => {
                     </Text>
                 </TableTitle>
                 <TabsWrapper>
-                    <StyledTab active={tab === "withdraw"} onClick={depositClickHandler}>
-                        <Text fontWeight={tab === "deposit" ? "bold" : "regular"}>Deposit</Text>
-                    </StyledTab>
-                    <StyledTab active={tab === "deposit"} onClick={withdrawClickHandler}>
-                        <Text fontWeight={tab === "withdraw" ? "bold" : "regular"}>Withdraw</Text>
-                    </StyledTab>
+                    <Link href={routes.history(BridgeDirection.Deposit)} passHref legacyBehavior>
+                        <StyledTab active={!depositSelected}>
+                            <Text fontWeight={depositSelected ? "bold" : "regular"}>Deposit</Text>
+                        </StyledTab>
+                    </Link>
+                    <Link href={routes.history(BridgeDirection.Withdraw)} passHref legacyBehavior>
+                        <StyledTab active={depositSelected}>
+                            <Text fontWeight={!depositSelected ? "bold" : "regular"}>Withdraw</Text>
+                        </StyledTab>
+                    </Link>
                 </TabsWrapper>
                 {!isLoading && (
                     <TableWrapper>
@@ -147,7 +142,7 @@ const History: React.FC<Props> = ({}) => {
                                     {
                                         /* check if the transaction is a deposit or withdraw, then render based on that */
                                     }
-                                    if (isDeposit(transaction) && tab === "deposit") {
+                                    if (isDeposit(transaction) && depositSelected) {
                                         const processed = transaction.Deposit.status.includes("processed");
 
                                         const parsedAmount = parseAmount(
@@ -270,7 +265,7 @@ const History: React.FC<Props> = ({}) => {
                                                 </TableData>
                                             </TableRow>
                                         );
-                                    } else if (!isDeposit(transaction) && tab === "withdraw") {
+                                    } else if (!isDeposit(transaction) && !depositSelected) {
                                         const processed = transaction.Withdraw.status.includes("processed");
 
                                         const parsedAmount = parseAmount(
@@ -408,11 +403,13 @@ const History: React.FC<Props> = ({}) => {
                     </TableWrapper>
                 )}
             </HistoryWrapper>
-            <LinkWrapper>
-                <Text fontSize="12" fontColor="Brown" onClick={transferClickHandler}>
-                    Back
-                </Text>
-            </LinkWrapper>
+            <Link href={routes.deposit.path} passHref legacyBehavior>
+                <LinkWrapper>
+                    <Text fontSize="12" fontColor="Brown">
+                        Back
+                    </Text>
+                </LinkWrapper>
+            </Link>
         </ContentWrapper>
     );
 };

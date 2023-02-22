@@ -17,5 +17,5 @@ export const routes = {
             approve: (txHash: string) => `/withdraw/${txHash}/approve`,
         },
     },
-    history: (direction: BridgeDirection) => `/history/${direction}`,
+    history: (direction = BridgeDirection.Deposit) => `/history/${direction}`,
 };

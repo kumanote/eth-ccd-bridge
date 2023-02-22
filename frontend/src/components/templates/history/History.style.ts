@@ -91,13 +91,10 @@ export const TableData = styled.td`
     white-space: nowrap;
 `;
 
-export const LinkWrapper = styled.div`
+export const LinkWrapper = styled.a`
     margin-top: 32px;
     user-select: none;
-    & > :first-child {
-        cursor: pointer;
-        text-decoration: underline;
-    }
+    text-decoration: underline;
 `;
 
 export const TabsWrapper = styled.div`
@@ -105,7 +102,7 @@ export const TabsWrapper = styled.div`
     background-color: ${theme.colors.ModalBackground};
 `;
 
-export const StyledTab = styled.div<{ active: boolean }>`
+export const StyledTab = styled.a<{ active: boolean }>`
     display: flex;
     align-items: center;
     justify-content: center;

@@ -17,6 +17,7 @@ import useGenerateContract from "src/contracts/use-generate-contract";
 import { noOp } from "src/helpers/basic";
 import parseWallet from "src/helpers/parseWallet";
 import { appContext } from "src/root/app-context";
+import { usePreSubmitStore } from "src/store/pre-submit";
 import ArrowDownIcon from "../../../../public/icons/arrow-down-icon.svg";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
@@ -112,50 +113,56 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
     const { push } = useRouter();
 
-    const { isMobile, isTablet } = useContext(appContext);
+    const { isTablet } = useContext(appContext);
     // introduced amount
-    const [amount, setAmount] = useState("0");
     const [submitted, setSubmitted] = useState(false);
     // tokens available in the dropdown
-    const [tokens, setTokens] = useState<Components.Schemas.TokenMapItem[]>();
+    const tokens = useMemo(() => {
+        if (tokensQuery.status !== "success") {
+            return undefined;
+        }
+        return tokensQuery.data;
+    }, [tokensQuery]);
+    //
     // state of the token dropdown
     const [dropdown, setDropdown] = useState(false);
     // current selected token
-    const [selectedToken, setSelectedToken] = useState<Components.Schemas.TokenMapItem>();
+    const { token, amount = "0", setToken, setAmount } = usePreSubmitStore();
 
     // state dependent hooks
     const { getBalance: getEthTokenBalance } = useGenerateContract(
-        selectedToken?.eth_address || "", // address or empty string because the address is undefined on first renders
-        !!selectedToken // plus it's disabled on the first render anyway
+        token?.eth_address || "", // address or empty string because the address is undefined on first renders
+        !!token // plus it's disabled on the first render anyway
     );
     const { balanceOf: getCcdTokenBalance } = useCCDContract(ccdContext.account, ccdContext.isActive);
 
     // constants
     const isLoggedIn = !!context?.account && !!ccdContext.account;
-    const transferButtonDisabled = !isLoggedIn || !selectedToken;
+    const transferButtonDisabled = !isLoggedIn || !token;
     const nextRoute = useMemo(() => (isDeposit ? routes.deposit.overview : routes.withdraw.overview), [isDeposit]);
+    const swapRoute = useMemo(() => (isDeposit ? routes.withdraw.path : routes.deposit.path), [isDeposit]);
 
     const ethBalance = useAsyncMemo(
         async () => {
-            if (!isLoggedIn || !selectedToken) {
+            if (!isLoggedIn || !token) {
                 return undefined;
             }
 
-            return getEthTokenBalance(selectedToken.decimals);
+            return getEthTokenBalance(token.decimals);
         },
         noOp,
-        [isLoggedIn, selectedToken, getEthTokenBalance]
+        [isLoggedIn, token, getEthTokenBalance]
     );
     const ccdBalance = useAsyncMemo(
         async () => {
-            if (!isLoggedIn || !selectedToken) {
+            if (!isLoggedIn || !token) {
                 return undefined;
             }
 
-            return getCcdTokenBalance(selectedToken);
+            return getCcdTokenBalance(token);
         },
         noOp,
-        [isLoggedIn, selectedToken, getEthTokenBalance]
+        [isLoggedIn, token, getEthTokenBalance]
     );
 
     const chains: ChainType[] = [
@@ -196,7 +203,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     };
 
     const selectTokenHandler = (token: Components.Schemas.TokenMapItem) => {
-        setSelectedToken(token);
+        setToken(token);
         setDropdown(false);
     };
 
@@ -211,20 +218,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         push({ pathname: nextRoute, query: { amount } });
     }, [isValidAmount, push, nextRoute, amount]);
 
-    // effects
-    useEffect(() => {
-        setAmount("0");
-    }, [isDeposit]);
-
-    // tokens balance effects
-    useEffect(() => {
-        if (tokensQuery.status === "error") {
-            console.log(tokensQuery.error); // TODO: error handling
-        } else if (tokensQuery.status === "success") {
-            setTokens(tokensQuery.data);
-        }
-    }, [tokensQuery]);
-
     return (
         <PageWrapper>
             <StyledContainer>
@@ -238,7 +231,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                         .map((chain, index) => (
                             <ChainBox key={chain.id} chain={chain} text={index === 0 ? "From" : "To"} />
                         ))}
-                    <Link href={isDeposit ? routes.withdraw.path : routes.deposit.path} passHref legacyBehavior>
+                    <Link href={swapRoute} passHref legacyBehavior>
                         <SwapLink>
                             <Image src={SwapIcon.src} alt="swap icon" width="14.4" height="11.52" />
                         </SwapLink>
@@ -247,11 +240,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 <SecondRow>
                     <MaxGapRow>
                         <Text fontWeight="light" onClick={dropdownHandler}>
-                            {selectedToken
-                                ? isDeposit
-                                    ? selectedToken?.eth_name
-                                    : selectedToken?.ccd_name
-                                : "Select Token"}
+                            {token ? (isDeposit ? token?.eth_name : token?.ccd_name) : "Select Token"}
                         </Text>
                         <Dropdown onClick={dropdownHandler}>
                             <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
@@ -273,7 +262,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                                 const { ccd_name, ccd_contract, eth_name, eth_address } = token;
                                 return (
                                     <Coin
-                                        onClick={selectTokenHandler.bind(undefined, token)}
+                                        onClick={() => selectTokenHandler(token)}
                                         key={
                                             isDeposit
                                                 ? `${eth_name + eth_address}`
@@ -304,7 +293,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             max={isDeposit ? ethBalance : ccdBalance}
                             valid={isValidAmount || !submitted}
                         />
-                        {isLoggedIn && selectedToken && (
+                        {isLoggedIn && token && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
                                 Balance:&nbsp;{isDeposit ? ethBalance?.toFixed(4) : ccdBalance?.toFixed(4)}
                             </Text>
@@ -322,12 +311,13 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 {isTablet && <Logo logo="ccd" isTablet={isTablet} />}
             </StyledContainer>
             {context?.account && (
-                <LinkWrapper>
-                    {/* TODO change to link... */}
-                    <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
-                        Transaction History
-                    </Text>
-                </LinkWrapper>
+                <Link href={routes.history()} passHref legacyBehavior>
+                    <LinkWrapper>
+                        <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
+                            Transaction History
+                        </Text>
+                    </LinkWrapper>
+                </Link>
             )}
         </PageWrapper>
     );

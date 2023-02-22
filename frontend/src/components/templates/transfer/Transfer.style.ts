@@ -161,13 +161,11 @@ export const DropdownList = styled.div<{ open: boolean }>`
   `}
 `;
 
-export const LinkWrapper = styled.div`
+export const LinkWrapper = styled.a`
+    display: block;
     margin-top: 32px;
     user-select: none;
-    & > :first-child {
-        cursor: pointer;
-        text-decoration: underline;
-    }
+    text-decoration: underline;
 
     @media only screen and (max-width: 1050px) {
         position: relative;
