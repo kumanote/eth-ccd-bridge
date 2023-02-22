@@ -17,8 +17,8 @@ interface Props {
     error: string;
     onInitTransaction: Function;
     merkleProof?: Components.Schemas.EthMerkleProofResponse;
-    onContinue: Function;
-    onCancel: Function;
+    onContinue(transaction: Components.Schemas.WalletWithdrawTx): void;
+    onCancel(): void;
 }
 
 const PendingTransactions: React.FC<Props> = ({

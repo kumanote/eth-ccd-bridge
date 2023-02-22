@@ -1,8 +1,9 @@
 import Button from "@components/atoms/button/Button";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import usePrice from "@hooks/use-price";
+import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { noOp } from "src/helpers/basic";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
 import Text from "../../atoms/text/text";
@@ -10,8 +11,8 @@ import { ButtonsContainer, StyledContainer, StyledProcessWrapper } from "./Trans
 
 type Props = {
     isWithdraw: boolean;
-    onCancel: Function;
-    onContinue: Function;
+    onCancel(): void;
+    onContinue(): void;
     gasFee: number;
     energyFee: number;
     error: string;
@@ -30,28 +31,17 @@ export const TransferOverview: React.FC<Props> = ({
 }) => {
     const getPrice = usePrice();
 
-    const [ethPrice, setEthPrice] = useState(0);
-    const [, setCcdPrice] = useState(0);
+    const { ethPrice = 0 } =
+        useAsyncMemo(
+            async () => {
+                const ethPrice = await getPrice("ETH");
+                const ccdPrice = await getPrice("CCD");
 
-    const cancelHandler = () => {
-        onCancel();
-    };
-
-    const continueHandler = () => {
-        onContinue();
-    };
-
-    const fetchPrices = async () => {
-        const ethPrice = await getPrice("ETH");
-        const ccdPrice = await getPrice("CCD");
-        setEthPrice(ethPrice);
-        setCcdPrice(ccdPrice);
-    };
-
-    useEffect(() => {
-        fetchPrices();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+                return { ethPrice, ccdPrice };
+            },
+            noOp,
+            [getPrice]
+        ) ?? {};
 
     return (
         <PageWrapper>
@@ -174,14 +164,14 @@ export const TransferOverview: React.FC<Props> = ({
                     )}
                 </div>
                 <ButtonsContainer>
-                    <Button variant="secondary" onClick={cancelHandler}>
+                    <Button variant="secondary" onClick={onCancel}>
                         <div style={{ position: "relative" }}>
                             <Text fontSize="16" fontColor="Black" fontWeight="bold">
                                 Cancel
                             </Text>
                         </div>
                     </Button>
-                    <Button variant="primary" disabled={pendingSubmission} onClick={continueHandler}>
+                    <Button variant="primary" disabled={pendingSubmission} onClick={onContinue}>
                         <div style={{ position: "relative" }}>
                             <Text fontSize="16" fontColor="Black" fontWeight="bold">
                                 Continue
