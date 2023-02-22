@@ -100,6 +100,35 @@ struct EthereumConfig {
     ethereum_request_timeout: u64,
 }
 
+impl EthereumConfig {
+    fn log(&self) {
+        // Do not log the API since that can be sensitive.
+        let EthereumConfig {
+            state_sender,
+            root_chain_manager,
+            state_sender_creation_block_number,
+            api: _,
+            max_gas_price,
+            max_gas,
+            merkle_update_interval,
+            chain_id,
+            num_confirmations,
+            ethereum_request_timeout,
+        } = self;
+        log::info!("Using {state_sender:#x} as the state sender address.");
+        log::info!("Using {root_chain_manager:#x} as the root chain manager address.");
+        log::info!(
+            "Using {state_sender_creation_block_number} as the starting height on Ethereum."
+        );
+        log::info!("Using {max_gas_price} as the maximum gas price.");
+        log::info!("Using {max_gas} as the maximum allowed gas for transactions.");
+        log::info!("Using {merkle_update_interval}s as the update interval for Merkle roots.");
+        log::info!("Using {chain_id} as the chain id.");
+        log::info!("Requiring {num_confirmations} confirmations for transactions on Ethereum.");
+        log::info!("Using {ethereum_request_timeout}s as the request timeout for Ethereum API.");
+    }
+}
+
 #[derive(Debug, Parser)]
 struct ConcordiumConfig {
     #[clap(
@@ -142,6 +171,23 @@ struct ConcordiumConfig {
         env = "ETHCCD_RELAYER_BRIDGE_MANAGER"
     )]
     bridge_manager:  ContractAddress,
+}
+
+impl ConcordiumConfig {
+    fn log(&self) {
+        let ConcordiumConfig {
+            api,
+            max_parallel,
+            max_behind,
+            request_timeout,
+            bridge_manager,
+        } = self;
+        log::info!("Using Concordium node at {}", api.uri());
+        log::info!("Allowing up to {max_parallel} parallel queries of the Concordium node.");
+        log::info!("Allowing the Concordium node to be at most {max_behind}s behind present.");
+        log::info!("Using {request_timeout}s as the request timeout for Concordium.");
+        log::info!("Using {bridge_manager} as bridge manager.");
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -245,6 +291,10 @@ async fn main() -> anyhow::Result<()> {
     log_builder.filter_module(module_path!(), app.log_level);
     log_builder.init();
 
+    log::info!("Using {} as the maximum log level.", app.log_level);
+    app.ethereum_config.log();
+    app.concordium_config.log();
+
     let inner_ethereum_client = {
         let network_client = reqwest::ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(
@@ -276,12 +326,6 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Balance of the Ethereum sender account is {balance}.");
     let ethereum_nonce = ethereum_client.get_transaction_count(sender, None).await?;
     log::info!("Nonce of the Ethereum sender account is {ethereum_nonce}.");
-    log::info!(
-        "Using max gas price bound = {}.",
-        app.ethereum_config.max_gas_price
-    );
-    log::info!("Using max gas bound = {}.", app.ethereum_config.max_gas);
-    log::info!("Using chain id = {}.", app.ethereum_config.chain_id);
 
     // Set up signal handlers before doing anything non-trivial so we have some sort
     // of graceful shut down during initial database lookups and pending
