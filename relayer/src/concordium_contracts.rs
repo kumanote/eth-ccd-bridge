@@ -68,10 +68,12 @@ pub enum StateUpdate {
 /// This means that the [`BridgeManager`] assumes exclusive access to the
 /// account.
 pub struct BridgeManager {
-    pub client: BridgeManagerClient,
-    sender:     std::sync::Arc<WalletAccount>,
+    pub client:     BridgeManagerClient,
+    sender:         std::sync::Arc<WalletAccount>,
+    /// Maximum NRG allowed for state updates on Concordium.
     pub max_energy: Energy,
-    next_nonce: Nonce,
+    /// Next nonce to be used for sending the transaction.
+    next_nonce:     Nonce,
 }
 
 /// Maximum allowed dry run energy.
@@ -486,7 +488,7 @@ pub async fn listen_concordium(
                         anyhow::bail!("Too many failures attempting to reconnect. Aborting.");
                     }
                     let delay = std::time::Duration::from_secs(5 << retry_attempt);
-                    log::error!(
+                    log::warn!(
                         "Querying the node timed out. Will attempt again in {} seconds..",
                         delay.as_secs()
                     );
@@ -499,7 +501,7 @@ pub async fn listen_concordium(
                         anyhow::bail!("Too many failures attempting to reconnect. Aborting.");
                     }
                     let delay = std::time::Duration::from_secs(5 << retry_attempt);
-                    log::error!(
+                    log::warn!(
                         "Querying the node failed due to {:#}. Will attempt again in {} seconds.",
                         e,
                         delay.as_secs()
@@ -561,6 +563,11 @@ async fn listen_concordium_worker(
 
         while let Some(result) = futures.next().await {
             let (block, summaries) = result?;
+            log::debug!(
+                "Processing Concordium block {} at height {}",
+                block.block_hash,
+                block.block_height
+            );
             let mut transaction_events = Vec::new();
             for summary in summaries {
                 let events = bridge_manager
@@ -587,7 +594,7 @@ async fn listen_concordium_worker(
                                 .await
                                 .is_err()
                             {
-                                log::error!("The channel to the database writer has been closed.");
+                                log::info!("The channel to the database writer has been closed.");
                                 return Ok(());
                             }
                         }
@@ -602,7 +609,7 @@ async fn listen_concordium_worker(
                 .await
                 .is_err()
             {
-                log::error!("The channel to the database writer has been closed.");
+                log::info!("The channel to the database writer has been closed.");
                 return Ok(());
             }
             *height = height.next();

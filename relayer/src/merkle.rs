@@ -236,10 +236,6 @@ impl<M, S: Signer> MerkleSetterClient<M, S> {
         for (tx_hash, we) in pending_withdrawals {
             let event_index = we.event_index;
             let merkle_event_hash = make_event_leaf_hash(tx_hash, &we)?;
-            log::debug!(
-                "{event_index}, {tx_hash} -> {}",
-                TransactionHash::from(merkle_event_hash)
-            );
             add_withdraw_event(&msc.current_leaves, event_index, merkle_event_hash)?;
         }
         Ok(msc)
@@ -902,11 +898,13 @@ where
         }
     };
     let ethereum_client = client.root_manager.client();
-    log::debug!("Sending SetMerkleRoot transaction with hash {tx_hash:#x}.");
+    log::debug!(
+        "Sending SetMerkleRoot transaction with hash {tx_hash:#x} to set Merkle root to {}.",
+        TransactionHash::from(root)
+    );
     let _pending_tx = ethereum_client
         .send_raw_transaction(raw_tx.clone())
         .await
         .map_err(EthereumSenderError::Retryable)?;
-
     Ok(false)
 }
