@@ -334,8 +334,30 @@ impl Database {
     pub async fn new(
         config: &tokio_postgres::Config,
     ) -> anyhow::Result<(Option<u64>, Option<AbsoluteBlockHeight>, Self)> {
-        let (client, connection) = config.connect(NoTls).await?;
-        let connection_handle = tokio::spawn(connection);
+        let (client, connection_handle) = {
+            match config.get_ssl_mode() {
+                tokio_postgres::config::SslMode::Prefer
+                | tokio_postgres::config::SslMode::Require => {
+                    let mut root_certs = rustls::RootCertStore::empty();
+                    for cert in rustls_native_certs::load_native_certs()
+                        .context("Unable to load certificates")?
+                    {
+                        root_certs.add(&rustls::Certificate(cert.0))?;
+                    }
+                    let tls_config = rustls::ClientConfig::builder()
+                        .with_safe_defaults()
+                        .with_root_certificates(root_certs)
+                        .with_no_client_auth();
+                    let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
+                    let (client, connection) = config.connect(tls).await?;
+                    (client, tokio::spawn(connection))
+                }
+                _ => {
+                    let (client, connection) = config.connect(NoTls).await?;
+                    (client, tokio::spawn(connection))
+                }
+            }
+        };
         client.batch_execute(SCHEMA).await?;
         let insert_concordium_tx = client
             .prepare(
@@ -1068,7 +1090,8 @@ async fn insert_into_db(
                         };
                         let update = concordium_contracts::StateUpdate::Deposit(deposit);
                         // TODO estimate execution energy.
-                        let tx = bridge_manager.make_state_update_tx(bridge_manager.max_energy, &update);
+                        let tx =
+                            bridge_manager.make_state_update_tx(bridge_manager.max_energy, &update);
                         txs.push((event.tx_hash, tx));
                         deposits.push((event.tx_hash, id.low_u64(), amount, depositor, root_token));
                     }

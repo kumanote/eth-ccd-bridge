@@ -33,6 +33,9 @@ clap = {version = "4", features = ["derive", "env"]}
 tokio = {version = "1.20", features = ["rt-multi-thread", "macros", "sync", "signal"]}
 env_logger = "0.9"
 tokio-postgres = { version = "^0.7.7", features = ["with-chrono-0_4"] }
+tokio-postgres-rustls = "0.9"
+rustls = "0.20"
+rustls-native-certs = "0.6"
 postgres-types = { version = "0.2", features = ["derive"]}
 tonic = {version = "0.8", features = ["tls", "tls-roots"]} # Use system trust roots.
 reqwest = "0.11"
