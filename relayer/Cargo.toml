@@ -41,6 +41,9 @@ tonic = {version = "0.8", features = ["tls", "tls-roots"]} # Use system trust ro
 reqwest = "0.11"
 aws-config = "0.54"
 aws-sdk-secretsmanager = "0.24"
+prometheus = {version = "0.13", features = ["process"]}
+axum = "0.6"
+tower-http = {version = "0.3", features = ["timeout", "limit"]}
 
 concordium-rust-sdk = { path = "../deps/concordium-rust-sdk/"}
 

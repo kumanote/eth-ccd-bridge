@@ -246,21 +246,23 @@ fn add_withdraw_event(
     leaves: &Arc<std::sync::Mutex<BTreeMap<u64, [u8; 32]>>>,
     event_index: u64,
     hash: [u8; 32],
-) -> anyhow::Result<Option<[u8; 32]>> {
+) -> anyhow::Result<(Option<[u8; 32]>, usize)> {
     let mut lock = leaves
         .lock()
         .map_err(|_| anyhow::anyhow!("Unable to acquire lock."))?;
-    Ok(lock.insert(event_index, hash))
+    let r = lock.insert(event_index, hash);
+    Ok((r, lock.len()))
 }
 
 fn remove_withdraw_event(
     leaves: &Arc<std::sync::Mutex<BTreeMap<u64, [u8; 32]>>>,
     event_index: u64,
-) -> anyhow::Result<Option<[u8; 32]>> {
+) -> anyhow::Result<(Option<[u8; 32]>, usize)> {
     let mut lock = leaves
         .lock()
         .map_err(|_| anyhow::anyhow!("Unable to acquire lock."))?;
-    Ok(lock.remove(&event_index))
+    let r = lock.remove(&event_index);
+    Ok((r, lock.len()))
 }
 pub enum SetMerkleRootResult {
     SetTransaction {
@@ -363,6 +365,7 @@ where
 /// This worker instead monitors the provided `receiver` channel for new Merkle
 /// tree updates to update its in-memory state.
 pub async fn send_merkle_root_updates<M: Middleware + 'static, S: Signer + 'static>(
+    metrics: crate::metrics::Metrics,
     client: MerkleSetterClient<M, S>,
     pending_merkle_set: Option<PendingEthereumTransactions>,
     mut receiver: tokio::sync::mpsc::Receiver<MerkleUpdate>,
@@ -391,6 +394,7 @@ where
                     .send_raw_transaction(raw_tx.clone())
                     .await
                     .context("Unable to send raw transaction.")?;
+                metrics.sent_ethereum_transactions.inc();
             }
         }
         pending = Some(EthereumPendingTransactions {
@@ -401,12 +405,16 @@ where
     }
     let leaves = client.current_leaves.clone();
     let sender_handle = tokio::spawn(ethereum_tx_sender(
+        metrics.clone(),
         client,
         db_sender,
         pending,
         num_confirmations,
         stop.clone(),
     ));
+    metrics
+        .merkle_tree_size
+        .set(leaves.lock().map_or(0, |x| x.len()) as i64);
     while let Some(mu) = tokio::select! {
         // Make sure to process all events that are in the queue before shutting down.
         // Thus prioritize getting things from the channel.
@@ -419,9 +427,13 @@ where
     } {
         match mu {
             MerkleUpdate::NewWithdraws { withdraws } => {
+                metrics.num_withdrawals.inc_by(withdraws.len() as u64);
                 for (event_index, merkle_hash) in withdraws {
                     log::debug!("New withdraw event with index {event_index}.");
-                    if add_withdraw_event(&leaves, event_index, merkle_hash)?.is_some() {
+                    let (r, new_size) = add_withdraw_event(&leaves, event_index, merkle_hash)?;
+                    metrics.merkle_tree_size.set(new_size as i64);
+                    if r.is_some() {
+                        metrics.warnings_counter.inc();
                         log::warn!(
                             "Duplicate event index {event_index} added to the withdraw events."
                         );
@@ -432,7 +444,11 @@ where
                 receiver: _,
                 original_event_index,
             } => {
-                if remove_withdraw_event(&leaves, original_event_index)?.is_none() {
+                metrics.num_completed_withdrawals.inc();
+                let (r, new_size) = remove_withdraw_event(&leaves, original_event_index)?;
+                metrics.merkle_tree_size.set(new_size as i64);
+                if r.is_none() {
+                    metrics.errors_counter.inc();
                     log::error!(
                         "An event {original_event_index} marked as withdrawn, but was not known."
                     );
@@ -480,6 +496,7 @@ struct EthereumPendingTransactions {
 }
 
 async fn ethereum_tx_sender<M: Middleware, S: Signer>(
+    metrics: crate::metrics::Metrics,
     mut client: MerkleSetterClient<M, S>,
     db_sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut pending: Option<EthereumPendingTransactions>,
@@ -490,6 +507,7 @@ where
     M::Error: 'static,
     S::Error: 'static, {
     while let Err(e) = ethereum_tx_sender_worker(
+        &metrics,
         &mut client,
         &db_sender,
         &mut pending,
@@ -500,7 +518,8 @@ where
     {
         match e {
             EthereumSenderError::Retryable(e) => {
-                log::error!(
+                metrics.warnings_counter.inc();
+                log::warn!(
                     "An error occurred when trying to send transactions to Ethereum or query the \
                      sent transaciton. Will attempt again in 10s: {e}"
                 );
@@ -509,6 +528,7 @@ where
                 tokio::time::sleep(delay).await;
             }
             EthereumSenderError::InternalABI(e) => {
+                metrics.errors_counter.inc();
                 log::error!(
                     "Unable to parse responses from Ethereum. This indicates a configuration \
                      error: {e:#}"
@@ -516,6 +536,7 @@ where
                 return Err(e.into());
             }
             EthereumSenderError::Internal(e) => {
+                metrics.errors_counter.inc();
                 log::error!(
                     "An unrecoverable error occurred when sending transactions to Ethereum: {e:#}."
                 );
@@ -540,6 +561,7 @@ where
 /// The client and `pending` are always left in a consistent state, so that a
 /// retry can be made.
 async fn ethereum_tx_sender_worker<M: Middleware, S: Signer>(
+    metrics: &crate::metrics::Metrics,
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
     pending: &mut Option<EthereumPendingTransactions>,
@@ -571,7 +593,8 @@ where
     'outer: loop {
         // Handle followup for any pending transaction first.
         let pending_result =
-            wait_pending_ethereum_tx(client, db_sender, pending, num_confirmations, stop).await?;
+            wait_pending_ethereum_tx(metrics, client, db_sender, pending, num_confirmations, stop)
+                .await?;
         let stop = match pending_result {
             WaitPendingResult::Stop => {
                 // if told to stop then propagate.
@@ -593,7 +616,7 @@ where
             break 'outer;
         }
         // Now check if we have to send a new one
-        let stop_loop = send_ethereum_tx(client, db_sender, pending).await?;
+        let stop_loop = send_ethereum_tx(metrics, client, db_sender, pending).await?;
         if stop_loop {
             break 'outer;
         }
@@ -629,6 +652,7 @@ enum WaitPendingResult {
 /// Wait until the transaction is no longer pending.
 /// Return whether the process should be stopped.
 async fn wait_pending_ethereum_tx<M: Middleware, S: Signer>(
+    metrics: &crate::metrics::Metrics,
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
     pending: &mut Option<EthereumPendingTransactions>,
@@ -659,6 +683,7 @@ where
             if elapsed > client.escalate_interval {
                 return Ok(WaitPendingResult::Escalate);
             } else if elapsed > client.warn_duration {
+                metrics.warnings_counter.inc();
                 log::warn!(
                     "More than {}s elapsed waiting for {pending_hash:#x} to be confirmed.",
                     elapsed.as_secs()
@@ -706,6 +731,7 @@ where
                 }
                 log::info!("Withdrawal transaction confirmed in block number {bn}.");
                 if !found {
+                    metrics.errors_counter.inc();
                     log::error!(
                         "A transaction with hash {pending_hash:#x} did not set a Merkle root. \
                          This means it failed."
@@ -736,8 +762,12 @@ where
                     );
                     return Ok(WaitPendingResult::Stop);
                 }
+                metrics
+                    .time_last_merkle_root
+                    .set(chrono::Utc::now().timestamp());
                 // Wait until the database operation completes.
                 if receiver.await.is_err() {
+                    metrics.warnings_counter.inc();
                     log::warn!("The database has been shut down. Stopping the transaction sender.");
                     return Ok(WaitPendingResult::Stop);
                 }
@@ -770,6 +800,7 @@ where
 /// Send a transaction and store it in the `pending` value.
 /// Return whether the process should be stopped.
 async fn send_ethereum_tx<M: Middleware, S: Signer>(
+    metrics: &crate::metrics::Metrics,
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
     pending: &mut Option<EthereumPendingTransactions>,
@@ -819,6 +850,7 @@ where
             current_gas_price,
         );
         if new_gas_price > client.max_gas_price {
+            metrics.warnings_counter.inc();
             log::warn!(
                 "Escalating would lead to transaction price that is too high {new_gas_price} > \
                  {}. Waiting for next iteration.",
@@ -862,6 +894,7 @@ where
                 max_gas_price,
                 current_gas_price,
             } => {
+                metrics.warnings_counter.inc();
                 log::warn!(
                     "Ethereum transaction price is too high {current_gas_price} > \
                      {max_gas_price}. Waiting for next iteration."
@@ -887,12 +920,13 @@ where
         .await
         .is_err()
     {
-        log::warn!("The database has been shut down. Stopping the transaction sender.");
+        log::info!("The database has been shut down. Stopping the transaction sender.");
         return Ok(true);
     }
     let raw_tx = match receiver.await {
         Ok(x) => x,
         Err(_) => {
+            metrics.warnings_counter.inc();
             log::warn!("The database has been shut down. Stopping the transaction sender.");
             return Ok(true);
         }
@@ -906,5 +940,6 @@ where
         .send_raw_transaction(raw_tx.clone())
         .await
         .map_err(EthereumSenderError::Retryable)?;
+    metrics.sent_ethereum_transactions.inc();
     Ok(false)
 }

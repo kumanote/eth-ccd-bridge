@@ -395,6 +395,7 @@ where
 /// Finalized is determined by `num_confirmations`, which counts the number of
 /// descentants that must exist before a block is considered final.
 pub async fn watch_eth_blocks<M: Middleware + 'static>(
+    metrics: crate::metrics::Metrics,
     contract: StateSender<M>,
     actions_channel: tokio::sync::mpsc::Sender<DatabaseOperation>,
     mut block_number: u64,
@@ -410,6 +411,7 @@ where
         let number = client.get_block_number().await?;
         if block_number.saturating_add(num_confirmations) <= number.as_u64() {
             let block_events = get_eth_block_events(&contract, block_number, upper_block).await?;
+            metrics.ethereum_height.set(upper_block as i64);
             actions_channel
                 .send(DatabaseOperation::EthereumEvents {
                     events: block_events,

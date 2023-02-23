@@ -447,6 +447,7 @@ pub enum NodeError {
 }
 
 pub async fn listen_concordium(
+    metrics: crate::metrics::Metrics,
     // The client used to query the chain.
     mut bridge_manager: BridgeManagerClient,
     // A channel used to insert into the database.
@@ -462,6 +463,7 @@ pub async fn listen_concordium(
     let mut last_height = height;
     loop {
         let res = listen_concordium_worker(
+            &metrics,
             &mut bridge_manager,
             &sender,
             &mut height,
@@ -520,6 +522,7 @@ pub async fn listen_concordium(
 /// Return Err if querying the node failed.
 /// Return Ok(()) if the channel to the database was closed.
 async fn listen_concordium_worker(
+    metrics: &crate::metrics::Metrics,
     // The client used to query the chain.
     bridge_manager: &mut BridgeManagerClient,
     // A channel used to insert into the database.
@@ -601,6 +604,9 @@ async fn listen_concordium_worker(
                     }
                 }
             }
+            metrics
+                .concordium_height
+                .set(block.block_height.height as i64);
             if sender
                 .send(db::DatabaseOperation::ConcordiumEvents {
                     block,
@@ -629,6 +635,7 @@ async fn listen_concordium_worker(
 /// The transactions in the channel should be in increasing order of nonces,
 /// otherwise sending will fail.
 pub async fn concordium_tx_sender(
+    metrics: crate::metrics::Metrics,
     mut client: v2::Client,
     mut receiver: tokio::sync::mpsc::Receiver<BlockItem<EncodedPayload>>,
     // Flag to signal stopping the task gracefully.
@@ -643,13 +650,16 @@ pub async fn concordium_tx_sender(
     let process_response = |hash, response: v2::RPCResult<TransactionHash>| match response {
         Ok(hash) => {
             log::info!("Transaction {hash} sent to the Concordium node.");
+            metrics.sent_concordium_transactions.inc();
             Ok(false)
         }
         Err(e) => {
             if e.is_duplicate() {
+                metrics.warnings_counter.inc();
                 log::warn!("Transaction {hash} already exists at the node.");
                 Ok(false)
             } else if e.is_invalid_argument() {
+                metrics.errors_counter.inc();
                 log::error!(
                     "Transaction {hash} is not valid for the current state of the node: {e:#}. \
                      Aborting."
@@ -659,7 +669,8 @@ pub async fn concordium_tx_sender(
                      Aborting.",
                 )
             } else {
-                log::error!("Sending transaction to Concordium failed due to {e}.");
+                metrics.warnings_counter.inc();
+                log::warn!("Sending transaction to Concordium failed due to {e:#}. Will retry.");
                 Ok(true)
             }
         }
@@ -686,7 +697,8 @@ pub async fn concordium_tx_sender(
                     break 'outer;
                 }
                 let delay = std::time::Duration::from_secs(5 << i);
-                log::error!(
+                metrics.warnings_counter.inc();
+                log::warn!(
                     "Waiting for {} seconds before resubmitting {hash}.",
                     delay.as_secs()
                 );

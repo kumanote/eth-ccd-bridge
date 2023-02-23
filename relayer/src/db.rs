@@ -114,6 +114,7 @@ impl PreparedStatements {
     /// return whether it has already been processed or not.
     pub async fn insert_concordium_event<'a, 'b>(
         &'a self,
+        metrics: &crate::metrics::Metrics,
         db_tx: &Transaction<'b>,
         tx_hash: &TransactionHash,
         event: &BridgeEvent,
@@ -129,6 +130,7 @@ impl PreparedStatements {
                     ])
                     .await?;
                 if rows.len() != 1 {
+                    metrics.warnings_counter.inc();
                     log::warn!(
                         "A TokenMap event was emitted by a transaction not submitted by the \
                          relayer."
@@ -141,6 +143,7 @@ impl PreparedStatements {
                 )
             }
             BridgeEvent::Deposit(de) => {
+                metrics.num_completed_deposits.inc();
                 log::debug!("Marking a deposit with event index {} as completed.", de.id);
                 let rows = db_tx
                     .query(
@@ -150,6 +153,7 @@ impl PreparedStatements {
                     )
                     .await?;
                 if rows.len() != 1 {
+                    metrics.warnings_counter.inc();
                     log::warn!("Deposited an event that was not emitted on Ethereum.");
                 }
                 let rows = db_tx
@@ -159,6 +163,7 @@ impl PreparedStatements {
                     ])
                     .await?;
                 if rows.len() != 1 {
+                    metrics.warnings_counter.inc();
                     log::warn!(
                         "A deposit event was emitted by a transaction not submitted by the \
                          relayer."
@@ -692,8 +697,10 @@ ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
         Ok(rows.is_some())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_transactions<P: PayloadLike>(
         &mut self,
+        metrics: &crate::metrics::Metrics,
         last_block_number: u64,
         txs: &[(H256, BlockItem<P>)],
         // List of event indexes to mark as "done"
@@ -737,6 +744,7 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
                 ])
                 .await?;
             if rv.is_none() {
+                metrics.errors_counter.inc();
                 log::error!(
                     "Event index {} not in the database. This is a database invariant violation.",
                     event_index
@@ -800,6 +808,7 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
 
     pub async fn insert_concordium_events(
         &mut self,
+        metrics: &crate::metrics::Metrics,
         block: &BlockInfo,
         events: &[(TransactionHash, Vec<BridgeEvent>)],
     ) -> anyhow::Result<Vec<(u64, [u8; 32])>> {
@@ -817,7 +826,7 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
                     None
                 };
                 let processed = statements
-                    .insert_concordium_event(&db_tx, tx_hash, event, mh.map(|x| x.1))
+                    .insert_concordium_event(metrics, &db_tx, tx_hash, event, mh.map(|x| x.1))
                     .await?;
                 if !processed {
                     if let Some(p) = mh {
@@ -889,6 +898,7 @@ pub enum MerkleUpdate {
 const MAX_CONNECT_ATTEMPTS: u32 = 5;
 
 async fn try_reconnect(
+    metrics: &crate::metrics::Metrics,
     config: &tokio_postgres::Config,
     stop_flag: &tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<(Option<u64>, Option<AbsoluteBlockHeight>, Database)> {
@@ -898,7 +908,8 @@ async fn try_reconnect(
             Ok(db) => return Ok(db),
             Err(e) if i < MAX_CONNECT_ATTEMPTS => {
                 let delay = std::time::Duration::from_millis(500 * (1 << i));
-                log::error!(
+                metrics.warnings_counter.inc();
+                log::warn!(
                     "Could not connect to the database due to {:#}. Reconnecting in {}ms.",
                     e,
                     delay.as_millis()
@@ -907,6 +918,7 @@ async fn try_reconnect(
                 i += 1;
             }
             Err(e) => {
+                metrics.errors_counter.inc();
                 log::error!(
                     "Could not connect to the database in {} attempts. Last attempt failed with \
                      reason {:#}.",
@@ -920,7 +932,9 @@ async fn try_reconnect(
     anyhow::bail!("The service was asked to stop.");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_database(
+    metrics: crate::metrics::Metrics,
     config: tokio_postgres::Config,
     mut db: Database,
     mut blocks: tokio::sync::mpsc::Receiver<DatabaseOperation>,
@@ -949,6 +963,7 @@ pub async fn handle_database(
         };
         let Some(action) = next_item else {break};
         match insert_into_db(
+            &metrics,
             &mut db,
             action,
             &merkle_setter_sender,
@@ -962,12 +977,13 @@ pub async fn handle_database(
             }
             Err(InsertError::Retry(action)) => {
                 let delay = std::time::Duration::from_millis(5000);
-                log::error!(
+                metrics.warnings_counter.inc();
+                log::warn!(
                     "Could not insert into the database. Reconnecting in {}ms.",
                     delay.as_millis()
                 );
                 tokio::time::sleep(delay).await;
-                let new_db = match try_reconnect(&config, &stop_flag).await {
+                let new_db = match try_reconnect(&metrics, &config, &stop_flag).await {
                     Ok(db) => db.2,
                     Err(e) => {
                         blocks.close();
@@ -980,6 +996,7 @@ pub async fn handle_database(
                 match old_db.connection_handle.await {
                     Ok(v) => {
                         if let Err(e) = v {
+                            metrics.warnings_counter.inc();
                             log::warn!(
                                 "Could not correctly stop the old database connection due to: {}.",
                                 e
@@ -988,11 +1005,13 @@ pub async fn handle_database(
                     }
                     Err(e) => {
                         if e.is_panic() {
+                            metrics.warnings_counter.inc();
                             log::warn!(
                                 "Could not correctly stop the old database connection. The \
                                  connection thread panicked: {e:#}."
                             );
                         } else if !e.is_cancelled() {
+                            metrics.warnings_counter.inc();
                             log::warn!("Could not correctly stop the old database connection.");
                         }
                     }
@@ -1024,6 +1043,7 @@ enum InsertError {
 
 /// The main worker that does all database operations.
 async fn insert_into_db(
+    metrics: &crate::metrics::Metrics,
     db: &mut Database,
     action: DatabaseOperation,
     merkle_setter_sender: &tokio::sync::mpsc::Sender<MerkleUpdate>,
@@ -1036,7 +1056,7 @@ async fn insert_into_db(
             transaction_events,
         } => {
             match db
-                .insert_concordium_events(&block, &transaction_events)
+                .insert_concordium_events(metrics, &block, &transaction_events)
                 .await
             {
                 Ok(withdraws) => {
@@ -1046,6 +1066,7 @@ async fn insert_into_db(
                             .await
                             .is_err()
                     {
+                        metrics.warnings_counter.inc();
                         log::warn!(
                             "Unable to send new withdraw events to the Merkle updated since the \
                              channel is closed."
@@ -1053,6 +1074,7 @@ async fn insert_into_db(
                     }
                 }
                 Err(e) => {
+                    metrics.warnings_counter.inc();
                     log::warn!("Database error when trying to insert Concordium events: {e}.");
                     return Err(InsertError::Retry(DatabaseOperation::ConcordiumEvents {
                         block,
@@ -1077,6 +1099,7 @@ async fn insert_into_db(
                         vault: _,
                         amount,
                     } => {
+                        metrics.num_deposits.inc();
                         // Send transaction to Concordium.
                         let deposit = concordium_contracts::DepositOperation {
                             id:       id.low_u64(),
@@ -1121,7 +1144,8 @@ async fn insert_into_db(
                         token_type: _,
                     } => {
                         // Do nothing at present. Manual intervention needed.
-                        log::warn!("Token {id} ({root_token} -> {child_token}) unmapped.");
+                        metrics.errors_counter.inc();
+                        log::error!("Token {id} ({root_token} -> {child_token}) unmapped.");
                         unmaps.push((root_token, child_token));
                     }
                     ethereum::EthEvent::Withdraw {
@@ -1147,7 +1171,15 @@ async fn insert_into_db(
             }
 
             match db
-                .insert_transactions(events.last_number, &txs, &wes, &deposits, &maps, &unmaps)
+                .insert_transactions(
+                    metrics,
+                    events.last_number,
+                    &txs,
+                    &wes,
+                    &deposits,
+                    &maps,
+                    &unmaps,
+                )
                 .await
             {
                 Ok(()) => {
@@ -1161,6 +1193,7 @@ async fn insert_into_db(
                             .is_err()
                         {
                             {
+                                metrics.warnings_counter.inc();
                                 log::warn!(
                                     "Unable to send completed withdrawal to the Merkle updater. \
                                      The channel is closed."
@@ -1170,6 +1203,7 @@ async fn insert_into_db(
                     }
                 }
                 Err(e) => {
+                    metrics.warnings_counter.inc();
                     log::warn!("Database error when trying to insert transactions: {e}.");
                     return Err(InsertError::Retry(DatabaseOperation::EthereumEvents {
                         events,
@@ -1183,6 +1217,7 @@ async fn insert_into_db(
                 let hash = tx.hash();
                 if ccd_transaction_sender.send(tx).await.is_err() {
                     {
+                        metrics.warnings_counter.inc();
                         log::warn!(
                             "Unable to send transctions stored in the database to the node since \
                              the channel is closed."
@@ -1196,6 +1231,7 @@ async fn insert_into_db(
         DatabaseOperation::MarkConcordiumTransaction { tx_hash, state } => {
             log::debug!("Marking {} as {:?}.", tx_hash, state);
             if let Err(e) = db.mark_concordium_tx(tx_hash, state).await {
+                metrics.warnings_counter.inc();
                 log::warn!("Database error: {e}");
                 return Err(InsertError::Retry(
                     DatabaseOperation::MarkConcordiumTransaction { tx_hash, state },
@@ -1206,13 +1242,15 @@ async fn insert_into_db(
             match db.pending_concordium_txs().await {
                 Ok(txs) => {
                     if response.send(txs).is_err() {
-                        log::warn!(
+                        metrics.errors_counter.inc();
+                        log::error!(
                             "Unable to send response to the sender of \
                              GetPendingConcordiumTransactions, indicating they have stopped."
                         );
                     }
                 }
                 Err(e) => {
+                    metrics.warnings_counter.inc();
                     log::warn!(
                         "Database error when trying to get pending Concordium transactions: {e}."
                     );
@@ -1235,7 +1273,8 @@ async fn insert_into_db(
                 .is_ok()
             {
                 if response.send(tx).is_err() {
-                    log::warn!("Unable to send response StoreEthereumTransaction. Continuing.");
+                    metrics.errors_counter.inc();
+                    log::error!("Unable to send response StoreEthereumTransaction. Continuing.");
                 }
             } else {
                 return Err(InsertError::Retry(
@@ -1263,7 +1302,8 @@ async fn insert_into_db(
                 .is_ok()
             {
                 if response.send(()).is_err() {
-                    log::warn!("Unable to send response MarkSetMerkleCompleted. Continuing.")
+                    metrics.errors_counter.inc();
+                    log::error!("Unable to send response MarkSetMerkleCompleted. Continuing.")
                 }
             } else {
                 return Err(InsertError::Retry(

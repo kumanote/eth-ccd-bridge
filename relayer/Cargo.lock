@@ -513,7 +513,11 @@ dependencies = [
  "pin-project-lite",
  "rustversion",
  "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
  "sync_wrapper",
+ "tokio",
  "tower",
  "tower-http",
  "tower-layer",
@@ -880,6 +884,7 @@ dependencies = [
  "anyhow",
  "aws-config",
  "aws-sdk-secretsmanager",
+ "axum",
  "base64 0.13.1",
  "chrono",
  "clap",
@@ -894,6 +899,7 @@ dependencies = [
  "log",
  "num-bigint 0.4.3",
  "postgres-types",
+ "prometheus",
  "reqwest",
  "rs_merkle",
  "rustls",
@@ -907,6 +913,7 @@ dependencies = [
  "tokio-postgres",
  "tokio-postgres-rustls",
  "tonic",
+ "tower-http",
  "url",
 ]
 
@@ -3410,6 +3417,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "procfs"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1de8dacb0873f77e6aefc6d71e044761fcc68060290f5b1089fcdf84626bb69"
+dependencies = [
+ "bitflags",
+ "byteorder",
+ "hex",
+ "lazy_static",
+ "rustix",
+]
+
+[[package]]
+name = "prometheus"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "449811d15fbdf5ceb5c1144416066429cf82316e2ec8ce0c1f6f8a02e7bbcf8c"
+dependencies = [
+ "cfg-if",
+ "fnv",
+ "lazy_static",
+ "libc",
+ "memchr",
+ "parking_lot 0.12.1",
+ "procfs",
+ "protobuf",
+ "thiserror",
+]
+
+[[package]]
 name = "prost"
 version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3431,6 +3468,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "protobuf"
+version = "2.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
 name = "ps_sig"
@@ -4181,6 +4224,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_path_to_error"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26b04f22b563c91331a10074bda3dd5492e3cc39d56bd557e91c0af42b6c7341"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4727,6 +4779,7 @@ dependencies = [
  "http-body",
  "http-range-header",
  "pin-project-lite",
+ "tokio",
  "tower",
  "tower-layer",
  "tower-service",

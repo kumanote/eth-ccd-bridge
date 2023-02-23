@@ -270,6 +270,12 @@ struct Relayer {
         env = "ETHCCD_RELAYER_DB_STRING"
     )]
     db_config:                     tokio_postgres::Config,
+    #[clap(
+        long = "prometheus-server",
+        help = "Listen address:port for the Prometheus server.",
+        env = "ETHCCD_RELAYER_PROMETHEUS_SERVER"
+    )]
+    prometheus_server:             Option<std::net::SocketAddr>,
 }
 
 async fn find_start_ethereum_config<M: Middleware>(
@@ -425,6 +431,15 @@ async fn main() -> anyhow::Result<()> {
         set_shutdown(stop_sender, died_receiver),
     );
 
+    let (registry, metrics) = ccdeth_relayer::metrics::Metrics::new()?;
+    if let Some(prometheus_server) = app.prometheus_server {
+        log::info!("Starting prometheus server at {prometheus_server}.");
+        spawn_cancel(
+            died_sender.clone(),
+            ccdeth_relayer::metrics::start_prometheus_server(prometheus_server, registry),
+        );
+    }
+
     let state_sender_contract =
         StateSender::new(app.ethereum_config.state_sender, ethereum_client.clone());
 
@@ -533,6 +548,7 @@ async fn main() -> anyhow::Result<()> {
     let tx_sender_handle = spawn_cancel(
         died_sender.clone(),
         concordium_contracts::concordium_tx_sender(
+            metrics.clone(),
             concordium_client.clone(),
             ccd_transaction_receiver,
             stop_receiver.clone(),
@@ -541,6 +557,7 @@ async fn main() -> anyhow::Result<()> {
     let db_task_handle = spawn_cancel(
         died_sender.clone(),
         db::handle_database(
+            metrics.clone(),
             app.db_config,
             db,
             db_receiver,
@@ -568,6 +585,7 @@ async fn main() -> anyhow::Result<()> {
         spawn_cancel(
             died_sender.clone(),
             merkle::send_merkle_root_updates(
+                metrics.clone(),
                 merkle_client,
                 pending_merkle_set,
                 merkle_setter_receiver,
@@ -582,6 +600,7 @@ async fn main() -> anyhow::Result<()> {
     let watch_concordium_handle = spawn_cancel(
         died_sender.clone(),
         concordium_contracts::listen_concordium(
+            metrics.clone(),
             bridge_manager_client.clone(),
             db_sender.clone(),
             concordium_start_height,
@@ -592,6 +611,7 @@ async fn main() -> anyhow::Result<()> {
     let watch_ethereum_handle = spawn_cancel(
         died_sender.clone(),
         ethereum::watch_eth_blocks(
+            metrics.clone(),
             state_sender_contract,
             db_sender.clone(),
             start_number,
