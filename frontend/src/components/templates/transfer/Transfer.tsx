@@ -17,7 +17,8 @@ import useGenerateContract from "src/contracts/use-generate-contract";
 import { noOp } from "src/helpers/basic";
 import parseWallet from "src/helpers/parseWallet";
 import { appContext } from "src/root/app-context";
-import { usePreSubmitStore } from "src/store/pre-submit";
+import { useTransactionFlowStore } from "src/store/transaction-flow";
+import { QueryRouter } from "src/types/config";
 import ArrowDownIcon from "../../../../public/icons/arrow-down-icon.svg";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
@@ -103,31 +104,28 @@ const ChainBox: React.FC<ChainBoxProps> = ({ chain, text }) => {
     );
 };
 
+type TransferRouteQuery = {
+    reset?: boolean;
+};
+
 interface Props {
     isDeposit?: boolean;
 }
 
 const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const tokensQuery = useTokens();
+    const {
+        query: { reset = false },
+    } = useRouter() as QueryRouter<TransferRouteQuery>;
     const { context, connect, disconnect } = useWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
     const { push } = useRouter();
-
     const { isTablet } = useContext(appContext);
-    // introduced amount
+    const { token, amount = "0", setToken, setAmount, clear: clearTransactionFlow } = useTransactionFlowStore();
+
+    // Keeps track of whether "continue" has been pressed. Used to not show validation error message prematurely.
     const [submitted, setSubmitted] = useState(false);
-    // tokens available in the dropdown
-    const tokens = useMemo(() => {
-        if (tokensQuery.status !== "success") {
-            return undefined;
-        }
-        return tokensQuery.data;
-    }, [tokensQuery]);
-    //
-    // state of the token dropdown
     const [dropdown, setDropdown] = useState(false);
-    // current selected token
-    const { token, amount = "0", setToken, setAmount } = usePreSubmitStore();
 
     // state dependent hooks
     const { getBalance: getEthTokenBalance } = useGenerateContract(
@@ -136,33 +134,29 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     );
     const { balanceOf: getCcdTokenBalance } = useCCDContract(ccdContext.account, ccdContext.isActive);
 
-    // constants
     const isLoggedIn = !!context?.account && !!ccdContext.account;
     const transferButtonDisabled = !isLoggedIn || !token;
     const nextRoute = useMemo(() => (isDeposit ? routes.deposit.overview : routes.withdraw.overview), [isDeposit]);
     const swapRoute = useMemo(() => (isDeposit ? routes.withdraw.path : routes.deposit.path), [isDeposit]);
 
-    const ethBalance = useAsyncMemo(
+    // tokens available in the dropdown
+    const tokens = useMemo(() => {
+        if (tokensQuery.status !== "success") {
+            return undefined;
+        }
+        return tokensQuery.data;
+    }, [tokensQuery]);
+
+    const tokenBalance = useAsyncMemo(
         async () => {
             if (!isLoggedIn || !token) {
                 return undefined;
             }
 
-            return getEthTokenBalance(token.decimals);
+            return isDeposit ? getEthTokenBalance(token.decimals) : getCcdTokenBalance(token);
         },
         noOp,
-        [isLoggedIn, token, getEthTokenBalance]
-    );
-    const ccdBalance = useAsyncMemo(
-        async () => {
-            if (!isLoggedIn || !token) {
-                return undefined;
-            }
-
-            return getCcdTokenBalance(token);
-        },
-        noOp,
-        [isLoggedIn, token, getEthTokenBalance]
+        [isLoggedIn, token, getCcdTokenBalance, getEthTokenBalance]
     );
 
     const chains: ChainType[] = [
@@ -191,12 +185,15 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             return false;
         }
 
-        if (isDeposit) {
-            return nAmount < Number(ethBalance);
-        }
+        return nAmount < Number(tokenBalance);
+    }, [amount, tokenBalance]);
 
-        return nAmount < Number(ccdBalance);
-    }, [amount, ccdBalance, ethBalance, isDeposit]);
+    useEffect(() => {
+        if (reset) {
+            clearTransactionFlow();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reset]);
 
     const dropdownHandler = () => {
         setDropdown((prev) => !prev);
@@ -245,14 +242,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                         <Dropdown onClick={dropdownHandler}>
                             <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
                         </Dropdown>
-                        <Button
-                            variant="max"
-                            onClick={() =>
-                                isDeposit
-                                    ? setAmount(ethBalance?.toString() ?? "")
-                                    : setAmount(ccdBalance?.toString() ?? "")
-                            }
-                        >
+                        <Button variant="max" onClick={() => setAmount(tokenBalance?.toString() ?? "")}>
                             <Text fontSize="10" fontWeight="light">
                                 Max
                             </Text>
@@ -290,12 +280,12 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             type="number"
                             step="0.01"
                             min="0.0"
-                            max={isDeposit ? ethBalance : ccdBalance}
+                            max={tokenBalance}
                             valid={isValidAmount || !submitted}
                         />
                         {isLoggedIn && token && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
-                                Balance:&nbsp;{isDeposit ? ethBalance?.toFixed(4) : ccdBalance?.toFixed(4)}
+                                Balance:&nbsp;{tokenBalance?.toFixed(4)}
                             </Text>
                         )}
                     </MaxGapRow>

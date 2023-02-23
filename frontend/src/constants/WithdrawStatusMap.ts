@@ -1,3 +1,4 @@
+// TODO REMOVE
 const withdrawStatusMap = new Map([
     ["missing", "Adding..."],
     ["pending", "Transaction pending..."],

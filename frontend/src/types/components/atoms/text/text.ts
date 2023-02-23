@@ -15,8 +15,8 @@ export type ThemeColor =
     | "Yellow";
 
 export type Family = "Roboto" | "Helvetica";
-
 export type Weight = "regular" | "light" | "bold";
+export type TextAlignment = "left" | "center" | "right";
 
 export type TextProps = {
     fontSize?: string;
@@ -24,4 +24,5 @@ export type TextProps = {
     fontWeight?: Weight;
     fontFamily?: Family;
     fontLetterSpacing?: string;
+    align?: TextAlignment;
 };

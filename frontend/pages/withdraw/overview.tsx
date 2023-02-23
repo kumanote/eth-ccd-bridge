@@ -20,11 +20,17 @@ const WithdrawOverview: NextPage = () => {
         transactionFinalization,
     } = useCCDContract(ccdContext.account, !!ccdContext.account);
 
-    const requestWithdrawApproval = async (token: Components.Schemas.TokenMapItem) => {
+    const requestWithdrawApproval = async (
+        token: Components.Schemas.TokenMapItem,
+        setStatus: (message: string) => void
+    ) => {
         try {
             const approvalFee = await estimateApprove(token);
+
+            setStatus("Awaiting allowance approval in Concordium wallet");
             const { hash } = await ccdApprove(token, approvalFee);
 
+            setStatus("Waiting for transaction to finalize");
             return await transactionFinalization(hash);
         } catch {
             // Either the allowance approval was rejected, or a timeout happened while polling for allowance approval finalization
@@ -38,7 +44,8 @@ const WithdrawOverview: NextPage = () => {
     const onSubmit = async (
         token: Components.Schemas.TokenMapItem,
         amount: string,
-        setError: (message: string) => void
+        setError: (message: string) => void,
+        setStatus: (message: string) => void
     ): Promise<string | undefined> => {
         if (!context) {
             throw new Error("Could not find Ethereum wallet");
@@ -49,7 +56,7 @@ const WithdrawOverview: NextPage = () => {
                 (await hasApprove({
                     index: token.ccd_contract?.index,
                     subindex: token.ccd_contract?.subindex,
-                })) || (await requestWithdrawApproval(token));
+                })) || (await requestWithdrawApproval(token, setStatus));
         }
 
         if (!hasApproval.current) {
@@ -59,6 +66,7 @@ const WithdrawOverview: NextPage = () => {
 
         let hash: string | undefined;
         try {
+            setStatus("Awaiting signature of withdrawal in Concordium wallet");
             const tx = await ccdWithdraw(amount, token, context?.account || "");
             hash = tx.hash;
         } catch {
@@ -69,6 +77,7 @@ const WithdrawOverview: NextPage = () => {
             return;
         }
         try {
+            setStatus("Waiting for transaction to finalize");
             await transactionFinalization(hash); // Wait for transaction finalization, as we do in the deposit flow.
 
             sessionStorage["CCDSameSession"] = true; // TODO: why is this needed??

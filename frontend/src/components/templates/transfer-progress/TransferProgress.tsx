@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { Components } from "src/api-query/__generated__/AxiosClient";
 import Text from "../../atoms/text/text";
 import Hourglass from "../../../../public/icons/Hourglass.svg";
 import {
@@ -16,31 +15,45 @@ import {
 } from "./TransferProgress.style";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Button from "@components/atoms/button/Button";
+import { useRouter } from "next/router";
+import { routes } from "src/constants/routes";
+import { useTransactionFlowStore } from "src/store/transaction-flow";
 
-type Props = {
-    isWithdraw: boolean;
-    onContinue: Function;
-    transferStatus: number;
-    isTablet: boolean;
-    isMobile: boolean;
-    amount: string;
-    token?: Components.Schemas.TokenMapItem;
-    isPending: boolean;
+export enum TransferStep {
+    Added = 1,
+    Pending = 2,
+    Processed = 3,
+    Failed = -1,
+}
+
+type BaseProps = {
+    transferStatus: TransferStep;
 };
 
-export const TransferProgress: React.FC<Props> = ({
-    isWithdraw,
-    onContinue,
-    transferStatus,
-    isTablet,
-    isMobile,
-    amount,
-    token,
-    isPending,
-}) => {
+type WithdrawProps = BaseProps & {
+    isWithdraw: true;
+    canWithdraw: boolean;
+};
+type DepositProps = BaseProps & {
+    isWithdraw?: false;
+};
+
+type Props = WithdrawProps | DepositProps;
+
+export const TransferProgress: React.FC<Props> = (props) => {
+    const { transferStatus, isWithdraw } = props;
+    const { push } = useRouter();
+    const { token, amount, clear: clearFlowStore } = useTransactionFlowStore();
+
+    if (!token || !amount) {
+        throw new Error("Expected dependencies to be available");
+    }
+
     const continueHandler = () => {
-        onContinue();
+        push({ pathname: routes.deposit.path, query: { reset: true } });
+        clearFlowStore();
     };
+
     return (
         <PageWrapper>
             <StyledContainer>
@@ -116,10 +129,10 @@ export const TransferProgress: React.FC<Props> = ({
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {isWithdraw
+                            {props.isWithdraw
                                 ? transferStatus > 2
                                     ? "Withdraw Processed!"
-                                    : isPending
+                                    : props.canWithdraw
                                     ? "Your withdraw will be ready very soon."
                                     : "Your withdraw is in progress. Please come back later."
                                 : transferStatus > 2
@@ -133,10 +146,10 @@ export const TransferProgress: React.FC<Props> = ({
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {isWithdraw
+                            {props.isWithdraw
                                 ? transferStatus > 2
                                     ? "You can now see it in your transaction history!"
-                                    : isPending
+                                    : props.canWithdraw
                                     ? ""
                                     : "When returning to the bridge, you will be prompted to finish the withdraw."
                                 : transferStatus > 2

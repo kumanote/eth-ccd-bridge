@@ -9,11 +9,16 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";
 import { noOp } from "src/helpers/basic";
 import { getPrice } from "src/helpers/price-usd";
-import { usePreSubmitStore } from "src/store/pre-submit";
+import { useTransactionFlowStore } from "src/store/transaction-flow";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
 import Text from "../../atoms/text/text";
 import { ButtonsContainer, StyledContainer, StyledProcessWrapper } from "./TransferOverview.style";
+
+type Status = {
+    message: string;
+    isError: boolean;
+};
 
 type BaseProps = {
     /**
@@ -23,7 +28,8 @@ type BaseProps = {
     handleSubmit(
         token: Components.Schemas.TokenMapItem,
         amount: string,
-        setError: (message: string) => void
+        setError: (message: string) => void,
+        setStatus: (message: string) => void
     ): Promise<string | undefined>;
 };
 type WithdrawProps = BaseProps & {
@@ -39,9 +45,9 @@ type Props = WithdrawProps | DepositProps;
 export const TransferOverview: React.FC<Props> = (props) => {
     const { isWithdraw, handleSubmit } = props;
     const [pendingSubmission, setPendingSubmission] = useState(false);
-    const [error, setError] = useState<string>();
+    const [status, setStatus] = useState<Status>();
     const { back, replace, push } = useRouter();
-    const { amount, token: selectedToken, clear: clearPreSubmitState } = usePreSubmitStore();
+    const { amount, token: selectedToken } = useTransactionFlowStore();
     const { ccdContext } = useCCDWallet();
 
     /**
@@ -54,33 +60,40 @@ export const TransferOverview: React.FC<Props> = (props) => {
                     return undefined;
                 }
 
+                if (amount === undefined || selectedToken === undefined) {
+                    throw new Error("Invalid page context.");
+                }
+
                 return props.requestGasFee();
             },
-            (e) => setError(e.message),
+            (e) => setStatus(e.message),
             [props.isWithdraw]
         ) ?? 0;
 
     const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
 
+    const setError = (message: string) => setStatus({ isError: true, message });
+    const setInfo = (message: string) => setStatus({ isError: false, message });
+
     // Check necessary values are present from transfer page. These will not be available if this is the first page loaded in the browser.
     if (!amount || !selectedToken) {
         replace(isWithdraw ? routes.withdraw.path : routes.deposit.path);
+        return null;
     }
 
     const submit = async () => {
-        if (!selectedToken || !amount || !ccdContext.account) {
+        if (!ccdContext.account) {
             throw new Error("Expected page dependencies to be available");
         }
 
         setPendingSubmission(true);
 
-        const nextRoute = await handleSubmit(selectedToken, amount, setError);
+        const nextRoute = await handleSubmit(selectedToken, amount, setError, setInfo);
 
         setPendingSubmission(false);
 
         if (nextRoute) {
             push(nextRoute);
-            clearPreSubmitState();
         }
     };
 
@@ -195,12 +208,10 @@ export const TransferOverview: React.FC<Props> = (props) => {
                             </StyledProcessWrapper>
                         </>
                     )}
-                    {error && (
-                        <Text fontSize="12" fontWeight="light" fontColor="Red">
-                            {error}
-                        </Text>
-                    )}
                 </div>
+                <Text fontSize="12" fontWeight="light" fontColor={status?.isError ? "Red" : "Black"} align="center">
+                    {status ? status.message : <>&nbsp;</>}
+                </Text>
                 <ButtonsContainer>
                     <Button variant="secondary" onClick={back}>
                         <div style={{ position: "relative" }}>

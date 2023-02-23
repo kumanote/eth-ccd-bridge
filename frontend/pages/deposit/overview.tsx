@@ -7,11 +7,11 @@ import useCCDWallet from "@hooks/use-ccd-wallet";
 import useRootManagerContract from "src/contracts/use-root-manager";
 import { routes } from "src/constants/routes";
 import useGenerateContract from "src/contracts/use-generate-contract";
-import { usePreSubmitStore } from "src/store/pre-submit";
+import { useTransactionFlowStore } from "src/store/transaction-flow";
 
 const WithdrawOverview: NextPage = () => {
     const { ccdContext } = useCCDWallet();
-    const { amount, token: selectedToken } = usePreSubmitStore();
+    const { amount, token: selectedToken } = useTransactionFlowStore();
     const { checkAllowance } = useGenerateContract(
         selectedToken?.eth_address as string, // address or empty string because the address is undefined on first renders
         !!selectedToken && !!amount // plus it's disabled on the first render anyway
@@ -27,7 +27,7 @@ const WithdrawOverview: NextPage = () => {
      */
     const getGasFee = async (): Promise<number> => {
         if (!amount || !selectedToken) {
-            throw new Error("Epxected dependencies to be available");
+            throw new Error("Invalid page context.");
         }
 
         try {
@@ -65,21 +65,28 @@ const WithdrawOverview: NextPage = () => {
     const onSubmit = async (
         token: Components.Schemas.TokenMapItem,
         amount: string,
-        setError: (message: string) => void
+        setError: (message: string) => void,
+        setStatus: (message: string) => void
     ): Promise<string | undefined> => {
         try {
-            let tx: ContractTransaction;
+            let txPromise: Promise<ContractTransaction>;
             if (token.eth_address === addresses.eth) {
                 // when depositing ether, we don't need to check allowance
-                tx = await depositEtherFor(amount);
+                txPromise = depositEtherFor(amount);
             } else {
                 const erc20PredicateAddress = await typeToVault(); //generate predicate address
-                await checkAllowance(erc20PredicateAddress); //check allowance for that address
-                tx = await depositFor(amount, token); //deposit
+                await checkAllowance(erc20PredicateAddress, () => {
+                    setStatus("Awaiting allowance approval in Ethereum wallet");
+                }); //check allowance for that address
+
+                txPromise = depositFor(amount, token); //deposit
             }
 
+            setStatus("Awaiting signature of deposit in Ethereum wallet");
+            const tx = await txPromise;
+
+            setStatus("Waiting for transaction to finalize");
             await tx.wait(1); // wait for confirmed transaction
-            // TODO: set a status message to let the user know what they're waiting for...
 
             return routes.deposit.tx(tx.hash);
         } catch (error: any) {

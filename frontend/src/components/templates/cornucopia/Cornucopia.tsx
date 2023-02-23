@@ -172,12 +172,7 @@ const Cornucopia = () => {
                 //if already approved
                 if (withdrawApproved) {
                     //withdraw
-                    const ccdWithdrawTx = await ccdWithdraw(
-                        amount,
-                        selectedToken,
-                        context?.account || "",
-                        estimatedWithdrawEnergy
-                    );
+                    const ccdWithdrawTx = await ccdWithdraw(amount, selectedToken, context?.account || "");
                     if (ccdWithdrawTx?.hash) {
                         setStep("progress-withdraw");
                         setCcdWithdrawTxHash(ccdWithdrawTx.hash);
@@ -231,12 +226,7 @@ const Cornucopia = () => {
 
     const ccdSdkWithdraw = async () => {
         if (withdrawApproved && selectedToken) {
-            const ccdWithdrawTx = await ccdWithdraw(
-                amount,
-                selectedToken,
-                context?.account || "",
-                estimatedWithdrawEnergy
-            );
+            const ccdWithdrawTx = await ccdWithdraw(amount, selectedToken, context?.account || "");
             if (ccdWithdrawTx?.result) {
                 setStep("progress-withdraw");
                 setCcdWithdrawTxHash(ccdWithdrawTx.hash);

@@ -1,3 +1,4 @@
+// TODO REMOVE
 const depositStatusMap = new Map([
     ["missing", "Adding..."],
     ["pending", "Transaction pending..."],

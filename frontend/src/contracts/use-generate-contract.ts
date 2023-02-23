@@ -63,7 +63,10 @@ const useGenerateContract = (address: string, enabled: boolean) => {
      * Returns `ContractTransaction` or undefined if allowance has already been given.
      * Throws if necessary parameters are not available when function is invoked.
      */
-    const checkAllowance = async (erc20PredicateAddress: string): Promise<ContractTransaction | undefined> => {
+    const checkAllowance = async (
+        erc20PredicateAddress: string,
+        onRequireApproval?: () => void
+    ): Promise<ContractTransaction | undefined> => {
         if (!enabled || !erc20PredicateAddress) {
             throw new Error("Expected necessary parameters to be available");
         }
@@ -75,6 +78,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         }
 
         try {
+            onRequireApproval?.();
             return await approve(erc20PredicateAddress);
         } catch (err) {
             throw new Error("You need to approve token spending");
