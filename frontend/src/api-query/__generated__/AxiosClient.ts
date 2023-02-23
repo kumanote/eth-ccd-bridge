@@ -82,7 +82,7 @@ export declare namespace Components {
         }
         export interface WatchWithdrawalResponse {
             concordium_event_id?: number; // int64
-            status: string;
+            status: TransactionStatus;
         }
         export interface WithdrawParams {
             amount: string;
@@ -117,11 +117,21 @@ export declare namespace Paths {
         }
         namespace Responses {
             export type $200 = Components.Schemas.EthMerkleProofResponse;
+            export type $400 = string;
+            export type $404 = string;
+            export type $500 = string;
+        }
+    }
+    namespace ExpectedMerkleRootUpdate {
+        namespace Responses {
+            export type $200 = number; // int64
+            export type $500 = string;
         }
     }
     namespace ListTokens {
         namespace Responses {
             export type $200 = Components.Schemas.TokenMapItem[];
+            export type $500 = string;
         }
     }
     namespace WalletTxs {
@@ -133,6 +143,8 @@ export declare namespace Paths {
         }
         namespace Responses {
             export type $200 = Components.Schemas.WalletTx[];
+            export type $400 = string;
+            export type $500 = string;
         }
     }
     namespace WatchDepositTx {
@@ -144,6 +156,8 @@ export declare namespace Paths {
         }
         namespace Responses {
             export type $200 = Components.Schemas.WatchTxResponse;
+            export type $400 = string;
+            export type $500 = string;
         }
     }
     namespace WatchWithdrawTx {
@@ -155,6 +169,8 @@ export declare namespace Paths {
         }
         namespace Responses {
             export type $200 = Components.Schemas.WatchWithdrawalResponse;
+            export type $400 = string;
+            export type $500 = string;
         }
     }
 }
@@ -179,6 +195,17 @@ export interface OperationMethods {
     data?: any,
     config?: AxiosRequestConfig  
   ): OperationResponse<Paths.WatchDepositTx.Responses.$200>
+  /**
+   * expected_merkle_root_update - Queried by Ethereum transaction hash, respond with the status of the
+   * 
+   * Queried by Ethereum transaction hash, respond with the status of the
+   * corresponding transaction on Concordium that handles the deposit.
+   */
+  'expected_merkle_root_update'(
+    parameters?: Parameters<UnknownParamsObject> | null,
+    data?: any,
+    config?: AxiosRequestConfig  
+  ): OperationResponse<Paths.ExpectedMerkleRootUpdate.Responses.$200>
   /**
    * list_tokens - List all tokens that are mapped.
    * 
@@ -233,6 +260,19 @@ export interface PathsDictionary {
       data?: any,
       config?: AxiosRequestConfig  
     ): OperationResponse<Paths.WatchDepositTx.Responses.$200>
+  }
+  ['api/v1/expectedMerkleRootUpdate']: {
+    /**
+     * expected_merkle_root_update - Queried by Ethereum transaction hash, respond with the status of the
+     * 
+     * Queried by Ethereum transaction hash, respond with the status of the
+     * corresponding transaction on Concordium that handles the deposit.
+     */
+    'get'(
+      parameters?: Parameters<UnknownParamsObject> | null,
+      data?: any,
+      config?: AxiosRequestConfig  
+    ): OperationResponse<Paths.ExpectedMerkleRootUpdate.Responses.$200>
   }
   ['api/v1/tokens']: {
     /**
