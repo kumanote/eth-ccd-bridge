@@ -3,6 +3,9 @@ import { CacheKeys } from "src/constants/CacheKeys";
 import { Paths } from "../../api-query/__generated__/AxiosClient";
 import useAxiosClient from "../../store/axios-client";
 
+/** Interval in ms for querying merkle proof */
+const UPDATE_INTERVAL = 60000;
+
 interface Params extends Paths.EthMerkleProof.PathParameters {}
 
 const useEthMerkleProof = (params: Params, options?: any) => {
@@ -18,7 +21,7 @@ const useEthMerkleProof = (params: Params, options?: any) => {
             const { data } = await client?.eth_merkle_proof(params);
             return data;
         },
-        { ...options, refetchInterval: 5000 }
+        { ...options, refetchInterval: UPDATE_INTERVAL }
     );
 };
 

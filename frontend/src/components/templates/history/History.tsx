@@ -5,6 +5,7 @@ import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import useWallet from "@hooks/use-wallet";
 import moment from "moment";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import { BridgeDirection, routes } from "src/constants/routes";
@@ -32,10 +33,8 @@ type Props = {
 
 const History = ({ depositSelected }: Props) => {
     const { context } = useWallet();
-    const { data: history, isLoading } = useWalletTransactions(
-        { wallet: context?.account || "" },
-        { enabled: !!context.account }
-    );
+    const { replace } = useRouter();
+    const { data: history, isLoading } = useWalletTransactions();
     const isMobile = useMediaQuery("(max-width: 540px)");
 
     const [open, setOpen] = useState<number | undefined>();
@@ -87,7 +86,8 @@ const History = ({ depositSelected }: Props) => {
     }, []);
 
     if (!context.account) {
-        return <></>;
+        replace(routes.deposit.path);
+        return null;
     }
     if (!history) {
         return (

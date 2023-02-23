@@ -6,6 +6,7 @@ import useAxiosClient from "../../store/axios-client";
 
 interface Params extends Paths.WalletTxs.PathParameters {}
 
+// TODO REMOVE
 const usePendingTransactions = (
     params: Params,
     options?: any
@@ -29,11 +30,19 @@ const usePendingTransactions = (
             // map the withdraws so the function does not return in the transaction.Withdraw form
             // and sort them by timestamp (older transactions should be verified first)
 
-            return pending.map((transaction) => {
-                if (!isDeposit(transaction)) {
-                    return transaction.Withdraw;
-                }
-            });
+            return pending
+                .map((transaction) => {
+                    if (!isDeposit(transaction)) {
+                        return transaction.Withdraw;
+                    }
+                })
+                .sort((a, b) => {
+                    if (a?.timestamp && b?.timestamp) {
+                        return a.timestamp - b.timestamp;
+                    } else {
+                        return 0;
+                    }
+                });
         },
         { ...options }
     );

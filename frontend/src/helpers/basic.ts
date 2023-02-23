@@ -7,3 +7,7 @@ export function sleep(timeMS: number): Promise<void> {
         setTimeout(resolve, timeMS);
     });
 }
+
+export function isDefined<T>(v?: T): v is T {
+    return v !== undefined;
+}

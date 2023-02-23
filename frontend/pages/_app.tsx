@@ -5,6 +5,7 @@ import type { AppProps } from "next/app";
 import { useMemo } from "react";
 import { QueryClient, QueryClientProvider } from "react-query";
 import { appContext, AppContext } from "src/root/app-context";
+import WatchWithdrawals from "src/root/WatchWithdrawals";
 import GlobalStyles from "src/theme/global";
 import Web3Provider from "web3-react";
 import "../styles/globals.css";
@@ -22,6 +23,7 @@ function MyApp({ Component, pageProps }: AppProps) {
             <Web3Provider connectors={connectors} libraryName="ethers.js">
                 <GlobalStyles />
                 <QueryClientProvider client={queryClient}>
+                    <WatchWithdrawals />
                     <Layout>
                         <Component {...pageProps} />
                     </Layout>
