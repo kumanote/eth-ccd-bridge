@@ -192,7 +192,7 @@ async fn get_eth_block_events<M: Middleware + 'static>(
                     );
                 } else {
                     let delay = std::time::Duration::from_secs(5 << retry_num);
-                    log::error!(
+                    log::warn!(
                         "Failed getting Ethereum block events due to {e}. Retrying in {} seconds.",
                         delay.as_secs()
                     );
@@ -223,7 +223,7 @@ async fn get_eth_block_events_worker<M: Middleware + 'static>(
 ) -> Result<EthBlockEvents, EthereumQueryError>
 where
     M::Error: 'static, {
-    log::debug!("Getting block events for block at height {}.", block_number);
+    log::debug!("Getting block events for blocks at heights {block_number}..={upper_block}.");
     let client = contract.client();
     let mut events = Vec::new();
     let block_filter = |filter: Filter| filter.from_block(block_number).to_block(upper_block);
@@ -235,7 +235,6 @@ where
             .await
             .context("Unable to get LockedToken logs.")?;
         for log in logs {
-            // TODO: If log.removed is true do something.
             if log.removed.unwrap_or(true) {
                 log::error!("An event in a confirmed block was removed.");
                 return Err(EthereumQueryError::Inconsistency);
@@ -272,7 +271,6 @@ where
             .await
             .context("Unable to MapAdded logs.")?;
         for log in logs {
-            // TODO: If log.removed is true do something.
             if log.removed.unwrap_or(true) {
                 log::error!("An event in a confirmed block was removed.");
                 return Err(EthereumQueryError::Inconsistency);
@@ -385,6 +383,7 @@ where
             events.push(event);
         }
     }
+    // Sort events by increasing ids so we have a consistent view in the database.
     events.sort_by(|x, y| x.event.id().cmp(&y.event.id()));
     Ok(EthBlockEvents {
         events,
@@ -393,6 +392,8 @@ where
 }
 
 /// Write "finalized" ethereum blocks to the provided channel.
+/// Finalized is determined by `num_confirmations`, which counts the number of
+/// descentants that must exist before a block is considered final.
 pub async fn watch_eth_blocks<M: Middleware + 'static>(
     contract: StateSender<M>,
     actions_channel: tokio::sync::mpsc::Sender<DatabaseOperation>,

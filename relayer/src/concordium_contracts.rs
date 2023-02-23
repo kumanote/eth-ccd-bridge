@@ -70,6 +70,7 @@ pub enum StateUpdate {
 pub struct BridgeManager {
     pub client: BridgeManagerClient,
     sender:     std::sync::Arc<WalletAccount>,
+    pub max_energy: Energy,
     next_nonce: Nonce,
 }
 
@@ -105,6 +106,7 @@ impl BridgeManager {
         mut client: BridgeManagerClient,
         sender: WalletAccount,
         start_nonce: Option<Nonce>,
+        max_energy: Energy,
     ) -> anyhow::Result<Self> {
         let next_nonce = {
             if let Some(nonce) = start_nonce {
@@ -123,6 +125,7 @@ impl BridgeManager {
             client,
             sender: Arc::new(sender),
             next_nonce,
+            max_energy,
         })
     }
 

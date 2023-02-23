@@ -85,6 +85,7 @@ struct PreparedStatements {
 }
 
 impl PreparedStatements {
+    /// Insert a Concordium transaction to the database.
     pub async fn insert_concordium_tx<'a, 'b, Payload: PayloadLike>(
         &'a self,
         db_tx: &Transaction<'b>,
@@ -92,6 +93,9 @@ impl PreparedStatements {
         bi: &BlockItem<Payload>,
     ) -> anyhow::Result<i64> {
         let hash = bi.hash();
+        log::debug!(
+            "Inserting Concordium transaction with hash {hash} in response to {origin_tx_hash:#x}"
+        );
         let timestamp = chrono::Utc::now().timestamp();
         let tx_bytes = to_bytes(bi);
         let res = db_tx
@@ -115,6 +119,7 @@ impl PreparedStatements {
         event: &BridgeEvent,
         merkle_hash: Option<[u8; 32]>,
     ) -> anyhow::Result<bool> {
+        log::debug!("Inserting Concordium event for transaction {tx_hash}.");
         let (event_type, origin_event_index, data) = match event {
             BridgeEvent::TokenMap(tm) => {
                 let rows = db_tx
@@ -166,6 +171,10 @@ impl PreparedStatements {
                 )
             }
             BridgeEvent::Withdraw(we) => {
+                log::debug!(
+                    "Inserting new withdrawal event with event index {}.",
+                    we.event_index,
+                );
                 let res = db_tx
                     .query_one(&self.insert_concordium_event, &[
                         &tx_hash.as_ref(),
@@ -218,6 +227,7 @@ pub struct Database {
 }
 
 impl Database {
+    /// Stop the database connection, including killing the background workers.
     pub(crate) async fn stop(self) {
         self.connection_handle.abort();
         match self.connection_handle.await {
@@ -236,6 +246,9 @@ impl Database {
 }
 
 #[derive(Debug)]
+/// Operations supported by the database client.
+/// All database access is done by a single worker which communicates with other
+/// tasks in the relayer via channels.
 pub enum DatabaseOperation {
     ConcordiumEvents {
         /// Events are from this block.
@@ -244,30 +257,49 @@ pub enum DatabaseOperation {
         transaction_events: Vec<(TransactionHash, Vec<BridgeEvent>)>,
     },
     EthereumEvents {
+        /// Insert these Ethereum events.
         events: ethereum::EthBlockEvents,
     },
     MarkConcordiumTransaction {
+        /// Mark this transaction hash.
         tx_hash: TransactionHash,
+        /// With the given status.
         state:   TransactionStatus,
     },
     GetPendingConcordiumTransactions {
+        /// Look up the pending Concordium transactions and write the values in
+        /// the given channel.
         response: tokio::sync::oneshot::Sender<Vec<(TransactionHash, BlockItem<EncodedPayload>)>>,
     },
     StoreEthereumTransaction {
+        /// Hash of the transaction to store.
         tx_hash:  H256,
+        /// The transaction, signed so cannot be tampered with.
         tx:       ethers::prelude::Bytes,
+        /// The channel where we reply to when the operation is completed.
         response: tokio::sync::oneshot::Sender<ethers::prelude::Bytes>,
+        /// The Merkle root that is being set by this transaction.
         root:     [u8; 32],
+        /// The event indices that are being approved by this transaction.
         ids:      std::sync::Arc<[u64]>,
     },
+    /// Mark the given Merkle root as current.
     MarkSetMerkleCompleted {
+        /// The root.
         root:          [u8; 32],
+        /// The event indices that are part of this Merkle root.
         ids:           std::sync::Arc<[u64]>,
+        /// Respond when the insertion is completed.
         response:      tokio::sync::oneshot::Sender<()>,
+        /// Whether the transaction was successful or not.
         success:       bool,
+        /// The hash of the transaction that is being marked.
         tx_hash:       H256,
+        /// The remaining transactions for the same Merkle root and ids (and
+        /// nonce) which have been made obsolete. Mark these as gone.
         failed_hashes: Vec<H256>,
     },
+    /// Set the expected time of the Merkle update. This is an estimate only.
     SetNextMerkleUpdateTime {
         next_time: chrono::DateTime<chrono::Utc>,
     },
@@ -968,6 +1000,7 @@ enum InsertError {
     Retry(DatabaseOperation),
 }
 
+/// The main worker that does all database operations.
 async fn insert_into_db(
     db: &mut Database,
     action: DatabaseOperation,
@@ -1029,12 +1062,13 @@ async fn insert_into_db(
                             root:     root_token.into(),
                             amount:   convert_to_token_amount(amount),
                             // TODO: Hardcoded token ID. Works with contracts as they are
-                            // now, but is not ideal.
+                            // now, but is not ideal. But until those contracts are changed not
+                            // much to do here.
                             token_id: cis2::TokenId::new_unchecked(vec![0u8; 8]),
                         };
                         let update = concordium_contracts::StateUpdate::Deposit(deposit);
                         // TODO estimate execution energy.
-                        let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
+                        let tx = bridge_manager.make_state_update_tx(bridge_manager.max_energy, &update);
                         txs.push((event.tx_hash, tx));
                         deposits.push((event.tx_hash, id.low_u64(), amount, depositor, root_token));
                     }
