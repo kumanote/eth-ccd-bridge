@@ -98,6 +98,20 @@ struct EthereumConfig {
         default_value = "10"
     )]
     ethereum_request_timeout: u64,
+    #[clap(
+        long,
+        help = "Interval (in seconds) on when to escalate the price of the transaction.",
+        env = "ETHCCD_RELAYER_MERKLE_ESCALATION_INTERVAL",
+        default_value = "120"
+    )]
+    escalation_interval: u64,
+    #[clap(
+        long,
+        help = "When to start warning that the transaction has not yet been confirmed.",
+        env = "ETHCCD_RELAYER_MERKLE_WARN_DURATION",
+        default_value = "120"
+    )]
+    warn_duration: u64,
 }
 
 impl EthereumConfig {
@@ -114,6 +128,8 @@ impl EthereumConfig {
             chain_id,
             num_confirmations,
             ethereum_request_timeout,
+            escalation_interval,
+            warn_duration,
         } = self;
         log::info!("Using {state_sender:#x} as the state sender address.");
         log::info!("Using {root_chain_manager:#x} as the root chain manager address.");
@@ -126,6 +142,8 @@ impl EthereumConfig {
         log::info!("Using {chain_id} as the chain id.");
         log::info!("Requiring {num_confirmations} confirmations for transactions on Ethereum.");
         log::info!("Using {ethereum_request_timeout}s as the request timeout for Ethereum API.");
+        log::info!("Will escalate price every {escalation_interval}s.");
+        log::info!("Will warn after transaction is not confirmed after {warn_duration}s.");
     }
 }
 
@@ -199,31 +217,50 @@ struct Relayer {
         help = "Maximum log level.",
         env = "ETHCCD_RELAYER_LOG_LEVEL"
     )]
-    log_level:         log::LevelFilter,
+    log_level:                     log::LevelFilter,
     #[clap(flatten)]
-    ethereum_config:   EthereumConfig,
+    ethereum_config:               EthereumConfig,
     #[clap(flatten)]
-    concordium_config: ConcordiumConfig,
+    concordium_config:             ConcordiumConfig,
     #[clap(
         long = "concordium-wallet-file",
+        name = "concordium-wallet-file",
         help = "File with the Concordium wallet in the browser extension wallet export format.",
-        env = "ETHCCD_RELAYER_CONCORDIUM_WALLET_FILE"
+        env = "ETHCCD_RELAYER_CONCORDIUM_WALLET_FILE",
+        conflicts_with = "concordium-wallet-secret-name"
     )]
-    concordium_wallet: PathBuf,
+    concordium_wallet:             Option<PathBuf>,
     #[clap(
-        long,
+        long = "concordium-wallet-secret-name",
+        name = "concordium-wallet-secret-name",
+        help = "File with the Concordium wallet in the browser extension wallet export format.",
+        env = "ETHCCD_RELAYER_CONCORDIUM_WALLET_SECRET_NAME",
+        conflicts_with = "concordium-wallet-file"
+    )]
+    concordium_wallet_secret_name: Option<String>,
+    #[clap(
+        long = "eth-private-key",
+        name = "eth-private-key",
         help = "Private key used to sign Merkle update tranasctions on Ethereum. The address \
                 derived from this key must have the MERKLE_UPDATER role.",
         env = "ETHCCD_RELAYER_ETH_PRIVATE_KEY"
     )]
-    eth_private_key:   LocalWallet,
+    eth_private_key:               Option<LocalWallet>,
+    #[clap(
+        long = "eth-key-secret-name",
+        name = "eth-key-secret-name",
+        help = "Secret name of the key stored in Amazon secret manager.",
+        env = "ETHCCD_RELAYER_ETH_PRIVATE_KEY_SECRET_NAME",
+        conflicts_with = "eth-private-key"
+    )]
+    eth_private_key_secret_name:   Option<String>,
     #[clap(
         long = "db",
         default_value = "host=localhost dbname=relayer user=postgres password=password port=5432",
         help = "Database connection string.",
         env = "ETHCCD_RELAYER_DB_STRING"
     )]
-    db_config:         tokio_postgres::Config,
+    db_config:                     tokio_postgres::Config,
 }
 
 async fn find_start_ethereum_config<M: Middleware>(
@@ -286,7 +323,7 @@ where
     })
 }
 
-#[tokio::main]
+#[tokio::main(worker_threads = 4)]
 async fn main() -> anyhow::Result<()> {
     let app: Relayer = Relayer::parse();
 
@@ -299,7 +336,22 @@ async fn main() -> anyhow::Result<()> {
     app.ethereum_config.log();
     app.concordium_config.log();
 
-    let concordium_wallet = WalletAccount::from_json_file(app.concordium_wallet)?;
+    let concordium_wallet = match (
+        app.concordium_wallet.as_ref(),
+        app.concordium_wallet_secret_name.as_ref(),
+    ) {
+        (Some(_), Some(_)) => {
+            anyhow::bail!(
+                "Both file and secret name provided as the key location for Concordium. Choose \
+                 one."
+            )
+        }
+        (Some(w), None) => WalletAccount::from_json_file(w)?,
+        (None, Some(sn)) => ccdeth_relayer::aws_secret_manager::get_concordium_keys_aws(sn).await?,
+        (None, None) => {
+            anyhow::bail!("Concordium keys were not provided.")
+        }
+    };
     log::info!(
         "Using {} as the sender of Concordium transactions.",
         concordium_wallet.address
@@ -327,9 +379,22 @@ async fn main() -> anyhow::Result<()> {
 
     // Transactions will be signed with the private key below and will be broadcast
     // via the eth_sendRawTransaction API)
-    let wallet: LocalWallet = app
-        .eth_private_key
-        .with_chain_id(app.ethereum_config.chain_id);
+    let wallet: LocalWallet = match (
+        app.eth_private_key,
+        app.eth_private_key_secret_name.as_ref(),
+    ) {
+        (Some(_), Some(_)) => {
+            anyhow::bail!(
+                "Both file and secret name provided as the key location for Ethereum. Choose one."
+            )
+        }
+        (Some(w), None) => w.with_chain_id(app.ethereum_config.chain_id),
+        (None, Some(sn)) => ccdeth_relayer::aws_secret_manager::get_ethereum_keys_aws(sn).await?.with_chain_id(app.ethereum_config.chain_id),
+        (None, None) => {
+            anyhow::bail!("Ethereum keys were not provided.")
+        }
+    };
+
     let sender = wallet.address();
     log::info!("Using {sender:#x} as the Ethereum wallet.");
 
@@ -484,6 +549,8 @@ async fn main() -> anyhow::Result<()> {
             std::time::Duration::from_secs(app.ethereum_config.merkle_update_interval),
             leaves,
             max_marked_event_index,
+            std::time::Duration::from_secs(app.ethereum_config.escalation_interval),
+            std::time::Duration::from_secs(app.ethereum_config.warn_duration),
         )?;
 
         spawn_cancel(

@@ -256,16 +256,17 @@ pub enum DatabaseOperation {
     StoreEthereumTransaction {
         tx_hash:  H256,
         tx:       ethers::prelude::Bytes,
-        response: tokio::sync::oneshot::Sender<(ethers::prelude::Bytes, Vec<u64>)>,
+        response: tokio::sync::oneshot::Sender<ethers::prelude::Bytes>,
         root:     [u8; 32],
-        ids:      Vec<u64>,
+        ids:      std::sync::Arc<[u64]>,
     },
     MarkSetMerkleCompleted {
-        root:     [u8; 32],
-        ids:      Vec<u64>,
-        response: tokio::sync::oneshot::Sender<()>,
-        success:  bool,
-        tx_hash:  H256,
+        root:          [u8; 32],
+        ids:           std::sync::Arc<[u64]>,
+        response:      tokio::sync::oneshot::Sender<()>,
+        success:       bool,
+        tx_hash:       H256,
+        failed_hashes: Vec<H256>,
     },
     SetNextMerkleUpdateTime {
         next_time: chrono::DateTime<chrono::Utc>,
@@ -273,17 +274,13 @@ pub enum DatabaseOperation {
 }
 
 /// A pending Ethereum transaction stored in the Database.
-pub struct PendingEthereumTransaction {
-    /// Hash of the transaction.
-    pub tx_hash:   H256,
-    /// The full transaction, signed.
-    pub raw_tx:    ethers::prelude::Bytes,
-    /// Timestamp (in seconds) of when the transaction was stored.
-    pub timestamp: u64,
+pub struct PendingEthereumTransactions {
+    /// A pair of hash and signed transaction.
+    pub txs:  Vec<(H256, ethers::prelude::Bytes)>,
     /// The Merkle root set by this transaction.
-    pub root:      [u8; 32],
+    pub root: [u8; 32],
     /// Event indices set by this Merkle root.
-    pub idxs:      Vec<u64>,
+    pub idxs: std::sync::Arc<[u64]>,
 }
 
 #[derive(Debug, tokio_postgres::types::ToSql, tokio_postgres::types::FromSql)]
@@ -454,6 +451,7 @@ ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
         ids: &[u64],
         success: bool,
         tx_hash: H256,
+        failed_hashes: &[H256],
     ) -> anyhow::Result<()> {
         let db_tx = self.client.transaction().await?;
         if success {
@@ -492,6 +490,15 @@ ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
                 &[&tx_hash.as_bytes()],
             )
             .await?;
+        for failed_tx in failed_hashes {
+            db_tx
+                .query_one(
+                    "UPDATE ethereum_transactions SET status = 'missing' WHERE tx_hash = $1 \
+                     RETURNING id;",
+                    &[&failed_tx.as_bytes()],
+                )
+                .await?;
+        }
         db_tx.commit().await?;
         Ok(())
     }
@@ -517,54 +524,56 @@ ON CONFLICT (tag) DO UPDATE SET expected_time = $1;
     /// Get the transaction hash, the data, and the timestamp when
     /// the transaction was inserted to the database, in case
     /// a pending transaction exists.
-    pub async fn pending_ethereum_tx(&self) -> anyhow::Result<Option<PendingEthereumTransaction>> {
+    pub async fn pending_ethereum_tx(&self) -> anyhow::Result<Option<PendingEthereumTransactions>> {
         let rows = self
             .client
-            .query_opt(&self.prepared_statements.get_pending_ethereum_txs, &[])
+            .query(&self.prepared_statements.get_pending_ethereum_txs, &[])
             .await?;
-        if let Some(row) = rows {
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let mut txs = Vec::new();
+        for row in rows {
             let tx_hash: Vec<u8> = row.try_get("tx_hash")?;
             let tx: Vec<u8> = row.try_get("tx")?;
-            let timestamp = row.try_get::<_, i64>("timestamp")? as u64;
-            let pending_idxs = self
-                .client
-                .query(
-                    "SELECT pending_root, event_index FROM concordium_events WHERE pending_root \
-                     IS NOT NULL ORDER BY event_index ASC;",
-                    &[],
-                )
-                .await?;
-            let mut root = None;
-            let mut idxs = Vec::with_capacity(pending_idxs.len());
-            for row in pending_idxs {
-                let pending_root: [u8; 32] = row
-                    .try_get::<_, Vec<u8>>("pending_root")?
-                    .try_into()
-                    .map_err(|_| anyhow::anyhow!("Stored value is not a Merkle root hash"))?;
-                anyhow::ensure!(
-                    root.is_none() || root == Some(pending_root),
-                    "Multiple pending Merkle roots. Database invariant violation"
-                );
-                root = Some(pending_root);
-                let event_index = row.try_get::<_, i64>("event_index")? as u64;
-                idxs.push(event_index);
-            }
-            let root = root.context(
-                "A pending transaction without any indices. This is a database invariant \
-                 violation.",
-            )?;
-            Ok(Some(PendingEthereumTransaction {
-                tx_hash: H256(tx_hash.try_into().map_err(|_| {
+            txs.push((
+                H256(tx_hash.try_into().map_err(|_| {
                     anyhow::anyhow!("Database invariant violation. Hash not 32 bytes")
                 })?),
-                raw_tx: tx.into(),
-                timestamp,
-                root,
-                idxs,
-            }))
-        } else {
-            Ok(None)
+                tx.into(),
+            ));
         }
+        let pending_idxs = self
+            .client
+            .query(
+                "SELECT pending_root, event_index FROM concordium_events WHERE pending_root IS \
+                 NOT NULL ORDER BY event_index ASC;",
+                &[],
+            )
+            .await?;
+        let mut root = None;
+        let mut idxs = Vec::with_capacity(pending_idxs.len());
+        for row in pending_idxs {
+            let pending_root: [u8; 32] = row
+                .try_get::<_, Vec<u8>>("pending_root")?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Stored value is not a Merkle root hash"))?;
+            anyhow::ensure!(
+                root.is_none() || root == Some(pending_root),
+                "Multiple pending Merkle roots. Database invariant violation"
+            );
+            root = Some(pending_root);
+            let event_index = row.try_get::<_, i64>("event_index")? as u64;
+            idxs.push(event_index);
+        }
+        let root = root.context(
+            "A pending transaction without any indices. This is a database invariant violation.",
+        )?;
+        Ok(Some(PendingEthereumTransactions {
+            txs,
+            root,
+            idxs: idxs.into(),
+        }))
     }
 
     /// Get pending withdrawals and check that they indeed exist on the chain.
@@ -1168,7 +1177,7 @@ async fn insert_into_db(
                 .await
                 .is_ok()
             {
-                if response.send((tx, ids)).is_err() {
+                if response.send(tx).is_err() {
                     log::warn!("Unable to send response StoreEthereumTransaction. Continuing.");
                 }
             } else {
@@ -1189,9 +1198,10 @@ async fn insert_into_db(
             response,
             success,
             tx_hash,
+            failed_hashes,
         } => {
             if db
-                .mark_merkle_root_set(root, &ids, success, tx_hash)
+                .mark_merkle_root_set(root, &ids, success, tx_hash, &failed_hashes)
                 .await
                 .is_ok()
             {
@@ -1206,6 +1216,7 @@ async fn insert_into_db(
                         response,
                         success,
                         tx_hash,
+                        failed_hashes,
                     },
                 ));
             }

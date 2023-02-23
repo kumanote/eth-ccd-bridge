@@ -28,6 +28,7 @@ thiserror = "1.0"
 url = "2.2"
 http = "0.2"
 ethers = "1"
+ethers-signers = {version = "1", features = ["aws"]}
 clap = {version = "4", features = ["derive", "env"]}
 tokio = {version = "1.20", features = ["rt-multi-thread", "macros", "sync", "signal"]}
 env_logger = "0.9"
@@ -35,6 +36,8 @@ tokio-postgres = { version = "^0.7.7", features = ["with-chrono-0_4"] }
 postgres-types = { version = "0.2", features = ["derive"]}
 tonic = {version = "0.8", features = ["tls", "tls-roots"]} # Use system trust roots.
 reqwest = "0.11"
+aws-config = "0.54"
+aws-sdk-secretsmanager = "0.24"
 
 concordium-rust-sdk = { path = "../deps/concordium-rust-sdk/"}
 

@@ -6,6 +6,8 @@ pub mod merkle;
 
 pub mod ethereum;
 
+pub mod aws_secret_manager;
+
 // These modules are auto-generated, so we don't bother with clippy.
 #[allow(clippy::all)]
 pub mod erc20;
