@@ -187,6 +187,7 @@ pub fn make_event_leaf_hash(
 }
 
 impl<M, S: Signer> MerkleSetterClient<M, S> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         root_manager: BridgeManager<M>,
         signer: S,
@@ -396,7 +397,11 @@ where
                     .context("Unable to send raw transaction.")?;
             }
         }
-        pending = Some((root, idxs, txs));
+        pending = Some(EthereumPendingTransactions {
+            root,
+            ids: idxs,
+            pending_txs: txs,
+        });
     }
     let leaves = client.current_leaves.clone();
     let sender_handle = tokio::spawn(ethereum_tx_sender(
@@ -468,10 +473,20 @@ where
     }
 }
 
+struct EthereumPendingTransactions {
+    /// The Merkle root to be set by all the pending transactions.
+    root:        [u8; 32],
+    /// The event_indices that are marked approved by the transactions.
+    ids:         Arc<[u64]>,
+    /// The list of transactions hashes and transactions.
+    /// This list is never empty and is ordered by increasing gas price.
+    pending_txs: Vec<(H256, ethers::prelude::Bytes)>,
+}
+
 async fn ethereum_tx_sender<M: Middleware, S: Signer>(
     mut client: MerkleSetterClient<M, S>,
     db_sender: tokio::sync::mpsc::Sender<DatabaseOperation>,
-    mut pending: Option<([u8; 32], Arc<[u64]>, Vec<(H256, ethers::prelude::Bytes)>)>,
+    mut pending: Option<EthereumPendingTransactions>,
     num_confirmations: u64,
     mut stop: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()>
@@ -531,7 +546,7 @@ where
 async fn ethereum_tx_sender_worker<M: Middleware, S: Signer>(
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
-    pending: &mut Option<([u8; 32], Arc<[u64]>, Vec<(H256, ethers::prelude::Bytes)>)>,
+    pending: &mut Option<EthereumPendingTransactions>,
     num_confirmations: u64,
     stop: &mut tokio::sync::watch::Receiver<()>,
 ) -> Result<(), EthereumSenderError<M>>
@@ -620,7 +635,7 @@ enum WaitPendingResult {
 async fn wait_pending_ethereum_tx<M: Middleware, S: Signer>(
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
-    pending: &mut Option<([u8; 32], Arc<[u64]>, Vec<(H256, ethers::prelude::Bytes)>)>,
+    pending: &mut Option<EthereumPendingTransactions>,
     num_confirmations: u64,
     stop: &mut tokio::sync::watch::Receiver<()>,
 ) -> Result<WaitPendingResult, EthereumSenderError<M>>
@@ -630,7 +645,12 @@ where
     let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(10));
     check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let start = tokio::time::Instant::now();
-    'outer: while let Some((root, ids, pending_hashes)) = pending {
+    'outer: while let Some(EthereumPendingTransactions {
+        root,
+        ids,
+        pending_txs,
+    }) = pending
+    {
         let stop = tokio::select! {
             _ = stop.changed() => true,
             _ = check_interval.tick() => false,
@@ -638,7 +658,7 @@ where
         if stop {
             return Ok(WaitPendingResult::Stop);
         }
-        for (i, (pending_hash, _)) in pending_hashes.iter().enumerate() {
+        for (i, (pending_hash, _)) in pending_txs.iter().enumerate() {
             let elapsed = start.elapsed();
             if elapsed > client.escalate_interval {
                 return Ok(WaitPendingResult::Escalate);
@@ -706,7 +726,7 @@ where
                         tx_hash: *pending_hash,
                         // Collect hashes of transactions that have not been confirmed to mark them
                         // as failed.
-                        failed_hashes: pending_hashes
+                        failed_hashes: pending_txs
                             .iter()
                             .enumerate()
                             .flat_map(|(j, (hash, _))| if i != j { Some(*hash) } else { None })
@@ -756,15 +776,20 @@ where
 async fn send_ethereum_tx<M: Middleware, S: Signer>(
     client: &mut MerkleSetterClient<M, S>,
     db_sender: &tokio::sync::mpsc::Sender<DatabaseOperation>,
-    pending: &mut Option<([u8; 32], Arc<[u64]>, Vec<(H256, ethers::prelude::Bytes)>)>,
+    pending: &mut Option<EthereumPendingTransactions>,
 ) -> Result<bool, EthereumSenderError<M>>
 where
     M::Error: 'static,
     S::Error: 'static, {
     // only send new transaction if there is no pending transaction. If there is a
     // pending transaction that means we need to escalate.
-    let (tx_hash, raw_tx, ids, root) = if let Some((root, ids, pending_transactions)) = pending {
-        let Some((_, tx)) = pending_transactions.last() else
+    let (tx_hash, raw_tx, ids, root) = if let Some(EthereumPendingTransactions {
+        root,
+        ids,
+        pending_txs,
+    }) = pending
+    {
+        let Some((_, tx)) = pending_txs.last() else
         {
             return Ok(false);
         };
@@ -814,7 +839,7 @@ where
             let tx_hash = tx.hash(&signature);
             let raw_tx = tx.rlp_signed(&signature);
             log::debug!("Sending escalation SetMerkleRoot transaction with hash {tx_hash:#x}.");
-            pending_transactions.push((tx_hash, raw_tx.clone()));
+            pending_txs.push((tx_hash, raw_tx.clone()));
             (tx_hash, raw_tx, ids.clone(), *root)
         }
     } else {
@@ -830,7 +855,11 @@ where
                     "New merkle root to be set to {} using transaction {tx_hash:#x}.",
                     TransactionHash::from(root)
                 );
-                *pending = Some((root, ids.clone(), vec![(tx_hash, raw_tx.clone())]));
+                *pending = Some(EthereumPendingTransactions {
+                    root,
+                    ids: ids.clone(),
+                    pending_txs: vec![(tx_hash, raw_tx.clone())],
+                });
                 (tx_hash, raw_tx, ids, root)
             }
             SetMerkleRootResult::GasTooHigh {

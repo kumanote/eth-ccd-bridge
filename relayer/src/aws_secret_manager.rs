@@ -22,7 +22,7 @@ pub async fn get_concordium_keys_aws(secret_name: &str) -> anyhow::Result<Wallet
     let Some(raw_secret) = resp.secret_string() else {
         anyhow::bail!("Secret {secret_name} was not present")
     };
-    let acc = WalletAccount::from_json_str(&raw_secret)?;
+    let acc = WalletAccount::from_json_str(raw_secret)?;
     Ok(acc)
 }
 
