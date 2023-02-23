@@ -1,11 +1,17 @@
-import { useQuery } from "react-query";
+import { useQuery, UseQueryOptions } from "react-query";
 import { CacheKeys } from "src/constants/CacheKeys";
-import { Paths } from "../__generated__/AxiosClient";
+import { Components, Paths } from "../__generated__/AxiosClient";
 import useAxiosClient from "../../store/axios-client";
 
 interface Params extends Paths.WatchDepositTx.PathParameters {}
+type Options = UseQueryOptions<
+    Components.Schemas.WatchTxResponse,
+    unknown,
+    Components.Schemas.WatchTxResponse,
+    (string | Params | undefined)[]
+>;
 
-const useWatchDeposit = (params?: Params, options?: any) => {
+const useWatchDeposit = (params?: Params, options?: Options) => {
     const { getClient } = useAxiosClient();
 
     return useQuery(
@@ -16,7 +22,18 @@ const useWatchDeposit = (params?: Params, options?: any) => {
             const { data } = await client?.watch_deposit_tx(params);
             return data;
         },
-        { ...options }
+        {
+            ...options,
+            refetchInterval: (data, query) => {
+                if (data?.concordium_tx_hash !== undefined) {
+                    return false;
+                }
+
+                return typeof options?.refetchInterval === "function"
+                    ? options?.refetchInterval(data, query)
+                    : options?.refetchInterval ?? false;
+            },
+        }
     );
 };
 
