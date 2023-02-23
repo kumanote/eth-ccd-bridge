@@ -1,9 +1,12 @@
-use prometheus::{Encoder, IntCounter, IntGauge, Registry, TextEncoder};
+use prometheus::{
+    core::{AtomicU64, GenericGauge},
+    IntCounter, IntGauge, Registry, TextEncoder,
+};
 
 #[derive(Clone)]
 pub struct Metrics {
     pub(crate) merkle_tree_size:             IntGauge,
-    pub(crate) warnings_counter:             IntCounter,
+    pub warnings_counter:                    IntCounter,
     pub(crate) errors_counter:               IntCounter,
     pub(crate) num_deposits:                 IntCounter,
     pub(crate) num_completed_deposits:       IntCounter,
@@ -14,6 +17,8 @@ pub struct Metrics {
     pub(crate) sent_concordium_transactions: IntCounter,
     pub(crate) sent_ethereum_transactions:   IntCounter,
     pub(crate) time_last_merkle_root:        IntGauge,
+    pub concordium_balance:                  GenericGauge<AtomicU64>,
+    pub ethereum_balance:                    GenericGauge<AtomicU64>,
 }
 
 impl Metrics {
@@ -84,7 +89,19 @@ impl Metrics {
             "timestamp_last_merkle_root",
             "Unix timestamp in seconds of the last time a Merkle root was set.",
         )?;
-        registry.register(Box::new(sent_ethereum_transactions.clone()))?;
+        registry.register(Box::new(time_last_merkle_root.clone()))?;
+
+        let concordium_balance = GenericGauge::new(
+            "concordium_account_balance",
+            "Balance, in microCCD, of the sender account for Concordium.",
+        )?;
+        registry.register(Box::new(concordium_balance.clone()))?;
+
+        let ethereum_balance = GenericGauge::new(
+            "ethereum_account_balance",
+            "Balance, in microEther, of the sender account for Ethereum.",
+        )?;
+        registry.register(Box::new(ethereum_balance.clone()))?;
 
         Ok((registry, Self {
             merkle_tree_size,
@@ -99,6 +116,8 @@ impl Metrics {
             sent_ethereum_transactions,
             time_last_merkle_root,
             num_completed_deposits,
+            concordium_balance,
+            ethereum_balance,
         }))
     }
 }

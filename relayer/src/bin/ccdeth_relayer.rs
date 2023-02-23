@@ -8,8 +8,9 @@ use ccdeth_relayer::{
 };
 use clap::Parser;
 use concordium::{
+    id::types::AccountAddress,
     types::{AbsoluteBlockHeight, ContractAddress, WalletAccount},
-    v2,
+    v2::{self, BlockIdentifier},
 };
 use concordium_rust_sdk as concordium;
 use ethabi::ethereum_types::U256;
@@ -317,6 +318,55 @@ async fn find_concordium_start_height(
     }
 }
 
+async fn query_concordium_balance(
+    metrics: ccdeth_relayer::metrics::Metrics,
+    mut client: v2::Client,
+    address: AccountAddress,
+) -> anyhow::Result<()> {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        interval.tick().await;
+        match client
+            .get_account_info(&address.into(), BlockIdentifier::LastFinal)
+            .await
+        {
+            Ok(ai) => {
+                metrics
+                    .concordium_balance
+                    .set(ai.response.account_amount.micro_ccd);
+            }
+            Err(e) => {
+                metrics.warnings_counter.inc();
+                log::warn!("Unable to query Concordium account balance: {e:#}")
+            }
+        }
+    }
+}
+
+async fn query_ethereum_balance<M: Middleware>(
+    metrics: ccdeth_relayer::metrics::Metrics,
+    client: M,
+    address: ethers::prelude::Address,
+) -> anyhow::Result<()> {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        interval.tick().await;
+        match client.get_balance(address, None).await {
+            Ok(balance) => {
+                metrics
+                    .ethereum_balance
+                    .set((balance / 1_000_000).low_u64());
+            }
+            Err(e) => {
+                metrics.warnings_counter.inc();
+                log::warn!("Unable to query Ethereum account balance: {e:#}")
+            }
+        }
+    }
+}
+
 /// Like `tokio::spawn` but the provided future is modified so that
 /// once it terminates it sends a message on the provided channel.
 /// This is sent regardless of how the future terminates, as long as it
@@ -367,9 +417,10 @@ async fn main() -> anyhow::Result<()> {
             anyhow::bail!("Concordium keys were not provided.")
         }
     };
+    let concordium_sender_address = concordium_wallet.address;
     log::info!(
         "Using {} as the sender of Concordium transactions.",
-        concordium_wallet.address
+        concordium_sender_address
     );
 
     let inner_ethereum_client = {
@@ -412,12 +463,14 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let sender = wallet.address();
-    log::info!("Using {sender:#x} as the Ethereum wallet.");
+    let ethereum_sender = wallet.address();
+    log::info!("Using {ethereum_sender:#x} as the Ethereum wallet.");
 
-    let balance = ethereum_client.get_balance(sender, None).await?;
+    let balance = ethereum_client.get_balance(ethereum_sender, None).await?;
     log::info!("Balance of the Ethereum sender account is {balance}.");
-    let ethereum_nonce = ethereum_client.get_transaction_count(sender, None).await?;
+    let ethereum_nonce = ethereum_client
+        .get_transaction_count(ethereum_sender, None)
+        .await?;
     log::info!("Nonce of the Ethereum sender account is {ethereum_nonce}.");
 
     // Set up signal handlers before doing anything non-trivial so we have some sort
@@ -620,6 +673,20 @@ async fn main() -> anyhow::Result<()> {
         ),
     );
 
+    let balance_query_handle = spawn_cancel(
+        died_sender.clone(),
+        query_concordium_balance(
+            metrics.clone(),
+            concordium_client,
+            concordium_sender_address,
+        ),
+    );
+
+    let ethereum_balance_query_handle = spawn_cancel(
+        died_sender.clone(),
+        query_ethereum_balance(metrics.clone(), ethereum_client, ethereum_sender),
+    );
+
     // Wait for signal to be received.
     if let Err(e) = stop_receiver.changed().await {
         log::error!("The signal handler unexpectedly died with {e}. Shutting off the service.");
@@ -628,6 +695,8 @@ async fn main() -> anyhow::Result<()> {
     // Stop watcher tasks.
     watch_concordium_handle.abort();
     watch_ethereum_handle.abort();
+    balance_query_handle.abort();
+    ethereum_balance_query_handle.abort();
     // And wait for all of them to terminate.
     let shutdown = [
         await_and_report("merkle updater", merkle_updater_handle),
