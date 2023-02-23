@@ -20,6 +20,9 @@ import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import detectCcdProvider from "src/helpers/detectCcdProvider";
 import hexToBase64 from "src/helpers/hexToBase64";
 
+/** Polling interval for CCD transactions in MS */
+const POLLING_INTEVAL = 5000;
+
 const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
     const bridgeManagerContract = {
         index: BigInt(addresses.bridgeManagerIndex),
@@ -82,15 +85,16 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             2
         );
 
+        // TODO: redundant, result can be removed.
         return { result: !!txHash, hash: txHash };
     };
 
     const withdraw = async function (
         amount: string,
         token?: Components.Schemas.TokenMapItem,
-        ethAddress?: string,
-        energy?: number
-    ): Promise<{ result: boolean; hash: string } | undefined> {
+        ethAddress?: string
+        // energy?: number
+    ): Promise<{ result: boolean; hash: string }> {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
         }
@@ -146,10 +150,25 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
     const getTransactionStatus = async (hash: string) => {
         const provider = detectCcdProvider();
+        return (await provider).getJsonRpcClient().getTransactionStatus(hash);
+    };
 
-        const tx = await (await provider).getJsonRpcClient().getTransactionStatus(hash);
+    const transactionFinalization = async (hash: string, timeout?: number) => {
+        return new Promise<boolean>((resolve, reject) => {
+            const t = timeout ? setTimeout(reject, timeout) : undefined;
+            const interval = setInterval(() => {
+                getTransactionStatus(hash)
+                    .then((tx) => {
+                        if (tx?.status === "finalized") {
+                            resolve(true);
 
-        return tx;
+                            clearInterval(interval);
+                            clearTimeout(t);
+                        }
+                    })
+                    .catch(reject);
+            }, POLLING_INTEVAL);
+        });
     };
 
     const balanceOf = async function (token: Components.Schemas.TokenMapItem): Promise<number> {
@@ -384,6 +403,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         getLatestFinalizedBlock,
         estimateWithdraw,
         estimateApprove,
+        transactionFinalization,
     };
 };
 

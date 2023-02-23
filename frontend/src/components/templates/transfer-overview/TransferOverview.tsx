@@ -1,147 +1,87 @@
 import Button from "@components/atoms/button/Button";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
-import addresses from "@config/addresses";
 import useCCDWallet from "@hooks/use-ccd-wallet";
-import usePrice from "@hooks/use-price";
 import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";
-import useGenerateContract from "src/contracts/use-generate-contract";
-import useRootManagerContract from "src/contracts/use-root-manager";
 import { noOp } from "src/helpers/basic";
+import { getPrice } from "src/helpers/price-usd";
 import { usePreSubmitStore } from "src/store/pre-submit";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
 import Text from "../../atoms/text/text";
 import { ButtonsContainer, StyledContainer, StyledProcessWrapper } from "./TransferOverview.style";
 
-type WithdrawProps = {
-    isWithdraw: true;
-    txForApproval?: Components.Schemas.WalletWithdrawTx;
+type BaseProps = {
+    /**
+     * Callback function for handling submission for specific flow.
+     * Expects route of next page to be returned, or undefined if an error happened.
+     */
+    handleSubmit(
+        token: Components.Schemas.TokenMapItem,
+        amount: string,
+        setError: (message: string) => void
+    ): Promise<string | undefined>;
 };
-
-type DepositProps = {
+type WithdrawProps = BaseProps & {
+    isWithdraw: true;
+};
+type DepositProps = BaseProps & {
     isWithdraw?: false;
+    requestGasFee(): Promise<number>;
 };
 
 type Props = WithdrawProps | DepositProps;
 
 export const TransferOverview: React.FC<Props> = (props) => {
-    const { isWithdraw = false } = props;
-    const getPrice = usePrice();
+    const { isWithdraw, handleSubmit } = props;
     const [pendingSubmission, setPendingSubmission] = useState(false);
     const [error, setError] = useState<string>();
-    const { back, replace } = useRouter();
-    const { amount, token, clear } = usePreSubmitStore();
+    const { back, replace, push } = useRouter();
+    const { amount, token: selectedToken, clear: clearPreSubmitState } = usePreSubmitStore();
     const { ccdContext } = useCCDWallet();
-    const {
-        typeToVault,
-        depositFor,
-        depositEtherFor,
-        withdraw: eth_withdraw,
-        estimateGas,
-    } = useRootManagerContract(ccdContext.account, !!ccdContext.account);
-    const { checkAllowance } = useGenerateContract(
-        token?.eth_address as string, // address or empty string because the address is undefined on first renders
-        !!token && !!amount // plus it's disabled on the first render anyway
-    );
 
+    /**
+     * Gas fee, only available for deposits (otherwise defaults to 0 and is ignored for withdrawals).
+     */
     const gasFee =
         useAsyncMemo(
             async () => {
-                if (!amount || !token) {
+                if (props.isWithdraw) {
                     return undefined;
                 }
 
-                if (!isWithdraw) {
-                    // if the token is ETH, you can estimate without allowance
-                    if (token.eth_address !== addresses.eth) {
-                        const erc20PredicateAddress = await typeToVault(); //generate predicate address
-                        // try to check the allowance of the token (else you can't estimate gas)
-                        const tx = await checkAllowance(erc20PredicateAddress);
-
-                        if (tx) {
-                            // if the tx is returned, the allowance was approved
-                            // wait for the confirmation of approve()
-                            // and estimate the gas
-                            await tx.wait(1);
-                        }
-                    }
-
-                    const gas = await estimateGas(amount, token, "deposit");
-                    return parseFloat(gas as string);
-                } else if (props.isWithdraw && props.txForApproval !== undefined) {
-                    // TODO: Get the GAS fee for approving the ETH transaction. This requires the merkle proof as well.
-                    const erc20PredicateAddress = await typeToVault(); //generate predicate address
-                    //try to check the allowance of the token (else you can't estimate gas)
-                    const tx = await checkAllowance(erc20PredicateAddress);
-                    if (tx) {
-                        //if the tx is returned, the allowance was approved
-                        tx.wait(1); //wait for the confirmation of approve()
-                        //and estimate the gas
-                    }
-
-                    // TODO: ...
-                    // const gas = await estimateGas(
-                    //     pendingTransaction.amount,
-                    //     pendingTransactionTokenQuery.token,
-                    //     type,
-                    //     merkleProof?.params,
-                    //     merkleProof?.proof
-                    // );
-                    // return parseFloat(gas as string);
-
-                    return undefined;
-                }
+                return props.requestGasFee();
             },
-            (error: any) => {
-                console.error("gas reason:", error);
-
-                // else, the user did not approve or doesn't have enought tokens and we see the error
-                if (error?.reason) {
-                    if (error?.reason.includes("EXIT_ALREADY_PROCESSED")) {
-                        sessionStorage["CCDWaitExitConfirmation"] = true; // TODO: what is this???
-                    } else {
-                        setError(error?.reason);
-                    }
-                } else {
-                    setError(error?.message);
-                }
-            },
-            [amount, token, isWithdraw]
+            (e) => setError(e.message),
+            [props.isWithdraw]
         ) ?? 0;
 
-    const { ethPrice = 0 } =
-        useAsyncMemo(
-            async () => {
-                const ethPrice = await getPrice("ETH");
-                const ccdPrice = await getPrice("CCD");
-
-                return { ethPrice, ccdPrice };
-            },
-            noOp,
-            [getPrice]
-        ) ?? {};
+    const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
 
     // Check necessary values are present from transfer page. These will not be available if this is the first page loaded in the browser.
-    if (!amount || !token) {
+    if (!amount || !selectedToken) {
         replace(isWithdraw ? routes.withdraw.path : routes.deposit.path);
     }
 
-    const submit = () => {
+    const submit = async () => {
+        if (!selectedToken || !amount || !ccdContext.account) {
+            throw new Error("Expected page dependencies to be available");
+        }
+
         setPendingSubmission(true);
 
-        // TODO: submit transaction.
+        const nextRoute = await handleSubmit(selectedToken, amount, setError);
 
-        clear();
         setPendingSubmission(false);
-    };
 
-    const cancel = () => {
-        back();
+        if (nextRoute) {
+            push(nextRoute);
+            clearPreSubmitState();
+        }
     };
 
     return (
@@ -206,32 +146,29 @@ export const TransferOverview: React.FC<Props> = (props) => {
                         </Text>
                     </StyledProcessWrapper>
 
-                    {props.isWithdraw && props.txForApproval && (
-                        <StyledProcessWrapper>
-                            <Image src={ConcordiumIcon.src} alt="Concordium Icon" height="20" width="20" />
-                            <Text
-                                fontFamily="Roboto"
-                                fontSize="11"
-                                fontWeight="light"
-                                fontColor="TitleText"
-                                fontLetterSpacing="0"
-                            >
-                                Approve withdraw:
-                            </Text>
-                            <Text
-                                fontFamily="Roboto"
-                                fontSize="11"
-                                fontWeight="bold"
-                                fontColor="TitleText"
-                                fontLetterSpacing="0"
-                            >
-                                It will be visible when signing the transaction.
-                            </Text>
-                        </StyledProcessWrapper>
-                    )}
-
                     {isWithdraw && (
                         <>
+                            <StyledProcessWrapper>
+                                <Image src={ConcordiumIcon.src} alt="Concordium Icon" height="20" width="20" />
+                                <Text
+                                    fontFamily="Roboto"
+                                    fontSize="11"
+                                    fontWeight="light"
+                                    fontColor="TitleText"
+                                    fontLetterSpacing="0"
+                                >
+                                    Approve withdraw:
+                                </Text>
+                                <Text
+                                    fontFamily="Roboto"
+                                    fontSize="11"
+                                    fontWeight="bold"
+                                    fontColor="TitleText"
+                                    fontLetterSpacing="0"
+                                >
+                                    It will be visible when signing the transaction.
+                                </Text>
+                            </StyledProcessWrapper>
                             <div style={{ marginTop: 12 }} />
                             <StyledProcessWrapper>
                                 <Image src={EthereumIcon.src} alt={`ccd icon`} height="20" width="20" />
@@ -265,7 +202,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
                     )}
                 </div>
                 <ButtonsContainer>
-                    <Button variant="secondary" onClick={cancel}>
+                    <Button variant="secondary" onClick={back}>
                         <div style={{ position: "relative" }}>
                             <Text fontSize="16" fontColor="Black" fontWeight="bold">
                                 Cancel

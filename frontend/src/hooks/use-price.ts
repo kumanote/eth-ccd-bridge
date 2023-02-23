@@ -1,5 +1,6 @@
 import axios from "axios";
 
+// TODO: remove...
 const usePrice = () => {
     const getPrice = async (token: "ETH" | "CCD"): Promise<number> => {
         if (token === "ETH") {

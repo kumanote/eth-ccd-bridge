@@ -7,14 +7,14 @@ export const routes = {
     deposit: {
         path: "/deposit",
         overview: "/deposit/overview",
-        tx: (txHash: string) => `/deposit/${txHash}`,
+        tx: (ethTxHash: string) => `/deposit/${ethTxHash}`,
     },
     withdraw: {
         path: "/withdraw",
         overview: "/withdraw/overview",
         tx: {
-            path: (txHash: string) => `/withdraw/${txHash}`,
-            approve: (txHash: string) => `/withdraw/${txHash}/approve`,
+            path: (ccdTxHash: string) => `/withdraw/${ccdTxHash}`,
+            approve: (ccdTxHash: string, ethTxHash: string) => `/withdraw/${ccdTxHash}/approve/${ethTxHash}`,
         },
     },
     history: (direction = BridgeDirection.Deposit) => `/history/${direction}`,
