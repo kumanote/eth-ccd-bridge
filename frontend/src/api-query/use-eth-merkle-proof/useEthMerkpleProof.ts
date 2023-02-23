@@ -8,7 +8,7 @@ const UPDATE_INTERVAL = 60000;
 
 interface Params extends Paths.EthMerkleProof.PathParameters {}
 
-const useEthMerkleProof = (params: Params, options?: any) => {
+const useEthMerkleProof = (params: Params) => {
     const { getClient } = useAxiosClient();
 
     return useQuery(
@@ -21,7 +21,14 @@ const useEthMerkleProof = (params: Params, options?: any) => {
             const { data } = await client?.eth_merkle_proof(params);
             return data;
         },
-        { ...options, refetchInterval: UPDATE_INTERVAL }
+        {
+            refetchInterval: (data) => {
+                if (data?.proof !== undefined) {
+                    return false;
+                }
+                return UPDATE_INTERVAL;
+            },
+        }
     );
 };
 

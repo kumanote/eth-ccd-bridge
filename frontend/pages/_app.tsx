@@ -2,11 +2,14 @@ import Layout from "@components/organisms/layout/Layout";
 import connectors from "@config/connectors";
 import useMediaQuery from "@hooks/use-media-query";
 import type { AppProps } from "next/app";
+import { useRouter } from "next/router";
 import { useMemo } from "react";
 import { QueryClient, QueryClientProvider } from "react-query";
+import { routes } from "src/constants/routes";
 import { appContext, AppContext } from "src/root/app-context";
 import WatchWithdrawals from "src/root/WatchWithdrawals";
 import GlobalStyles from "src/theme/global";
+import { QueryRouter } from "src/types/config";
 import Web3Provider from "web3-react";
 import "../styles/globals.css";
 
@@ -15,6 +18,18 @@ const queryClient = new QueryClient();
 function MyApp({ Component, pageProps }: AppProps) {
     const isTablet = useMediaQuery("(max-width: 1050px)"); // res at which cornucopia logo might touch the modal
     const isMobile = useMediaQuery("(max-width: 540px)"); // res at which the design looks a little weird
+    const {
+        pathname,
+        query: { tx },
+    } = useRouter() as QueryRouter<{ tx?: string }>;
+
+    /**
+     * Shows whether user is on withdraw progress page, in which case we should NOT watch for pending withdrawals
+     */
+    const isWithdrawProgressRoute = useMemo(
+        () => tx !== undefined && pathname === routes.withdraw.tx(tx),
+        [pathname, tx]
+    );
 
     const appContextValue: AppContext = useMemo(() => ({ isTablet, isMobile }), [isTablet, isMobile]);
 
@@ -23,7 +38,7 @@ function MyApp({ Component, pageProps }: AppProps) {
             <Web3Provider connectors={connectors} libraryName="ethers.js">
                 <GlobalStyles />
                 <QueryClientProvider client={queryClient}>
-                    <WatchWithdrawals />
+                    {isWithdrawProgressRoute || <WatchWithdrawals />}
                     <Layout>
                         <Component {...pageProps} />
                     </Layout>

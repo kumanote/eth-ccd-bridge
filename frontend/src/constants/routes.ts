@@ -12,10 +12,7 @@ export const routes = {
     withdraw: {
         path: "/withdraw",
         overview: "/withdraw/overview",
-        tx: {
-            path: (ccdTxHash: string) => `/withdraw/${ccdTxHash}`,
-            approve: (ccdTxHash: string) => `/withdraw/${ccdTxHash}/approve`,
-        },
+        tx: (ccdTxHash: string) => `/withdraw/${ccdTxHash}`,
     },
     history: (direction = BridgeDirection.Deposit) => `/history/${direction}`,
 };

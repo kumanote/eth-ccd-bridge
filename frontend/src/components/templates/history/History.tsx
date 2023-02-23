@@ -85,10 +85,14 @@ const History = ({ depositSelected }: Props) => {
         });
     }, []);
 
-    if (!context.account) {
-        replace(routes.deposit.path);
-        return null;
-    }
+    useEffect(() => {
+        // Effects only run client-side, nextJS router is only available on the client.
+        if (!context.account) {
+            replace(routes.deposit.path);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     if (!history) {
         return (
             <ContentWrapper>

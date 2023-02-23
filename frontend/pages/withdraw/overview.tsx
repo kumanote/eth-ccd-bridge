@@ -80,8 +80,7 @@ const WithdrawOverview: NextPage = () => {
             setStatus("Waiting for transaction to finalize");
             await transactionFinalization(hash); // Wait for transaction finalization, as we do in the deposit flow.
 
-            sessionStorage["CCDSameSession"] = true; // TODO: why is this needed??
-            return routes.withdraw.tx.path(hash);
+            return routes.withdraw.tx(hash);
         } catch {
             setError("Could not get transaction status for withdrawal");
         }
