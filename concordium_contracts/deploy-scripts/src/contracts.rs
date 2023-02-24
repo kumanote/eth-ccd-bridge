@@ -1,15 +1,10 @@
-use concordium_contracts_common::{Address, ModuleReference, OwnedEntrypointName, OwnedParameter};
-use concordium_rust_sdk::{
-    id,
-    types::{
-        self,
-        smart_contracts::concordium_contracts_common::{Serial, Write},
-    },
+use concordium_rust_sdk::types::smart_contracts::concordium_contracts_common::{
+    Address, ModuleReference, OwnedEntrypointName, OwnedParameter, Serial, Write,
 };
 
 #[derive(Debug)]
 pub struct CIS2BridgeableInitParams {
-    pub url: String,
+    pub url:  String,
     pub hash: Option<[u8; 32]>,
 }
 
@@ -25,7 +20,7 @@ impl Serial for CIS2BridgeableInitParams {
 #[derive(Debug)]
 pub struct BridgeGrantRoleParams {
     pub address: Address,
-    pub role: BridgeRoles,
+    pub role:    BridgeRoles,
 }
 
 impl Serial for BridgeGrantRoleParams {
@@ -56,7 +51,7 @@ impl Serial for BridgeRoles {
 #[derive(Debug)]
 pub struct CIS2BridgeableGrantRoleParams {
     pub address: Address,
-    pub role: CIS2BridgeableRoles,
+    pub role:    CIS2BridgeableRoles,
 }
 
 impl Serial for CIS2BridgeableGrantRoleParams {
@@ -85,7 +80,7 @@ impl Serial for CIS2BridgeableRoles {
 #[derive(Debug)]
 pub struct UpgradeParams {
     /// The new module reference.
-    pub module: ModuleReference,
+    pub module:  ModuleReference,
     /// Optional entrypoint to call in the new module after upgrade.
     pub migrate: Option<(OwnedEntrypointName, OwnedParameter)>,
 }
@@ -95,22 +90,5 @@ impl Serial for UpgradeParams {
         self.module.serial(out)?;
         self.migrate.serial(out)?;
         Ok(())
-    }
-}
-
-pub fn convert_account_address(
-    account: &id::types::AccountAddress,
-) -> concordium_contracts_common::AccountAddress {
-    let mut address_bytes = [0u8; 32];
-    address_bytes.copy_from_slice(account.as_ref());
-    concordium_contracts_common::AccountAddress(address_bytes)
-}
-
-pub fn convert_contract_address(
-    contract: &types::ContractAddress,
-) -> concordium_contracts_common::ContractAddress {
-    concordium_contracts_common::ContractAddress {
-        index: contract.index,
-        subindex: contract.subindex,
     }
 }

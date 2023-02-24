@@ -1,6 +1,6 @@
 {
   "bridge_manager": {
-    "index": 2194,
+    "index": 3138,
     "subindex": 0
   },
   "tokens": [
@@ -8,7 +8,7 @@
       "name": "ETH.eth",
       "token_url": "https://relayer-testnet.toni.systems/token/metadata/ETH.et",
       "contract": {
-        "index": 2195,
+        "index": 3139,
         "subindex": 0
       }
     },
@@ -16,7 +16,7 @@
       "name": "MOCK.et",
       "token_url": "https://relayer-testnet.toni.systems/token/metadata/MOCK.et",
       "contract": {
-        "index": 2196,
+        "index": 3140,
         "subindex": 0
       }
     },
@@ -24,7 +24,7 @@
       "name": "USDC.et",
       "token_url": "https://relayer-testnet.toni.systems/token/metadata/USDC.et",
       "contract": {
-        "index": 2197,
+        "index": 3141,
         "subindex": 0
       }
     }
