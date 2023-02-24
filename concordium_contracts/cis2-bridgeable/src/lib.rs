@@ -161,14 +161,20 @@ impl schema::SchemaType for BridgeableEvent {
             GRANT_ROLE_EVENT_TAG,
             (
                 "GrantRole".to_string(),
-                schema::Fields::Named(vec![(String::from("new_admin"), Address::get_type())]),
+                schema::Fields::Named(vec![
+                    (String::from("address"), Address::get_type()),
+                    (String::from("role"), Roles::get_type()),
+                ]),
             ),
         );
         event_map.insert(
             REVOKE_ROLE_EVENT_TAG,
             (
                 "RevokeRole".to_string(),
-                schema::Fields::Named(vec![(String::from("new_admin"), Address::get_type())]),
+                schema::Fields::Named(vec![
+                    (String::from("address"), Address::get_type()),
+                    (String::from("role"), Roles::get_type()),
+                ]),
             ),
         );
         event_map.insert(
@@ -328,10 +334,20 @@ impl From<CustomContractError> for ContractError {
     }
 }
 
-#[derive(Serialize, PartialEq, Eq, Reject, SchemaType, Clone, Copy)]
+#[derive(Serialize, PartialEq, Eq, Reject, Clone, Copy)]
 pub enum Roles {
     Admin,
     Manager,
+}
+
+/// Manual implementation of the `Roles` schema.
+impl schema::SchemaType for Roles {
+    fn get_type() -> schema::Type {
+        schema::Type::Enum(vec![
+            ("Admin".to_string(), schema::Fields::None),
+            ("Manager".to_string(), schema::Fields::None),
+        ])
+    }
 }
 
 impl<S: HasStateApi> State<S> {
@@ -534,6 +550,7 @@ struct SetMetadataUrlParams {
 #[init(
     contract = "cis2-bridgeable",
     parameter = "SetMetadataUrlParams",
+    event = "BridgeableEvent",
     enable_logger,
     crypto_primitives
 )]
@@ -1611,8 +1628,7 @@ mod tests {
         // Testing the `viewRoles` function
         let roles_result = contract_view_roles(&ctx, &mut host);
 
-        let roles =
-            roles_result.expect_report("Calling contract_view_roles expected to succeed");
+        let roles = roles_result.expect_report("Calling contract_view_roles expected to succeed");
 
         // Check the roles_result
         claim_eq!(
