@@ -19,12 +19,17 @@ import { useRouter } from "next/router";
 import { routes } from "src/constants/routes";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+
+type Status = {
+    message: string;
+    isError: boolean;
+};
 
 enum TransferStep {
-    Added = 1,
-    Pending = 2,
-    Processed = 3,
+    Added,
+    Pending,
+    Processed,
     Failed = -1,
 }
 
@@ -41,7 +46,11 @@ type BaseProps = {
 
 type WithdrawProps = BaseProps & {
     isWithdraw: true;
-    canWithdraw: boolean;
+    canWithdraw?: boolean;
+    onRequestApproval(
+        setError: (message: string) => void,
+        setStatus: (message: string | undefined) => void
+    ): Promise<void>;
 };
 type DepositProps = BaseProps & {
     isWithdraw?: false;
@@ -52,16 +61,27 @@ type Props = WithdrawProps | DepositProps;
 export const TransferProgress: React.FC<Props> = (props) => {
     const { transferStatus, isWithdraw } = props;
     const { push } = useRouter();
+    const [status, setStatus] = useState<Status | undefined>();
     const { token, amount, clear: clearFlowStore } = useTransactionFlowStore();
     const step = useMemo(() => transferStepMap[transferStatus ?? "missing"], [transferStatus]);
+
+    const setError = (message: string) => setStatus({ isError: true, message });
+    const setInfo = (message: string | undefined) =>
+        setStatus(message !== undefined ? { isError: false, message } : undefined);
 
     if (!token || !amount) {
         throw new Error("Expected dependencies to be available");
     }
 
-    const continueHandler = () => {
-        push({ pathname: routes.deposit.path, query: { reset: true } });
-        clearFlowStore();
+    const continueHandler = async () => {
+        if (props.isWithdraw && props.canWithdraw) {
+            setStatus(undefined);
+
+            await props.onRequestApproval(setError, setInfo);
+        } else {
+            push({ pathname: routes.deposit.path, query: { reset: true } });
+            clearFlowStore();
+        }
     };
 
     return (
@@ -83,7 +103,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                         <StyledProcessWrapper>
                             <StyledHorizontalLine />
                             <StyledCircleWrapper index={1}>
-                                <StyledCircle completed={step > 0} />
+                                <StyledCircle completed={step === 0} />
                                 <Text
                                     fontFamily="Roboto"
                                     fontSize="13"
@@ -96,7 +116,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             </StyledCircleWrapper>
 
                             <StyledCircleWrapper index={2}>
-                                <StyledCircle completed={step > 1} />
+                                <StyledCircle completed={step > 0} />
                                 <Text
                                     fontFamily="Roboto"
                                     fontSize="13"
@@ -109,7 +129,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             </StyledCircleWrapper>
 
                             <StyledCircleWrapper index={3}>
-                                <StyledCircle completed={step > 2} />
+                                <StyledCircle completed={step > 1} />
                                 <Text
                                     fontFamily="Roboto"
                                     fontSize="13"
@@ -130,7 +150,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             </Text>
                         </TransferAmountWrapper>
                     </div>
-                    <InfoContainer processed={step > 2}>
+                    <InfoContainer processed={step > 1}>
                         <Image src={Hourglass.src} width={16.56} height={26.14} alt="Hourglass image" />
                         <Text
                             fontFamily="Roboto"
@@ -140,12 +160,12 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             fontLetterSpacing="0"
                         >
                             {props.isWithdraw
-                                ? step > 2
+                                ? step > 1
                                     ? "Withdraw Processed!"
                                     : props.canWithdraw
                                     ? "Your withdraw will be ready very soon."
                                     : "Your withdraw is in progress. Please come back later."
-                                : step > 2
+                                : step > 1
                                 ? "Deposit Processed!"
                                 : "Your deposit is in progress."}
                         </Text>
@@ -156,15 +176,18 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {props.isWithdraw
-                                ? step > 2
-                                    ? "You can now see it in your transaction history!"
-                                    : props.canWithdraw
-                                    ? ""
-                                    : "When returning to the bridge, you will be prompted to finish the withdraw."
-                                : step > 2
-                                ? "You can now see your finished transaction in History!"
-                                : "After the transaction is processed you can also check it in your transaction history."}
+                            <>
+                                {status !== undefined && status}
+                                {status === undefined && props.isWithdraw
+                                    ? step > 1
+                                        ? "You can now see it in your transaction history!"
+                                        : props.canWithdraw
+                                        ? ""
+                                        : "When returning to the bridge, you can fininsh the withdraw from the transaction history."
+                                    : step > 1
+                                    ? "You can now see your finished transaction in History!"
+                                    : "After the transaction is processed you can also check it in your transaction history."}
+                            </>
                         </Text>
                     </InfoContainer>
                     <StyledButtonContainer>

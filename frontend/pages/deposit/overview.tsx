@@ -3,23 +3,18 @@ import TransferOverview from "@components/templates/transfer-overview";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { ContractTransaction } from "ethers";
 import addresses from "@config/addresses";
-import useCCDWallet from "@hooks/use-ccd-wallet";
 import useRootManagerContract from "src/contracts/use-root-manager";
 import { routes } from "src/constants/routes";
 import useGenerateContract from "src/contracts/use-generate-contract";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
 
 const WithdrawOverview: NextPage = () => {
-    const { ccdContext } = useCCDWallet();
     const { amount, token: selectedToken } = useTransactionFlowStore();
     const { checkAllowance } = useGenerateContract(
         selectedToken?.eth_address as string, // address or empty string because the address is undefined on first renders
         !!selectedToken && !!amount // plus it's disabled on the first render anyway
     );
-    const { typeToVault, depositFor, depositEtherFor, estimateGas } = useRootManagerContract(
-        ccdContext.account,
-        !!ccdContext.account
-    );
+    const { typeToVault, depositFor, depositEtherFor, estimateGas } = useRootManagerContract();
 
     /**
      * Gets the gas fee required to make the deposit.

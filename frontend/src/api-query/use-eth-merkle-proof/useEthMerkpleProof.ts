@@ -8,7 +8,7 @@ const UPDATE_INTERVAL = 60000;
 
 interface Params extends Paths.EthMerkleProof.PathParameters {}
 
-const useEthMerkleProof = (params: Params) => {
+const useEthMerkleProof = (params: Partial<Params>) => {
     const { getClient } = useAxiosClient();
 
     return useQuery(
@@ -17,11 +17,14 @@ const useEthMerkleProof = (params: Params) => {
             const client = await getClient();
 
             if (!client) throw new Error("Client not initialized.");
+            if (params.event_id === undefined || params.tx_hash === undefined)
+                throw new Error("Should not be enabled with partial params");
 
-            const { data } = await client?.eth_merkle_proof(params);
+            const { data } = await client?.eth_merkle_proof(params as Params);
             return data;
         },
         {
+            enabled: params.tx_hash !== undefined && params.event_id !== undefined,
             refetchInterval: (data) => {
                 if (data?.proof !== undefined) {
                     return false;

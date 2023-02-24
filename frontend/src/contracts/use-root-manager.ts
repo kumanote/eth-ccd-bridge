@@ -1,14 +1,19 @@
-import { BigNumber, ContractFunction, ContractTransaction, ethers } from "ethers";
+import { BigNumber, ContractTransaction, ethers } from "ethers";
 import { toWei } from "../helpers/number";
 import useWallet from "../hooks/use-wallet";
 import ROOTMANAGER_ABI from "./abis/ROOTMANAGER_ABI.json";
 import bs58check from "bs58check";
 import addresses from "@config/addresses";
 import { Components } from "src/api-query/__generated__/AxiosClient";
+import useCCDWallet from "@hooks/use-ccd-wallet";
 
-const useRootManagerContract = (ccdAccount: string | null, enabled: boolean) => {
+const useRootManagerContract = () => {
     const { context } = useWallet();
+    const {
+        ccdContext: { account: ccdAccount },
+    } = useCCDWallet();
 
+    const enabled = !!ccdAccount;
     const ccdUser = enabled
         ? "0x" + Buffer.from(Uint8Array.prototype.slice.call(bs58check.decode(ccdAccount || ""), 1)).toString("hex")
         : "";

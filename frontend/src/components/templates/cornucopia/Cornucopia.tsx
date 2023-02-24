@@ -86,13 +86,7 @@ const Cornucopia = () => {
         hasApprove,
         estimateApprove,
     } = useCCDContract(ccdContext.account, !!ccdContext.account);
-    const {
-        typeToVault,
-        depositFor,
-        depositEtherFor,
-        withdraw: eth_withdraw,
-        estimateGas,
-    } = useRootManagerContract(ccdContext.account, !!ccdContext.account);
+    const { typeToVault, depositFor, depositEtherFor, withdraw: eth_withdraw, estimateGas } = useRootManagerContract();
     const { checkAllowance } = useGenerateContract(
         selectedToken?.eth_address as string, // address or empty string because the address is undefined on first renders
         !!selectedToken && !!amount // plus it's disabled on the first render anyway
@@ -108,16 +102,10 @@ const Cornucopia = () => {
             refetchInterval: 1000,
         }
     );
-    const { data: merkleProof } = useEthMerkleProof(
-        {
-            event_id: eventId || 0,
-            tx_hash: ccdWithdrawTxHash || "",
-        },
-        {
-            enabled: !!eventId && !!ccdWithdrawTxHash,
-            refetchInterval: 1000 * 60,
-        }
-    );
+    const { data: merkleProof } = useEthMerkleProof({
+        event_id: eventId || 0,
+        tx_hash: ccdWithdrawTxHash || "",
+    });
     const { data: pendingTransactions } = usePendingTransactions(
         { wallet: context?.account || "" },
         { enabled: !!context.account && !ccdWithdrawTxHash } // stop the query if you have a tx hash, so an ongoing transaction won't come in the pending array
