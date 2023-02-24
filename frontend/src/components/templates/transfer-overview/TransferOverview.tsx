@@ -4,7 +4,7 @@ import useCCDWallet from "@hooks/use-ccd-wallet";
 import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";
 import { noOp } from "src/helpers/basic";
@@ -75,9 +75,15 @@ export const TransferOverview: React.FC<Props> = (props) => {
     const setError = (message: string) => setStatus({ isError: true, message });
     const setInfo = (message: string) => setStatus({ isError: false, message });
 
+    useEffect(() => {
+        if (!amount || !selectedToken) {
+            replace(isWithdraw ? routes.withdraw.path : routes.deposit.path);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Check necessary values are present from transfer page. These will not be available if this is the first page loaded in the browser.
     if (!amount || !selectedToken) {
-        replace(isWithdraw ? routes.withdraw.path : routes.deposit.path);
         return null;
     }
 

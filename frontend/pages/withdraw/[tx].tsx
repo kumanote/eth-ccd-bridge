@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import { QueryRouter } from "src/types/config";
 import { routes } from "src/constants/routes";
 import useWatchWithdraw from "src/api-query/use-watch-withdraw/useWatchWithdraw";
+import { useEffect } from "react";
 
 /** Interval in ms for how often to query for deposit status */
 const QUERY_INTERVAL = 10000;
@@ -22,10 +23,12 @@ const WithdrawTransactionStatus: NextPage = () => {
         refetchInterval: QUERY_INTERVAL,
     });
 
-    if (tx === undefined) {
-        replace(routes.deposit.path);
-        return null;
-    }
+    useEffect(() => {
+        if (tx === undefined) {
+            replace(routes.deposit.path);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return <TransferProgress transferStatus={data?.status} />;
 };
