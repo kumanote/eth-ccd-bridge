@@ -401,17 +401,8 @@ impl From<bool> for HasRoleQueryResponse {
     }
 }
 
-/// Tag for the BridgeManager TokenMap event.
-pub const TOKEN_MAP_EVENT_TAG: u8 = 0;
-/// Tag for the BridgeManager Deposit event.
-pub const DEPOSIT_EVENT_TAG: u8 = 1;
-/// Tag for the BridgeManager Withdraw event.
-pub const WITHDRAW_EVENT_TAG: u8 = 2;
-pub const GRANT_ROLE_EVENT_TAG: u8 = 3;
-pub const REVOKE_ROLE_EVENT_TAG: u8 = 4;
-
 /// Tagged event to be serialized for the event log.
-#[derive(SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub enum BridgeEvent {
     // TokenMapEvent
     TokenMap(TokenMapEvent),
@@ -419,47 +410,6 @@ pub enum BridgeEvent {
     Withdraw(WithdrawEvent),
     GrantRole(GrantRoleEvent),
     RevokeRole(RevokeRoleEvent),
-}
-
-impl Serial for BridgeEvent {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            BridgeEvent::TokenMap(event) => {
-                out.write_u8(TOKEN_MAP_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::Deposit(event) => {
-                out.write_u8(DEPOSIT_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::Withdraw(event) => {
-                out.write_u8(WITHDRAW_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::GrantRole(event) => {
-                out.write_u8(GRANT_ROLE_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::RevokeRole(event) => {
-                out.write_u8(REVOKE_ROLE_EVENT_TAG)?;
-                event.serial(out)
-            }
-        }
-    }
-}
-
-impl Deserial for BridgeEvent {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let tag = source.read_u8()?;
-        match tag {
-            TOKEN_MAP_EVENT_TAG => TokenMapEvent::deserial(source).map(BridgeEvent::TokenMap),
-            DEPOSIT_EVENT_TAG => DepositEvent::deserial(source).map(BridgeEvent::Deposit),
-            WITHDRAW_EVENT_TAG => WithdrawEvent::deserial(source).map(BridgeEvent::Withdraw),
-            GRANT_ROLE_EVENT_TAG => GrantRoleEvent::deserial(source).map(BridgeEvent::GrantRole),
-            REVOKE_ROLE_EVENT_TAG => RevokeRoleEvent::deserial(source).map(BridgeEvent::RevokeRole),
-            _ => Err(ParseError::default()),
-        }
-    }
 }
 
 #[derive(Serialize, SchemaType)]
