@@ -655,11 +655,11 @@ pub async fn concordium_tx_sender(
         }
         Err(e) => {
             if e.is_duplicate() {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!("Transaction {hash} already exists at the node.");
                 Ok(false)
             } else if e.is_invalid_argument() {
-                metrics.errors_counter.inc();
+                metrics.errors_total.inc();
                 log::error!(
                     "Transaction {hash} is not valid for the current state of the node: {e:#}. \
                      Aborting."
@@ -669,7 +669,7 @@ pub async fn concordium_tx_sender(
                      Aborting.",
                 )
             } else {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!("Sending transaction to Concordium failed due to {e:#}. Will retry.");
                 Ok(true)
             }
@@ -697,7 +697,7 @@ pub async fn concordium_tx_sender(
                     break 'outer;
                 }
                 let delay = std::time::Duration::from_secs(5 << i);
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!(
                     "Waiting for {} seconds before resubmitting {hash}.",
                     delay.as_secs()

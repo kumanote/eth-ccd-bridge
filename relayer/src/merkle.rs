@@ -433,7 +433,7 @@ where
                     let (r, new_size) = add_withdraw_event(&leaves, event_index, merkle_hash)?;
                     metrics.merkle_tree_size.set(new_size as i64);
                     if r.is_some() {
-                        metrics.warnings_counter.inc();
+                        metrics.warnings_total.inc();
                         log::warn!(
                             "Duplicate event index {event_index} added to the withdraw events."
                         );
@@ -448,7 +448,7 @@ where
                 let (r, new_size) = remove_withdraw_event(&leaves, original_event_index)?;
                 metrics.merkle_tree_size.set(new_size as i64);
                 if r.is_none() {
-                    metrics.errors_counter.inc();
+                    metrics.errors_total.inc();
                     log::error!(
                         "An event {original_event_index} marked as withdrawn, but was not known."
                     );
@@ -518,7 +518,7 @@ where
     {
         match e {
             EthereumSenderError::Retryable(e) => {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!(
                     "An error occurred when trying to send transactions to Ethereum or query the \
                      sent transaciton. Will attempt again in 10s: {e}"
@@ -528,7 +528,7 @@ where
                 tokio::time::sleep(delay).await;
             }
             EthereumSenderError::InternalABI(e) => {
-                metrics.errors_counter.inc();
+                metrics.errors_total.inc();
                 log::error!(
                     "Unable to parse responses from Ethereum. This indicates a configuration \
                      error: {e:#}"
@@ -536,7 +536,7 @@ where
                 return Err(e.into());
             }
             EthereumSenderError::Internal(e) => {
-                metrics.errors_counter.inc();
+                metrics.errors_total.inc();
                 log::error!(
                     "An unrecoverable error occurred when sending transactions to Ethereum: {e:#}."
                 );
@@ -683,7 +683,7 @@ where
             if elapsed > client.escalate_interval {
                 return Ok(WaitPendingResult::Escalate);
             } else if elapsed > client.warn_duration {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!(
                     "More than {}s elapsed waiting for {pending_hash:#x} to be confirmed.",
                     elapsed.as_secs()
@@ -731,7 +731,7 @@ where
                 }
                 log::info!("Withdrawal transaction confirmed in block number {bn}.");
                 if !found {
-                    metrics.errors_counter.inc();
+                    metrics.errors_total.inc();
                     log::error!(
                         "A transaction with hash {pending_hash:#x} did not set a Merkle root. \
                          This means it failed."
@@ -767,7 +767,7 @@ where
                     .set(chrono::Utc::now().timestamp());
                 // Wait until the database operation completes.
                 if receiver.await.is_err() {
-                    metrics.warnings_counter.inc();
+                    metrics.warnings_total.inc();
                     log::warn!("The database has been shut down. Stopping the transaction sender.");
                     return Ok(WaitPendingResult::Stop);
                 }
@@ -850,7 +850,7 @@ where
             current_gas_price,
         );
         if new_gas_price > client.max_gas_price {
-            metrics.warnings_counter.inc();
+            metrics.warnings_total.inc();
             log::warn!(
                 "Escalating would lead to transaction price that is too high {new_gas_price} > \
                  {}. Waiting for next iteration.",
@@ -894,7 +894,7 @@ where
                 max_gas_price,
                 current_gas_price,
             } => {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!(
                     "Ethereum transaction price is too high {current_gas_price} > \
                      {max_gas_price}. Waiting for next iteration."
@@ -926,7 +926,7 @@ where
     let raw_tx = match receiver.await {
         Ok(x) => x,
         Err(_) => {
-            metrics.warnings_counter.inc();
+            metrics.warnings_total.inc();
             log::warn!("The database has been shut down. Stopping the transaction sender.");
             return Ok(true);
         }

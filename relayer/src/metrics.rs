@@ -5,20 +5,20 @@ use prometheus::{
 
 #[derive(Clone)]
 pub struct Metrics {
-    pub(crate) merkle_tree_size:             IntGauge,
-    pub warnings_counter:                    IntCounter,
-    pub(crate) errors_counter:               IntCounter,
-    pub(crate) num_deposits:                 IntCounter,
-    pub(crate) num_completed_deposits:       IntCounter,
-    pub(crate) num_withdrawals:              IntCounter,
-    pub(crate) num_completed_withdrawals:    IntCounter,
-    pub(crate) concordium_height:            IntGauge,
-    pub(crate) ethereum_height:              IntGauge,
+    pub(crate) merkle_tree_size: IntGauge,
+    pub warnings_total: IntCounter,
+    pub(crate) errors_total: IntCounter,
+    pub(crate) num_deposits: IntCounter,
+    pub(crate) num_completed_deposits: IntCounter,
+    pub(crate) num_withdrawals: IntCounter,
+    pub(crate) num_completed_withdrawals: IntCounter,
+    pub(crate) concordium_height: IntGauge,
+    pub(crate) ethereum_height: IntGauge,
     pub(crate) sent_concordium_transactions: IntCounter,
-    pub(crate) sent_ethereum_transactions:   IntCounter,
-    pub(crate) time_last_merkle_root:        IntGauge,
-    pub concordium_balance:                  GenericGauge<AtomicU64>,
-    pub ethereum_balance:                    GenericGauge<AtomicU64>,
+    pub(crate) sent_ethereum_transactions: IntCounter,
+    pub(crate) time_last_merkle_root: IntGauge,
+    pub concordium_balance: GenericGauge<AtomicU64>,
+    pub ethereum_balance: GenericGauge<AtomicU64>,
 }
 
 impl Metrics {
@@ -31,15 +31,15 @@ impl Metrics {
         )?;
         registry.register(Box::new(merkle_tree_size.clone()))?;
 
-        let warnings_counter = IntCounter::new(
+        let warnings_total = IntCounter::new(
             "warnings_counter",
             "Number of warnings emitted since start.",
         )?;
-        registry.register(Box::new(warnings_counter.clone()))?;
+        registry.register(Box::new(warnings_total.clone()))?;
 
-        let errors_counter =
-            IntCounter::new("errors_counter", "Number of errors emitted since start.")?;
-        registry.register(Box::new(errors_counter.clone()))?;
+        let errors_total =
+            IntCounter::new("errors_total", "Number of errors emitted since start.")?;
+        registry.register(Box::new(errors_total.clone()))?;
 
         let num_deposits =
             IntCounter::new("num_deposits", "Number deposits detected since start.")?;
@@ -105,8 +105,8 @@ impl Metrics {
 
         Ok((registry, Self {
             merkle_tree_size,
-            warnings_counter,
-            errors_counter,
+            warnings_total,
+            errors_total,
             num_deposits,
             num_withdrawals,
             num_completed_withdrawals,
