@@ -205,7 +205,7 @@ describe('RootChainManager', () => {
         tokenId: 0
       }
       // start exit
-      await expectRevert(contracts.rootChainManager.connect(depositReceiver).withdraw(params, merkletree.getHexProof(withdrawTxHash)), 'Transaction proof is not live on mainnet')
+      await expectRevert(contracts.rootChainManager.connect(depositReceiver).withdraw(params, merkletree.getHexProof(withdrawTxHash)), 'RootChainManager: transaction proof verification failed')
     })
 
     it('Should fail: withdraw with a fake amount data in receipt', async () => {
@@ -222,7 +222,7 @@ describe('RootChainManager', () => {
         tokenId: 0
       }
       // start exit
-      await expectRevert(contracts.rootChainManager.connect(depositReceiver).withdraw(params, merkletree.getHexProof(withdrawTxHash)), 'Transaction proof is not live on mainnet')
+      await expectRevert(contracts.rootChainManager.connect(depositReceiver).withdraw(params, merkletree.getHexProof(withdrawTxHash)), 'RootChainManager: transaction proof verification failed')
     })
 
     describe('ERC20 WITHDRAW', () => {
@@ -234,7 +234,7 @@ describe('RootChainManager', () => {
       })
 
       it('Should fail: start exit again', async () => {
-        await expectRevert(contracts.rootChainManager.connect(depositReceiver).withdraw(withdrawTxs[0], merkletree.getHexProof(withdrawTxHash)), 'RootChainManager: EXIT_ALREADY_PROCESSED')
+        await expectRevert(contracts.rootChainManager.connect(depositReceiver).withdraw(withdrawTxs[0], merkletree.getHexProof(withdrawTxHash)), 'RootChainManager: exit already processed')
       })
 
       it('Should emit Transfer log in exit tx', () => {
@@ -271,7 +271,7 @@ describe('RootChainManager', () => {
       })
 
       it('Should fail: start exit again', async () => {
-        await expectRevert(contracts.rootChainManager.connect(depositReceiverEth).withdraw(withdrawTxs[1], merkletree.getHexProof(encode(withdrawTxs[1]))), 'RootChainManager: EXIT_ALREADY_PROCESSED')
+        await expectRevert(contracts.rootChainManager.connect(depositReceiverEth).withdraw(withdrawTxs[1], merkletree.getHexProof(encode(withdrawTxs[1]))), 'RootChainManager: exit already processed')
       })
 
       it('Should emit WithdrawEvent log in exit tx', () => {
@@ -321,7 +321,7 @@ describe('RootChainManager', () => {
           {
             value: withdrawFee.div(2)
           }),
-        'Not enough ether for withdraw fee')
+        'RootChainManager: ETH send needs to be at least withdrawFee')
       })
       it('transaction should work', async () => {
         await contracts.rootChainManager.withdraw(
@@ -348,7 +348,7 @@ describe('RootChainManager', () => {
           {
             value: withdrawFee
           }
-        ), 'RootChainManager: TOKEN_NOT_MAPPED')
+        ), 'RootChainManager: token not mapped')
       })
     })
   })
