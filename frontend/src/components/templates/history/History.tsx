@@ -39,7 +39,6 @@ const History = ({ depositSelected }: Props) => {
     const isMobile = useMediaQuery("(max-width: 540px)");
     const { push } = useRouter();
 
-    const [open, setOpen] = useState<number | undefined>();
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const getTransactionToken = useGetTransactionToken();
 
@@ -58,18 +57,6 @@ const History = ({ depositSelected }: Props) => {
 
     const linkClick: MouseEventHandler = (e) => {
         e.stopPropagation();
-    };
-
-    const rowClickHandler = (transaction: Components.Schemas.WalletTx, index: number) => {
-        if (!isMobile) {
-            goToProgress(transaction);
-            return;
-        }
-        if (open === index) {
-            setOpen(undefined);
-        } else {
-            setOpen(index);
-        }
     };
 
     useEffect(() => {
@@ -157,7 +144,6 @@ const History = ({ depositSelected }: Props) => {
                             </thead>
                             <tbody>
                                 {history.map((transaction, index) => {
-                                    const isOpen = open === index;
                                     const tokenReponse = getTransactionToken(transaction);
 
                                     if (tokenReponse.status !== "success" || tokenReponse.token === undefined) {
@@ -177,49 +163,22 @@ const History = ({ depositSelected }: Props) => {
                                         return (
                                             <TableRow
                                                 key={transaction.Deposit.origin_tx_hash}
-                                                onClick={() => rowClickHandler(transaction, index)}
+                                                onClick={() => goToProgress(transaction)}
                                             >
                                                 <TableData>
-                                                    {isMobile && <InfoArrow isOpen={isOpen} />}
                                                     <Text fontSize="10" fontWeight="light">
                                                         Ethereum
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="11" fontColor="Black" fontWeight="bold">
-                                                            ETH TX:
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
                                                         Concordium
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="10" fontWeight="light">
-                                                            {transaction.Deposit.origin_tx_hash ? (
-                                                                <a
-                                                                    href={`https://goerli.etherscan.io/tx/${transaction.Deposit.origin_tx_hash}`}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    onClick={linkClick}
-                                                                >
-                                                                    {parseTxHash(transaction.Deposit.origin_tx_hash)}
-                                                                </a>
-                                                            ) : (
-                                                                "Processing..."
-                                                            )}
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
                                                         {`${parsedAmount} ${tokenReponse.token.eth_name}`}
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="11" fontColor="Black" fontWeight="bold">
-                                                            CCD TX:
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 {!isMobile && (
                                                     <>
@@ -265,22 +224,6 @@ const History = ({ depositSelected }: Props) => {
                                                     <Text fontSize="10" fontWeight="light">
                                                         {moment(transaction.Deposit.timestamp * 1000).fromNow()}
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="10" fontWeight="light">
-                                                            {transaction.Deposit.tx_hash ? (
-                                                                <a
-                                                                    href={transactionUrl(transaction.Deposit.tx_hash)}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    onClick={linkClick}
-                                                                >
-                                                                    {parseTxHash(transaction.Deposit.tx_hash)}
-                                                                </a>
-                                                            ) : (
-                                                                "Processing..."
-                                                            )}
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 <TableData>
                                                     <Text
@@ -304,51 +247,22 @@ const History = ({ depositSelected }: Props) => {
                                         return (
                                             <TableRow
                                                 key={transaction.Withdraw.origin_tx_hash}
-                                                onClick={() => rowClickHandler(transaction, index)}
+                                                onClick={() => goToProgress(transaction)}
                                             >
                                                 <TableData>
-                                                    {isMobile && <InfoArrow isOpen={isOpen} />}
                                                     <Text fontSize="10" fontWeight="light">
                                                         Concordium
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="11" fontColor="Black" fontWeight="bold">
-                                                            CCD TX:
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
                                                         Ethereum
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="10" fontWeight="light">
-                                                            {transaction.Withdraw.origin_tx_hash ? (
-                                                                <a
-                                                                    href={transactionUrl(
-                                                                        transaction.Withdraw.origin_tx_hash
-                                                                    )}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    onClick={linkClick}
-                                                                >
-                                                                    {parseTxHash(transaction.Withdraw.origin_tx_hash)}
-                                                                </a>
-                                                            ) : (
-                                                                "Processing..."
-                                                            )}
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
                                                         {`${parsedAmount} ${tokenReponse.token.ccd_name}`}
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="11" fontColor="Black" fontWeight="bold">
-                                                            ETH TX:
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 {!isMobile && (
                                                     <>
@@ -400,22 +314,6 @@ const History = ({ depositSelected }: Props) => {
                                                     <Text fontSize="10" fontWeight="light">
                                                         {moment(transaction.Withdraw.timestamp * 1000).fromNow()}
                                                     </Text>
-                                                    {isMobile && isOpen && (
-                                                        <Text fontSize="10" fontWeight="light">
-                                                            {transaction.Withdraw.tx_hash ? (
-                                                                <a
-                                                                    href={`https://goerli.etherscan.io/tx/${transaction.Withdraw.tx_hash}`}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    onClick={linkClick}
-                                                                >
-                                                                    {parseTxHash(transaction.Withdraw.tx_hash)}
-                                                                </a>
-                                                            ) : (
-                                                                "Processing..."
-                                                            )}
-                                                        </Text>
-                                                    )}
                                                 </TableData>
                                                 <TableData>
                                                     <Text

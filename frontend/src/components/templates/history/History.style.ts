@@ -7,9 +7,6 @@ export const ContentWrapper = styled(PageWrapper)``;
 
 export const HistoryWrapper = styled(Container)`
     overflow: hidden;
-    @media only screen and (max-width: 540px) {
-        width: 100%;
-    }
 `;
 
 export const TableTitle = styled.div`
@@ -23,7 +20,7 @@ export const TableTitle = styled.div`
 
 export const TableWrapper = styled.div`
     width: 100%;
-    height: calc(100% - 80px);
+    height: calc(100% - 100px);
     padding: 24px 20px 28px;
     overflow-y: auto;
     background-color: #d9d4ce;

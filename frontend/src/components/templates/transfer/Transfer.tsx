@@ -299,7 +299,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                         <StyledButtonShine src={ButtonShine.src} />
                     </div>
                 </Button>
-                {isTablet && <Logo logo="ccd" isTablet={isTablet} />}
             </StyledContainer>
             {context?.account && (
                 <Link href={routes.history()} passHref legacyBehavior>

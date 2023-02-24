@@ -346,7 +346,6 @@ const Transfer: React.FC<Props> = ({
                         <StyledButtonShine src={ButtonShine.src} />
                     </div>
                 </Button>
-                {isTablet && <Logo logo="ccd" isTablet={isTablet} />}
             </StyledContainer>
             {context?.account && (
                 <LinkWrapper>
