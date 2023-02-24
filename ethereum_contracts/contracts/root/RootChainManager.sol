@@ -19,7 +19,7 @@ contract RootChainManager is
      * @notice Disable direct eth transfers
      */
     receive() external payable {
-        require(false, "ETH direct transfer are disabled");
+        require(false, "RootChainManager: no direct ETH deposits");
     }
 
     function initialize(address _owner) external initializer {
@@ -30,7 +30,7 @@ contract RootChainManager is
     }
 
     modifier isNotPaused() {
-        require(!paused, "RootChainManager: Bridge is paused");
+        require(!paused, "RootChainManager: bridge is paused");
         _;
     }
 
@@ -44,7 +44,7 @@ contract RootChainManager is
     {
         require(
             newTreasurer != address(0),
-            "RootChainManager: valid address required"
+            "RootChainManager: treasurer can not be address(0)"
         );
         treasurer = newTreasurer;
     }
@@ -73,7 +73,7 @@ contract RootChainManager is
     {
         require(
             newStateSender != address(0),
-            "RootChainManager: BAD_NEW_STATE_SENDER"
+            "RootChainManager: stateSender can not be address(0)"
         );
         _stateSender = IStateSender(newStateSender);
     }
@@ -132,7 +132,7 @@ contract RootChainManager is
         require(
             rootToChildToken[rootToken].index == 0 &&
                 childToRootToken[childToken] == address(0),
-            "RootChainManager: ALREADY_MAPPED"
+            "RootChainManager: already mapped"
         );
         _mapToken(
             rootToken,
@@ -225,7 +225,7 @@ contract RootChainManager is
     ) private {
         require(
             typeToVault[tokenType] != address(0x0),
-            "RootChainManager: TOKEN_TYPE_NOT_SUPPORTED"
+            "RootChainManager: not supported token type"
         );
         rootToChildToken[rootToken] = CCDAddress({
             index: childTokenIndex,
@@ -255,8 +255,8 @@ contract RootChainManager is
         isNotPaused
     {
         require(
-            msg.value > depositFee,
-            "Not enough ether to deposit after paying the fee"
+            msg.value >= depositFee,
+            "RootChainManager: ETH send needs to be at least depositFee"
         );
         if (depositFee > 0) {
             _sendFee(depositFee);
@@ -281,9 +281,9 @@ contract RootChainManager is
     ) external payable override isNotPaused {
         require(
             rootToken != ETHER_ADDRESS,
-            "RootChainManager: INVALID_ROOT_TOKEN"
+            "RootChainManager: invalid root token"
         );
-        require(msg.value >= depositFee, "Not enough ether for deposit fee");
+        require(msg.value >= depositFee, "RootChainManager: ETH send needs to be at least depositFee");
         if (depositFee > 0) {
             _sendFee(depositFee);
         }
@@ -313,14 +313,14 @@ contract RootChainManager is
         bytes32 tokenType = tokenToType[rootToken];
         require(
             rootToChildToken[rootToken].index != 0 && tokenType != 0,
-            "RootChainManager: TOKEN_NOT_MAPPED"
+            "RootChainManager: token not mapped"
         );
         address vaultAddress = typeToVault[tokenType];
         require(
             vaultAddress != address(0),
-            "RootChainManager: INVALID_TOKEN_TYPE"
+            "RootChainManager: invalid token type"
         );
-        require(user != address(0), "RootChainManager: INVALID_USER");
+        require(user != address(0), "RootChainManager: invalid user");
         ITokenVault(vaultAddress).lockTokens(
             _msgSender(),
             user,
@@ -345,7 +345,7 @@ contract RootChainManager is
         WithdrawParams calldata withdrawParam,
         bytes32[] calldata proof
     ) external payable override isNotPaused {
-        require(msg.value >= withdrawFee, "Not enough ether for withdraw fee");
+        require(msg.value >= withdrawFee, "RootChainManager: ETH send needs to be at least withdrawFee");
         if (withdrawFee > 0) {
             _sendFee(withdrawFee);
         }
@@ -363,13 +363,13 @@ contract RootChainManager is
         );
         require(
             processedExits[exitHash] == false,
-            "RootChainManager: EXIT_ALREADY_PROCESSED"
+            "RootChainManager: exit already processed"
         );
 
         require(
             MerkleProof.verify(proof, merkleRoot, exitHash) ||
                 MerkleProof.verify(proof, previousMerkleRoot, exitHash),
-            "Transaction proof is not live on mainnet"
+            "RootChainManager: transaction proof verification failed"
         );
         processedExits[exitHash] = true;
         // log should be emmited only by the child token
@@ -378,7 +378,7 @@ contract RootChainManager is
             withdrawParam.ccdSubIndex
         );
         address rootToken = childToRootToken[childKey];
-        require(rootToken != address(0), "RootChainManager: TOKEN_NOT_MAPPED");
+        require(rootToken != address(0), "RootChainManager: token not mapped");
         address vaultAddress = typeToVault[tokenToType[rootToken]];
         ITokenVault(vaultAddress).exitTokens(
             withdrawParam.userWallet,

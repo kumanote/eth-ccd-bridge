@@ -45,7 +45,7 @@ describe('RootChainManager', () => {
     it('Should revert while setting stateSenderAddress to 0x0', async () => {
       await expectRevert(
         contracts.rootChainManager.setStateSender(blank),
-        'RootChainManager: BAD_NEW_STATE_SENDER'
+        'RootChainManager: stateSender can not be address(0)'
       )
     })
     it('Can register predicate', async () => {
@@ -114,7 +114,7 @@ describe('RootChainManager', () => {
         const mockType = mockValues.bytes32[0]
         await expectRevert(
           contracts.rootChainManager.mapToken(spockParent, spockChildIndex, spockChildSubIndex, mockType),
-          'RootChainManager: TOKEN_TYPE_NOT_SUPPORTED'
+          'RootChainManager: not supported token type'
         )
       })
 
@@ -161,7 +161,7 @@ describe('RootChainManager', () => {
       it('Should fail to noramlly map Tomato as child of Fruit', async () => {
         await expectRevert(
           contracts.rootChainManager.mapToken(fruit, tomatoIndex, tomatoSubIndex, tokenType),
-          'RootChainManager: ALREADY_MAPPED'
+          'RootChainManager: already mapped'
         )
       })
 
@@ -222,7 +222,7 @@ describe('RootChainManager', () => {
       it('Should fail to noramlly map Chimp to Man', async () => {
         await expectRevert(
           contracts.rootChainManager.mapToken(chimp, manIndex, manSubIndex, tokenType),
-          'RootChainManager: ALREADY_MAPPED'
+          'RootChainManager: already mapped'
         )
       })
 
@@ -283,7 +283,7 @@ describe('RootChainManager', () => {
       await rootChainManager.setPaused(true)
       await expectRevert(
         rootChainManager.depositFor(depositForAccount, ccdUser, dummyERC20.address, depositData),
-        'RootChainManager: Bridge is paused'
+        'RootChainManager: bridge is paused'
       )
       await rootChainManager.setPaused(false)
     })
@@ -402,7 +402,7 @@ describe('RootChainManager', () => {
       const depositData = ethers.utils.defaultAbiCoder.encode(['uint256'], [depositAmount.toString()])
       await expectRevert(
         rootChainManager.depositFor(depositForAccount, ccdUser, dummyERC20.address, depositData),
-        'RootChainManager: INVALID_USER'
+        'RootChainManager: invalid user'
       )
     })
   })
@@ -429,13 +429,13 @@ describe('RootChainManager', () => {
       await rootChainManager.setTreasurer(newAccount.address)
     })
     it('should not be able to set treasurer to 0x0', async () => {
-      await expectRevert(rootChainManager.setTreasurer(blank), 'RootChainManager: valid address required')
+      await expectRevert(rootChainManager.setTreasurer(blank), 'RootChainManager: treasurer can not be address(0)')
     })
     it('transaction should revert', async () => {
       const depositData = ethers.utils.defaultAbiCoder.encode(['uint256'], [depositAmount.toString()])
       await expectRevert(rootChainManager.depositFor(depositForAccount, ccdUser, dummyERC20.address, depositData, {
         value: depositFee.div(2)
-      }), 'Not enough ether for deposit fee')
+      }), 'RootChainManager: ETH send needs to be at least depositFee')
     })
     it('transaction should work', async () => {
       const depositData = ethers.utils.defaultAbiCoder.encode(['uint256'], [depositAmount.toString()])
@@ -568,7 +568,7 @@ describe('RootChainManager', () => {
           value: depositAmount,
           gasPrice
         }),
-        'RootChainManager: Bridge is paused'
+        'RootChainManager: bridge is paused'
       )
       await rootChainManager.setPaused(false)
     })
@@ -602,7 +602,7 @@ describe('RootChainManager', () => {
         to: rootChainManager.address,
         value: depositAmount,
         gasPrice
-      }), 'ETH direct transfer are disabled')
+      }), 'RootChainManager: no direct ETH deposits')
     })
   })
 
@@ -621,7 +621,7 @@ describe('RootChainManager', () => {
       await expectRevert(
         rootChainManager.depositFor(depositForAccount, ccdUser,
           etherAddress, depositData),
-        'RootChainManager: INVALID_ROOT_TOKEN'
+        'RootChainManager: invalid root token'
       )
     })
   })
@@ -639,7 +639,7 @@ describe('RootChainManager', () => {
     it('transaction should revert', async () => {
       await expectRevert(
         rootChainManager.depositEtherFor(depositForAccount, ccdUser, { value: depositAmount }),
-        'RootChainManager: INVALID_USER'
+        'RootChainManager: invalid user'
       )
     })
   })
@@ -666,8 +666,8 @@ describe('RootChainManager', () => {
     })
     it('transaction should revert', async () => {
       await expectRevert(rootChainManager.depositEtherFor(depositForAccount, ccdUser, {
-        value: depositFee
-      }), 'Not enough ether to deposit after paying the fee')
+        value: depositFee.sub(1)
+      }), 'RootChainManager: ETH send needs to be at least depositFee')
     })
     it('transaction should work', async () => {
       await rootChainManager.depositEtherFor(depositForAccount, ccdUser, {
@@ -707,7 +707,7 @@ describe('RootChainManager', () => {
       const depositData = ethers.utils.defaultAbiCoder.encode(['uint256'], [depositAmount.toString()])
       await expectRevert(
         rootChainManager.depositFor(depositForAccount, ccdUser, dummyERC20.address, depositData),
-        'RootChainManager: INVALID_TOKEN_TYPE'
+        'RootChainManager: invalid token type'
       )
     })
 
@@ -716,7 +716,7 @@ describe('RootChainManager', () => {
       await rootChainManager.cleanMapToken(dummyERC20.address, mockChildIndex, mockChildSubIndex)
       await expectRevert(
         rootChainManager.depositFor(depositForAccount, ccdUser, dummyERC20.address, depositData),
-        'RootChainManager: TOKEN_NOT_MAPPED'
+        'RootChainManager: token not mapped'
       )
     })
   })
