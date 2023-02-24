@@ -50,23 +50,28 @@ pub enum EthTransactionStatus {
     Clone,
     tokio_postgres::types::ToSql,
     tokio_postgres::types::FromSql,
-    serde::Serialize,
+    utoipa::ToSchema,
 )]
 #[postgres(name = "concordium_transaction_status")]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum TransactionStatus {
     /// Transaction was added to the database and not yet finalized.
     #[postgres(name = "pending")]
     #[serde(rename = "pending")]
+    #[schema(rename = "pending")]
     Pending,
-    /// Transaction was finalized, but failed.
+    /// Transaction was finalized.
     #[postgres(name = "failed")]
     #[serde(rename = "failed")]
+    #[schema(rename = "failed")]
     Failed,
     /// Transaction was finalized.
     #[postgres(name = "finalized")]
-    #[serde(rename = "finalized")]
+    #[serde(rename = "processed")]
+    #[schema(rename = "processed")]
     Finalized,
     #[postgres(name = "missing")]
+    #[schema(rename = "missing")]
     #[serde(rename = "missing")]
     Missing,
 }
