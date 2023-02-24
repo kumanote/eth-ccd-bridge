@@ -362,7 +362,7 @@ impl<S: HasStateApi> State<S> {
 // Contract functions
 
 /// Initialize contract instance with no initial tokens.
-#[init(contract = "bridge-manager", enable_logger)]
+#[init(contract = "bridge-manager", enable_logger, event = "BridgeEvent")]
 fn contract_init<S: HasStateApi>(
     ctx: &impl HasInitContext,
     state_builder: &mut StateBuilder<S>,
@@ -402,13 +402,14 @@ impl From<bool> for HasRoleQueryResponse {
 }
 
 /// Tag for the BridgeManager TokenMap event.
-pub const TOKEN_MAP_EVENT_TAG: u8 = u8::MAX;
+pub const TOKEN_MAP_EVENT_TAG: u8 = 0;
 /// Tag for the BridgeManager Deposit event.
-pub const DEPOSIT_EVENT_TAG: u8 = u8::MAX - 1;
+pub const DEPOSIT_EVENT_TAG: u8 = 1;
 /// Tag for the BridgeManager Withdraw event.
-pub const WITHDRAW_EVENT_TAG: u8 = u8::MAX - 2;
-pub const GRANT_ROLE_EVENT_TAG: u8 = 0;
-pub const REVOKE_ROLE_EVENT_TAG: u8 = 1;
+pub const WITHDRAW_EVENT_TAG: u8 = 2;
+pub const GRANT_ROLE_EVENT_TAG: u8 = 3;
+pub const REVOKE_ROLE_EVENT_TAG: u8 = 4;
+
 /// Tagged event to be serialized for the event log.
 #[derive(SchemaType)]
 pub enum BridgeEvent {
