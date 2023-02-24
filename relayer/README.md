@@ -1,4 +1,4 @@
-## Relayer
+# Relayer
 
 The relayer is the component of the bridge that monitors both the Ethereum and
 Concordium chains and acts on events on both of them by submitting transactions
@@ -246,7 +246,13 @@ git submodule update --init --recursive
 
 A docker image containing the relayer and API server can be built using the
 provided [`Dockerfile`](./scripts/build.Dockerfile) as follows **from the root
-of the repository**.
+of the repository**. Make sure to do a full repository checkout first using
+
+```
+git submodule update --init --recursive
+```
+
+Then run
 
 ```
 docker build \
@@ -255,6 +261,8 @@ docker build \
     -f relayer/scripts/build.Dockerfile\
     -t ccdeth_relayer:latest .
 ```
+
+The image has two binaries, `ccdeth_relayer` and `api_server` installed at `/usr/local/bin/`.
 
 ## Metrics
 
@@ -311,3 +319,42 @@ cargo build --feature=generate-client
 ```
 
 This should only be necessary if the ABI of those contracts changes.
+
+# API server
+
+The package contains another binary, the api-server which exposes data from the
+database that the relayer writes to. The API is used by the bridge frontend to
+keep track of transactions, and to get Merkle proofs.
+
+The following configuration options are available
+
+- Maximum loggin level, options are `off`, `error`, `warn`, `info`, `debug`, `trace`.
+
+      --log-level <LOG_LEVEL>
+          Maximum log level. [env: ETHCCD_API_LOG_LEVEL=] [default: info]
+
+- Database connection string.
+
+      --db <DB_CONFIG>
+          Database connection string. [env: ETHCCD_API_DB_STRING=] [default: "host=localhost dbname=relayer user=postgres password=password port=5432"]
+
+- Address where the server will listen on for its API.
+
+      --listen-address <LISTEN_ADDRESS>
+          Listen address for the server. [env: ETHCCD_API_LISTEN_ADDRESS=] [default: 0.0.0.0:8080]
+
+- Optional address of the Prometheus server. The server exposes one endpoint
+  `/metrics` which contains information about the accessed endpoints and timings
+  of requests.
+
+      --prometheus-address <PROMETHEUS_ADDRESS>
+          Listen address for the server. [env: ETHCCD_API_PROMETHEUS_ADDRESS=] [default: 0.0.0.0:9090]
+
+- The maximum number of database connections to be kept at the connection pool.
+      --max-pool-size <MAX_POOL_SIZE>
+          Maximum size of a database connection pool. [env: ETHCCD_API_MAX_DB_CONNECTION_POOL_SIZE=] [default: 16]
+
+- Maximum request handling duration, in milliseconds.
+
+      --request-timeout <REQUEST_TIMEOUT>
+          Request timeout in millisecons. [env: ETHCCD_API_REQUEST_TIMEOUT=] [default: 1000]
