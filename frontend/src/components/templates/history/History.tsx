@@ -6,7 +6,7 @@ import useWallet from "@hooks/use-wallet";
 import moment from "moment";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { useEffect, useState } from "react";
+import React, { MouseEventHandler, useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
@@ -54,6 +54,10 @@ const History = ({ depositSelected }: Props) => {
 
         const route = isDeposit(transaction) ? routes.deposit.tx(txHash) : routes.withdraw.tx(txHash);
         push(route);
+    };
+
+    const linkClick: MouseEventHandler = (e) => {
+        e.stopPropagation();
     };
 
     const rowClickHandler = (transaction: Components.Schemas.WalletTx, index: number) => {
@@ -197,6 +201,7 @@ const History = ({ depositSelected }: Props) => {
                                                                     href={`https://goerli.etherscan.io/tx/${transaction.Deposit.origin_tx_hash}`}
                                                                     target="_blank"
                                                                     rel="noreferrer"
+                                                                    onClick={linkClick}
                                                                 >
                                                                     {parseTxHash(transaction.Deposit.origin_tx_hash)}
                                                                 </a>
@@ -225,6 +230,7 @@ const History = ({ depositSelected }: Props) => {
                                                                         href={`https://goerli.etherscan.io/tx/${transaction.Deposit.origin_tx_hash}`}
                                                                         target="_blank"
                                                                         rel="noreferrer"
+                                                                        onClick={linkClick}
                                                                     >
                                                                         {parseTxHash(
                                                                             transaction.Deposit.origin_tx_hash
@@ -244,6 +250,7 @@ const History = ({ depositSelected }: Props) => {
                                                                         )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
+                                                                        onClick={linkClick}
                                                                     >
                                                                         {parseTxHash(transaction.Deposit.tx_hash)}
                                                                     </a>
@@ -265,6 +272,7 @@ const History = ({ depositSelected }: Props) => {
                                                                     href={transactionUrl(transaction.Deposit.tx_hash)}
                                                                     target="_blank"
                                                                     rel="noreferrer"
+                                                                    onClick={linkClick}
                                                                 >
                                                                     {parseTxHash(transaction.Deposit.tx_hash)}
                                                                 </a>
@@ -322,6 +330,7 @@ const History = ({ depositSelected }: Props) => {
                                                                     )}
                                                                     target="_blank"
                                                                     rel="noreferrer"
+                                                                    onClick={linkClick}
                                                                 >
                                                                     {parseTxHash(transaction.Withdraw.origin_tx_hash)}
                                                                 </a>
@@ -352,6 +361,7 @@ const History = ({ depositSelected }: Props) => {
                                                                         )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
+                                                                        onClick={linkClick}
                                                                     >
                                                                         {parseTxHash(
                                                                             transaction.Withdraw.origin_tx_hash
@@ -375,6 +385,7 @@ const History = ({ depositSelected }: Props) => {
                                                                         href={`https://goerli.etherscan.io/tx/${transaction.Withdraw.tx_hash}`}
                                                                         target="_blank"
                                                                         rel="noreferrer"
+                                                                        onClick={linkClick}
                                                                     >
                                                                         {parseTxHash(transaction.Withdraw.tx_hash)}
                                                                     </a>
@@ -396,6 +407,7 @@ const History = ({ depositSelected }: Props) => {
                                                                     href={`https://goerli.etherscan.io/tx/${transaction.Withdraw.tx_hash}`}
                                                                     target="_blank"
                                                                     rel="noreferrer"
+                                                                    onClick={linkClick}
                                                                 >
                                                                     {parseTxHash(transaction.Withdraw.tx_hash)}
                                                                 </a>
