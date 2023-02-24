@@ -28,6 +28,7 @@ const WithdrawTransactionStatus: NextPage = () => {
     });
     const { withdraw } = useRootManagerContract();
     const { addApproved, transactions: approvedTransactions } = useApprovedWithdrawalsStore();
+    const [pendingWallet, setPendingWallet] = useState(false);
 
     const { data: merkleProofData } = useEthMerkleProof(
         { event_id: txData?.concordium_event_id, tx_hash: tx },
@@ -49,6 +50,7 @@ const WithdrawTransactionStatus: NextPage = () => {
             throw new Error("Dependencies for withdrawal request not available");
 
         try {
+            setPendingWallet(true);
             setStatus("Waiting for approval in Ethereum wallet");
             const approvalTx = await withdraw(merkleProofData.params, merkleProofData.proof);
 
@@ -59,6 +61,8 @@ const WithdrawTransactionStatus: NextPage = () => {
             addApproved(tx, approvalTx.hash);
         } catch {
             setError("Transacion rejected.");
+        } finally {
+            setPendingWallet(false);
         }
     };
 
@@ -71,6 +75,7 @@ const WithdrawTransactionStatus: NextPage = () => {
             transferStatus={txData?.status}
             canWithdraw={canWithdraw}
             onRequestApproval={handleApprovalRequest}
+            disableContinue={pendingWallet}
         />
     );
 };

@@ -47,6 +47,7 @@ const transferStepMap: { [p in Components.Schemas.TransactionStatus]: TransferSt
 
 type BaseProps = {
     transferStatus?: Components.Schemas.TransactionStatus;
+    disableContinue?: boolean;
 };
 
 type WithdrawProps = BaseProps & {
@@ -104,7 +105,7 @@ const useTransactionDetails = () => {
 };
 
 export const TransferProgress: React.FC<Props> = (props) => {
-    const { transferStatus, isWithdraw = false } = props;
+    const { transferStatus, isWithdraw = false, disableContinue = false } = props;
     const { push } = useRouter();
     const [status, setStatus] = useState<Status | undefined>();
     const { data: transactionDetails, loading: transactionDetailsLoading } = useTransactionDetails();
@@ -252,7 +253,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                         </Text>
                     </InfoContainer>
                     <StyledButtonContainer>
-                        <Button variant="primary" onClick={continueHandler}>
+                        <Button variant="primary" onClick={continueHandler} disabled={disableContinue}>
                             <div style={{ position: "relative" }}>
                                 <Text fontSize="16" fontColor={"Black"} fontWeight="bold">
                                     {props.isWithdraw && props.canWithdraw && step === 1 ? "Approve" : "Continue"}

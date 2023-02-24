@@ -5,7 +5,7 @@ export enum BridgeDirection {
 
 export const routes = {
     deposit: {
-        path: "/deposit",
+        path: "/",
         overview: "/deposit/overview",
         tx: (ethTxHash: string) => `/deposit/${ethTxHash}`,
     },

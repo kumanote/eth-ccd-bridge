@@ -1,8 +1,6 @@
-import Cornucopia from "@components/templates/cornucopia/Cornucopia";
 import type { NextPage } from "next";
+import Transfer from "@components/templates/transfer";
 
-const Home: NextPage = () => {
-    return <Cornucopia />;
-};
+const Deposit: NextPage = () => <Transfer isDeposit />;
 
-export default Home;
+export default Deposit;

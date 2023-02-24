@@ -17,7 +17,6 @@ const WatchWithdrawal: FC<Components.Schemas.WalletWithdrawTx> = ({ origin_event
 
     useEffect(() => {
         if (data?.proof) {
-            console.log("Found withdrawal ready for approval:", origin_tx_hash, data.proof);
             push(routes.history(BridgeDirection.Withdraw));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
