@@ -16,6 +16,7 @@ type Query = {
 const DepositTransactionStatus: NextPage = () => {
     const {
         query: { tx },
+        isReady,
         replace,
     } = useRouter() as QueryRouter<Query>;
     const { data } = useWatchDeposit(tx !== undefined ? { tx_hash: tx } : undefined, {
@@ -24,11 +25,11 @@ const DepositTransactionStatus: NextPage = () => {
     });
 
     useEffect(() => {
-        if (tx === undefined) {
+        if (tx === undefined && isReady) {
             replace(routes.deposit.path);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [isReady, tx]);
 
     return <TransferProgress transferStatus={data?.status} />;
 };

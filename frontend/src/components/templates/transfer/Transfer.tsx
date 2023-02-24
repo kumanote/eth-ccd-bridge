@@ -116,6 +116,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const tokensQuery = useTokens();
     const {
         query: { reset = false },
+        isReady,
     } = useRouter() as QueryRouter<TransferRouteQuery>;
     const { context, connect, disconnect } = useWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
@@ -189,11 +190,11 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     }, [amount, tokenBalance]);
 
     useEffect(() => {
-        if (reset) {
+        if (reset && isReady) {
             clearTransactionFlow();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [reset]);
+    }, [reset, isReady]);
 
     const dropdownHandler = () => {
         setDropdown((prev) => !prev);

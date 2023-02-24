@@ -19,17 +19,14 @@ function MyApp({ Component, pageProps }: AppProps) {
     const isTablet = useMediaQuery("(max-width: 1050px)"); // res at which cornucopia logo might touch the modal
     const isMobile = useMediaQuery("(max-width: 540px)"); // res at which the design looks a little weird
     const {
-        pathname,
+        asPath,
         query: { tx },
     } = useRouter() as QueryRouter<{ tx?: string }>;
 
     /**
      * Shows whether user is on withdraw progress page, in which case we should NOT watch for pending withdrawals
      */
-    const isWithdrawProgressRoute = useMemo(
-        () => tx !== undefined && pathname === routes.withdraw.tx(tx),
-        [pathname, tx]
-    );
+    const isWithdrawProgressRoute = useMemo(() => tx !== undefined && asPath === routes.withdraw.tx(tx), [asPath, tx]);
 
     const appContextValue: AppContext = useMemo(() => ({ isTablet, isMobile }), [isTablet, isMobile]);
 
