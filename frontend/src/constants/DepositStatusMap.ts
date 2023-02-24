@@ -1,14 +1,10 @@
 const depositStatusMap = new Map([
-    ["confirming", "Confirming..."],
     ["missing", "Adding..."],
-    ["added", "Added!"],
     ["pending", "Transaction pending..."],
     ["processed", "Transaction processed!"],
-    ["confirming_number", "1"],
-    ["missing_number", "2"],
-    ["added_number", "3"],
-    ["pending_number", "4"],
-    ["processed_number", "5"],
+    ["missing_number", "1"],
+    ["pending_number", "2"],
+    ["processed_number", "3"],
 ]);
 
 export default depositStatusMap;

@@ -6,7 +6,6 @@ import styled from "styled-components";
 export const ContentWrapper = styled(PageWrapper)``;
 
 export const HistoryWrapper = styled(Container)`
-    width: 500px;
     overflow: hidden;
     @media only screen and (max-width: 540px) {
         width: 100%;

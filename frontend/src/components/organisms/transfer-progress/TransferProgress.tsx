@@ -60,7 +60,7 @@ export const TransferProgress: React.FC<Props> = ({
                         <StyledProcessWrapper>
                             <StyledHorizontalLine />
                             <StyledCircleWrapper index={1}>
-                                <StyledCircle completed={isWithdraw ? transferStatus > 0 : transferStatus > 1} />
+                                <StyledCircle completed={transferStatus > 0} />
                                 <Text
                                     fontFamily="Roboto"
                                     fontSize="13"
@@ -73,7 +73,7 @@ export const TransferProgress: React.FC<Props> = ({
                             </StyledCircleWrapper>
 
                             <StyledCircleWrapper index={2}>
-                                <StyledCircle completed={isWithdraw ? transferStatus > 1 : transferStatus > 3} />
+                                <StyledCircle completed={transferStatus > 1} />
                                 <Text
                                     fontFamily="Roboto"
                                     fontSize="13"
@@ -81,12 +81,12 @@ export const TransferProgress: React.FC<Props> = ({
                                     fontColor="TitleText"
                                     fontLetterSpacing="0"
                                 >
-                                    {isWithdraw ? "Pending..." : "Pending..."}
+                                    Pending...
                                 </Text>
                             </StyledCircleWrapper>
 
                             <StyledCircleWrapper index={3}>
-                                <StyledCircle completed={isWithdraw ? transferStatus > 2 : transferStatus > 4} />
+                                <StyledCircle completed={transferStatus > 2} />
                                 <Text
                                     fontFamily="Roboto"
                                     fontSize="13"
@@ -107,7 +107,7 @@ export const TransferProgress: React.FC<Props> = ({
                             </Text>
                         </TransferAmountWrapper>
                     </div>
-                    <InfoContainer processed={isWithdraw ? transferStatus > 2 : transferStatus > 4}>
+                    <InfoContainer processed={transferStatus > 2}>
                         <Image src={Hourglass.src} width={16.56} height={26.14} alt="Hourglass image" />
                         <Text
                             fontFamily="Roboto"
@@ -122,7 +122,7 @@ export const TransferProgress: React.FC<Props> = ({
                                     : isPending
                                     ? "Your withdraw will be ready very soon."
                                     : "Your withdraw is in progress. Please come back later."
-                                : transferStatus > 4
+                                : transferStatus > 2
                                 ? "Deposit Processed!"
                                 : "Your deposit is in progress."}
                         </Text>
@@ -139,7 +139,7 @@ export const TransferProgress: React.FC<Props> = ({
                                     : isPending
                                     ? ""
                                     : "When returning to the bridge, you will be prompted to finish the withdraw."
-                                : transferStatus > 3
+                                : transferStatus > 2
                                 ? "You can now see your finished transaction in History!"
                                 : "After the transaction is processed you can also check it in your transaction history."}
                         </Text>

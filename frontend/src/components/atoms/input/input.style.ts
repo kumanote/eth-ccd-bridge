@@ -1,13 +1,17 @@
 import theme from "src/theme/theme";
 import styled from "styled-components";
 
-export const StyledInput = styled.input`
+type InputProps = {
+    valid: boolean;
+};
+
+export const StyledInput = styled.input<InputProps>`
     border: none;
     outline: none;
     font-family: Roboto;
     font-size: 25px;
     font-weight: regular;
-    color: ${theme.colors.Black};
+    color: ${(props) => (props.valid ? theme.colors.Black : theme.colors.Red)};
     letter-spacing: 0px;
 
     &::-webkit-outer-spin-button,

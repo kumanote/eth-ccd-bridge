@@ -78,8 +78,7 @@ struct EthereumConfig {
     #[clap(
         long,
         help = "Chain ID. Goerli is 5, mainnet is 1.",
-        env = "ETHCCD_RELAYER_CHAIN_ID",
-        default_value_t = 5
+        env = "ETHCCD_RELAYER_CHAIN_ID"
     )]
     chain_id: u64,
     /// Number of confirmations required on Ethereum before considering
@@ -362,7 +361,7 @@ async fn query_concordium_balance(
                 }
             }
             Err(e) => {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!("Unable to query Concordium account balance: {e:#}")
             }
         }
@@ -392,7 +391,7 @@ async fn query_ethereum_balance<M: Middleware>(
                 }
             }
             Err(e) => {
-                metrics.warnings_counter.inc();
+                metrics.warnings_total.inc();
                 log::warn!("Unable to query Ethereum account balance: {e:#}")
             }
         }

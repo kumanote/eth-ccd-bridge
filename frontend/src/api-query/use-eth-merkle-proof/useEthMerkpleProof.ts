@@ -8,8 +8,6 @@ interface Params extends Paths.EthMerkleProof.PathParameters {}
 const useEthMerkleProof = (params: Params, options?: any) => {
     const { getClient } = useAxiosClient();
 
-    console.log(params);
-
     return useQuery(
         [CacheKeys.EthMerkleProof, params],
         async () => {

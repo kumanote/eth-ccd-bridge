@@ -4,12 +4,14 @@ import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Logo from "@components/molecules/logo/Logo";
 import useCCDWallet from "@hooks/use-ccd-wallet";
 import useWallet from "@hooks/use-wallet";
+import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useTokens from "src/api-query/use-tokens/useTokens";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import useGenerateContract from "src/contracts/use-generate-contract";
+import { noOp } from "src/helpers/basic";
 import parseWallet from "src/helpers/parseWallet";
 import ArrowDownIcon from "../../../../public/icons/arrow-down-icon.svg";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
@@ -45,6 +47,57 @@ interface ChainType {
     connect: (() => void) | null;
 }
 
+interface ChainBoxProps {
+    chain: ChainType;
+    text: string;
+}
+
+const ChainBox: React.FC<ChainBoxProps> = ({ chain, text }) => {
+    // state for the copied address
+    const [copied, setCopied] = useState<boolean>(false);
+
+    const walletCopyHandler = () => {
+        setCopied(true);
+        navigator.clipboard.writeText(chain.account || "");
+    };
+
+    useEffect(() => {
+        const copyTimeout = setTimeout(() => {
+            setCopied(false);
+        }, 1000);
+
+        return () => clearTimeout(copyTimeout);
+    }, [copied]);
+
+    return (
+        <CoinContainer>
+            <OrderText>{text}</OrderText>
+            <CoinSelect>
+                <CoinPicker>
+                    <Coin>
+                        <Image src={chain.icon} alt={`${chain.name} icon`} height="23.13" width="23.13" />
+                        <StyledCoinText fontWeight="light">{chain.name}</StyledCoinText>
+                    </Coin>
+                    {chain.account ? (
+                        <StyledWalletDisplay copied={copied} onClick={walletCopyHandler}>
+                            {parseWallet(chain.account)}
+                        </StyledWalletDisplay>
+                    ) : (
+                        <Button
+                            variant="connect"
+                            onClick={() => {
+                                chain.connect && chain.connect();
+                            }}
+                        >
+                            Connect
+                        </Button>
+                    )}
+                </CoinPicker>
+            </CoinSelect>
+        </CoinContainer>
+    );
+};
+
 interface Props {
     onDeposit: Function;
     onWithdraw: Function;
@@ -72,16 +125,10 @@ const Transfer: React.FC<Props> = ({
     const { context, connect, disconnect } = useWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
 
-    // order of the addresses (from - to)
-    const [order, setOrder] = useState(1);
-
+    const [isDeposit, setIsDeposit] = useState(true);
     // introduced amount
     const [amount, setAmount] = useState("0");
-
-    // eth token balance and ccd token balance
-    const [ethBalance, setEthBalance] = useState<string>("0");
-    const [ccdBalance, setCcdBalance] = useState<number>(0);
-
+    const [submitted, setSubmitted] = useState(false);
     // tokens available in the dropdown
     const [tokens, setTokens] = useState<Components.Schemas.TokenMapItem[]>();
     // state of the token dropdown
@@ -89,14 +136,7 @@ const Transfer: React.FC<Props> = ({
     // current selected token
     const [selectedToken, setSelectedToken] = useState(token);
 
-    // the text of the main button
-    const [buttonText, setButtonText] = useState<"Deposit" | "Withdraw">("Deposit");
-
-    // state for the copied address
-    const [copied, setCopied] = useState<number>();
-
     // state dependent hooks
-
     const { getBalance: getEthTokenBalance } = useGenerateContract(
         selectedToken?.eth_address || "", // address or empty string because the address is undefined on first renders
         !!selectedToken // plus it's disabled on the first render anyway
@@ -104,8 +144,32 @@ const Transfer: React.FC<Props> = ({
     const { balanceOf: getCcdTokenBalance } = useCCDContract(ccdContext.account, ccdContext.isActive);
 
     // constants
-
     const isLoggedIn = !!context?.account && !!ccdContext.account;
+    const transferButtonDisabled = !isLoggedIn || !selectedToken;
+
+    const ethBalance = useAsyncMemo(
+        async () => {
+            if (!isLoggedIn || !selectedToken) {
+                return undefined;
+            }
+
+            return getEthTokenBalance(selectedToken.decimals);
+        },
+        noOp,
+        [isLoggedIn, selectedToken, getEthTokenBalance]
+    );
+    const ccdBalance = useAsyncMemo(
+        async () => {
+            if (!isLoggedIn || !selectedToken) {
+                return undefined;
+            }
+
+            return getCcdTokenBalance(selectedToken);
+        },
+        noOp,
+        [isLoggedIn, selectedToken, getEthTokenBalance]
+    );
+
     const chains: ChainType[] = [
         {
             id: 1,
@@ -125,8 +189,21 @@ const Transfer: React.FC<Props> = ({
         },
     ];
 
-    // handlers
+    const isValidAmount = useMemo(() => {
+        const nAmount = Number(amount);
 
+        if (nAmount <= 0 || Number.isNaN(nAmount)) {
+            return false;
+        }
+
+        if (isDeposit) {
+            return nAmount < Number(ethBalance);
+        }
+
+        return nAmount < Number(ccdBalance);
+    }, [amount, ccdBalance, ethBalance, isDeposit]);
+
+    // handlers
     const historyClickHandler = () => {
         onHistoryClick();
     };
@@ -141,65 +218,27 @@ const Transfer: React.FC<Props> = ({
         onSelectToken(token);
     };
 
-    const swapHandler = () => {
-        setOrder((prev) => {
-            if (prev === 1) {
-                setButtonText("Withdraw");
-            } else {
-                setButtonText("Deposit");
-            }
-            return -prev;
-        });
-        setAmount("0");
-    };
+    const submitHandler = useCallback(() => {
+        setSubmitted(true);
 
-    const buttonHandler = async (amount: string) => {
-        if (buttonText === "Deposit") {
+        if (!isValidAmount) {
+            // Abort.
+            return;
+        }
+
+        if (isDeposit) {
             onDeposit(amount);
         } else {
             onWithdraw(amount);
         }
-    };
-
-    const walletCopyHandler = (id: number) => {
-        if (id === 1) {
-            setCopied(1);
-            navigator.clipboard.writeText(context.account || "");
-        } else {
-            // onCcdConnectClick();
-        }
-    };
-
-    // functions
-    const fetchEthTokenBalance = async () => {
-        if (selectedToken) {
-            const balance = await getEthTokenBalance(selectedToken.decimals);
-            if (balance) setEthBalance(Number(balance.toFixed(4)).toString());
-        }
-    };
-    const fetchCcdTokenBalance = async () => {
-        if (selectedToken) {
-            const balance = await getCcdTokenBalance(selectedToken);
-            if (balance >= 0) setCcdBalance(Number(balance.toFixed(4)));
-        }
-    };
+    }, [isValidAmount, isDeposit, onDeposit, amount, onWithdraw]);
 
     // effects
+    useEffect(() => {
+        setAmount("0");
+    }, [isDeposit]);
 
     // tokens balance effects
-    useEffect(() => {
-        if (isLoggedIn && selectedToken) {
-            fetchEthTokenBalance();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedToken, isLoggedIn, transferStatus, order]);
-    useEffect(() => {
-        if (ccdContext.account && selectedToken) {
-            fetchCcdTokenBalance();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedToken, isLoggedIn, transferStatus, order]);
-
     useEffect(() => {
         if (tokensQuery.status === "error") {
             console.log(tokensQuery.error); // TODO: error handling
@@ -215,24 +254,6 @@ const Transfer: React.FC<Props> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transferStatus]);
 
-    useEffect(() => {
-        const copyTimeout = setTimeout(() => {
-            setCopied(undefined);
-        }, 1000);
-
-        return () => clearTimeout(copyTimeout);
-    }, [copied]);
-
-    // button memo
-    const transferButtonDisabled = useMemo(() => {
-        if (!isLoggedIn) return true;
-        if (!selectedToken) return true;
-        if (!amount) return true;
-        if (!(parseFloat(amount) > 0)) return true;
-
-        return false;
-    }, [amount, isLoggedIn, selectedToken]);
-
     return (
         <PageWrapper>
             <StyledContainer>
@@ -242,40 +263,11 @@ const Transfer: React.FC<Props> = ({
                 </Text>
                 <FirstRow>
                     {chains
-                        .sort((a, b) => (order === -1 ? +b.id - +a.id : +a.id - +b.id))
-                        .map(({ id, name, account, icon, connect }, index) => (
-                            <CoinContainer key={index}>
-                                <OrderText>{index === 0 ? "From" : "To"}</OrderText>
-                                <CoinSelect>
-                                    <CoinPicker>
-                                        <Coin>
-                                            <Image src={icon} alt={`${name} icon`} height="23.13" width="23.13" />
-                                            <StyledCoinText fontWeight="light">{name}</StyledCoinText>
-                                        </Coin>
-                                        {account && (
-                                            <StyledWalletDisplay
-                                                copied={copied}
-                                                copyId={id}
-                                                onClick={walletCopyHandler.bind(undefined, id)}
-                                            >
-                                                {parseWallet(account)}
-                                            </StyledWalletDisplay>
-                                        )}
-                                        {!account && (
-                                            <Button
-                                                variant="connect"
-                                                onClick={() => {
-                                                    connect && connect();
-                                                }}
-                                            >
-                                                Connect
-                                            </Button>
-                                        )}
-                                    </CoinPicker>
-                                </CoinSelect>
-                            </CoinContainer>
+                        .sort((a, b) => (isDeposit ? +a.id - +b.id : +b.id - +a.id))
+                        .map((chain, index) => (
+                            <ChainBox key={chain.id} chain={chain} text={index === 0 ? "From" : "To"} />
                         ))}
-                    <SwapContainer onClick={swapHandler}>
+                    <SwapContainer onClick={() => setIsDeposit((v) => !v)}>
                         <Image src={SwapIcon.src} alt="swap icon" width="14.4" height="11.52" />
                     </SwapContainer>
                 </FirstRow>
@@ -283,7 +275,7 @@ const Transfer: React.FC<Props> = ({
                     <MaxGapRow>
                         <Text fontWeight="light" onClick={dropdownHandler}>
                             {selectedToken
-                                ? order === 1
+                                ? isDeposit
                                     ? selectedToken?.eth_name
                                     : selectedToken?.ccd_name
                                 : "Select Token"}
@@ -294,7 +286,9 @@ const Transfer: React.FC<Props> = ({
                         <Button
                             variant="max"
                             onClick={() =>
-                                buttonText === "Deposit" ? setAmount(ethBalance) : setAmount(ccdBalance.toString())
+                                isDeposit
+                                    ? setAmount(ethBalance?.toString() ?? "")
+                                    : setAmount(ccdBalance?.toString() ?? "")
                             }
                         >
                             <Text fontSize="10" fontWeight="light">
@@ -308,7 +302,7 @@ const Transfer: React.FC<Props> = ({
                                     <Coin
                                         onClick={selectTokenHandler.bind(undefined, token)}
                                         key={
-                                            order === 1
+                                            isDeposit
                                                 ? `${eth_name + eth_address}`
                                                 : `${ccd_name + ccd_contract?.index + ccd_contract?.subindex}`
                                         }
@@ -320,7 +314,7 @@ const Transfer: React.FC<Props> = ({
                                             width="23.13"
                                         />
                                         <StyledCoinText fontWeight="light">
-                                            {order === 1 ? eth_name : ccd_name}
+                                            {isDeposit ? eth_name : ccd_name}
                                         </StyledCoinText>
                                     </Coin>
                                 );
@@ -334,23 +328,20 @@ const Transfer: React.FC<Props> = ({
                             type="number"
                             step="0.01"
                             min="0.0"
-                            max={order === 1 ? ethBalance : ccdBalance}
+                            max={isDeposit ? ethBalance : ccdBalance}
+                            valid={isValidAmount || !submitted}
                         />
                         {isLoggedIn && selectedToken && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
-                                Balance:&nbsp;{order === 1 ? ethBalance : ccdBalance}
+                                Balance:&nbsp;{isDeposit ? ethBalance?.toFixed(4) : ccdBalance?.toFixed(4)}
                             </Text>
                         )}
                     </MaxGapRow>
                 </SecondRow>
-                <Button
-                    variant="primary"
-                    disabled={transferButtonDisabled}
-                    onClick={buttonHandler.bind(undefined, amount)}
-                >
+                <Button variant="primary" disabled={transferButtonDisabled} onClick={submitHandler}>
                     <div style={{ position: "relative" }}>
                         <Text fontSize="16" fontColor={transferButtonDisabled ? "White" : "Brown"} fontWeight="regular">
-                            {buttonText}
+                            {isDeposit ? "Deposit" : "Withdraw"}
                         </Text>
                         <StyledButtonShine src={ButtonShine.src} />
                     </div>

@@ -6,6 +6,7 @@ import useCCDWallet from "@hooks/use-ccd-wallet";
 import useMediaQuery from "@hooks/use-media-query";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import useWallet from "@hooks/use-wallet";
+import { ContractTransaction } from "ethers";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkpleProof";
@@ -36,22 +37,22 @@ const Cornucopia = () => {
     // status states
     const [transferStatus, setTransferStatus] = useState("");
     const [transferStep, setTransferStep] = useState(0);
-    const [overviewContinueClicked, setOverviewContinueClicked] = useState(false);
+    const [overviewPendingSubmission, setOverviewPendingSubmission] = useState(false);
     const [pendingContinueClicked, setPendingContinueClicked] = useState(false);
     const [isPending, setIsPending] = useState(false);
 
     // withdraw approve state
     const [withdrawApproved, setWithdrawApproved] = useState(false);
-    const [withdrawApproveFee, setWithdrawApproveFee] = useState<number | undefined>();
+    const [withdrawApproveFee, setWithdrawApproveFee] = useState<number>();
 
     // withdraw estimate ccd state
     const [estimatedWithdrawEnergy] = useState(0);
 
     // txs and event id
-    const [depositTx, setDepositTx] = useState();
-    const [ccdWithdrawTxHash, setCcdWithdrawTxHash] = useState<string | undefined>();
-    const [ccdApproveTxResult, setCcdApproveTxResult] = useState<boolean | undefined>(false);
-    const [ccdApproveTxHash, setCcdApproveTxHash] = useState<string | undefined>();
+    const [depositTx, setDepositTx] = useState<string>();
+    const [ccdWithdrawTxHash, setCcdWithdrawTxHash] = useState<string>();
+    const [ccdApproveTxResult, setCcdApproveTxResult] = useState(false);
+    const [ccdApproveTxHash, setCcdApproveTxHash] = useState<string>();
     const [eventId, setEventId] = useState<number | undefined>();
 
     // amount to transfer
@@ -72,6 +73,7 @@ const Cornucopia = () => {
     );
 
     // transaction steps
+    // TODO: Replace this with proper routing...
     const [step, setStep] = useState<
         "overview-deposit" | "overview-withdraw" | "progress-deposit" | "progress-withdraw" | undefined
     >(undefined);
@@ -95,7 +97,7 @@ const Cornucopia = () => {
         selectedToken?.eth_address as string, // address or empty string because the address is undefined on first renders
         !!selectedToken && !!amount // plus it's disabled on the first render anyway
     );
-    const { data: depositData } = useWatchDeposit(depositTx, {
+    const { data: depositData } = useWatchDeposit(depositTx !== undefined ? { tx_hash: depositTx } : undefined, {
         enabled: !!depositTx,
         refetchInterval: 1000,
     });
@@ -159,8 +161,12 @@ const Cornucopia = () => {
     };
 
     const overviewContinueHandler = async () => {
-        if (!selectedToken || overviewContinueClicked) return;
-        setOverviewContinueClicked(true);
+        if (!selectedToken) {
+            throw new Error("Expected selected token to be available");
+        }
+
+        setOverviewPendingSubmission(true);
+
         if (step?.includes("withdraw")) {
             try {
                 //if already approved
@@ -196,6 +202,8 @@ const Cornucopia = () => {
             setTransferStep(1);
             await deposit(amount);
         }
+
+        setOverviewPendingSubmission(false);
     };
     const overviewCancelHandler = () => {
         setError("");
@@ -243,27 +251,26 @@ const Cornucopia = () => {
     const deposit = async (amount: string) => {
         try {
             if (selectedToken && ccdContext.account) {
+                let tx: ContractTransaction;
                 if (selectedToken.eth_address === addresses.eth) {
                     // when depositing ether, we don't need to check allowance
-                    const tx = await depositEtherFor(amount);
-                    setStep("progress-deposit"); // track deposit progress
-                    await tx.wait(1); // wait for confirmed transaction
-                    setDepositTx(tx.hash); // set the hash to fetch status
+                    tx = await depositEtherFor(amount);
                 } else {
                     const erc20PredicateAddress = await typeToVault(); //generate predicate address
                     await checkAllowance(erc20PredicateAddress); //check allowance for that address
-                    const tx = await depositFor(amount, selectedToken); //deposit
-                    setStep("progress-deposit"); // track deposit progress
-                    await tx.wait(1); // wait for confirmed transaction
-                    setDepositTx(tx.hash); // set the hash to fetch status
-                    setOverviewContinueClicked(false);
+                    tx = await depositFor(amount, selectedToken); //deposit
                 }
+
+                setStep("progress-deposit"); // track deposit progress
+                await tx.wait(1); // wait for confirmed transaction
+                setDepositTx(tx.hash); // set the hash to fetch status
             }
         } catch (error: any) {
             console.dir("Deposit error:", error);
             setTransferStatus("");
             setTransferStep(0);
             setDepositTx(undefined);
+
             if (error.message.includes("ACTION_REJECTED")) {
                 setError("Please confirm the transaction!");
             } else {
@@ -288,7 +295,7 @@ const Cornucopia = () => {
                             // if the tx is returned, the allowance was approved
                             // wait for the confirmation of approve()
                             // and estimate the gas
-                            tx.wait(1);
+                            await tx.wait(1);
                         }
 
                         // if the tx comes undefined, but no error was thrown
@@ -299,9 +306,10 @@ const Cornucopia = () => {
                     }
                 } catch (error: any) {
                     setGasFee(0);
+                    console.error("gas reason:", error);
+
                     // else, the user did not approve or doesn't have enought tokens and we see the error
                     if (error?.reason) {
-                        console.log("gas reason:", error.reason);
                         setError(error?.reason);
                     } else {
                         setError(error?.message);
@@ -435,7 +443,7 @@ const Cornucopia = () => {
                 setEventId(undefined);
                 setPendingTransaction(undefined);
                 setWithdrawApproved(false);
-                setCcdApproveTxResult(undefined);
+                setCcdApproveTxResult(false);
                 setCcdApproveTxHash(undefined);
                 setIsPending(false);
                 delete sessionStorage["CCDSameSession"];
@@ -548,6 +556,7 @@ const Cornucopia = () => {
                 isWithdraw={step.includes("withdraw")}
                 onContinue={overviewContinueHandler}
                 onCancel={overviewCancelHandler}
+                pendingSubmission={overviewPendingSubmission}
             />
         );
     }

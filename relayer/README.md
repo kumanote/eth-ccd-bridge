@@ -42,7 +42,186 @@ node, and the database. In case any of the tasks terminate then all are killed
 and the service will stop. A task ending prematurely indicates a bug, or failure
 to reconnect for some time.
 
-## TODO: Configuration options.
+## Configuration options
+
+The service can be configured using either command-line options or environment
+variables.
+
+The following configuration options are available
+
+### General configuration
+- Configure logging level. Supported values are `off, error, info, debug, trace`.
+
+      --log-level <LOG_LEVEL>
+          Maximum log level. [env: ETHCCD_RELAYER_LOG_LEVEL=] [default: info]
+
+- Database connection string. This must point to a PostgreSQL database
+
+      --db <DB_CONFIG>
+          Database connection string. [env: ETHCCD_RELAYER_DB_STRING=] [default: "host=localhost dbname=relayer user=postgres password=password port=5432"]
+
+- Address where the prometheus exporter should listen. If not set the prometheus
+  server is not started.
+
+      --prometheus-server <PROMETHEUS_SERVER>
+          Listen address:port for the Prometheus server. [env: ETHCCD_RELAYER_PROMETHEUS_SERVER=]
+
+### Ethereum specific options
+
+- Address of the `StateSender` contract (or proxy) which is monitored for all Ethereum events.
+
+      --state-sender-address <STATE_SENDER>
+          Address of the StateSender proxy instance on Ethereum. [env: ETHCCD_RELAYER_STATE_SENDER_PROXY=]
+
+- Address of the `RootChainManager` contract which is sent Merkle root updates.
+
+      --root-chain-manager-address <ROOT_CHAIN_MANAGER>
+          Address of the RootChainManager proxy instance on Ethereum. [env: ETHCCD_RELAYER_ROOT_CHAIN_MANAGER_PROXY=]
+
+- Block number where the `StateSender` instance was created. This is used only
+      during initial startup as a starting point for monitoring the chain
+
+      --state-sender-creation-height <STATE_SENDER_CREATION_BLOCK_NUMBER>
+          Block number when the state sender instance was created. This is used as a starting point for monitoring the Ethereum chain. [env: ETHCCD_RELAYER_STATE_SENDER_CREATION_BLOCK_NUMBER=]
+
+- URL of the Ethereum JSON-RPC API, e.g., https://goerli.infura.io/v3/$API_KEY
+
+      --ethereum-api <ethereum-api>
+          JSON-RPC interface of an Ethereum node. Only HTTPS is supported as transport. [env: ETHCCD_RELAYER_ETHEREUM_API=]
+
+- Maximum allowed gas price. If the price is higher than that then Merkle root updates are not going to be sent.
+
+      --max-gas-price <MAX_GAS_PRICE>
+          Maximum gas price allowed for Ethereum transactions. If the current gas price is higher then the Merkle updates will be skipped. [env: ETHCCD_RELAYER_MAX_GAS_PRICE=] [default: 1000000000]
+
+- Maximum allowed gas cost of Merkle root updates. The default is reasonable here since the cost of this transaction is fixed.
+
+      --max-gas <MAX_GAS>
+          Maximum gas allowed for setting the Merkle root on Ethereum. [env: ETHCCD_RELAYER_MAX_GAS=] [default: 100000]
+
+- How often to send Merkle root updates to Ethereum (in seconds).
+
+      --merkle-update-interval <MERKLE_UPDATE_INTERVAL>
+          How often to approve new withdrawals on Ethereum. [env: ETHCCD_RELAYER_MERKLE_UPDATE_INTERVAL=] [default: 600]
+
+- The private key used for signing Merkle root updates. This option conflicts
+  with `--eth-key-secret-name` option.
+
+      --eth-private-key <eth-private-key>
+          Private key used to sign Merkle update tranasctions on Ethereum. The address derived from this key must have the MERKLE_UPDATER role. [env: ETHCCD_RELAYER_ETH_PRIVATE_KEY=]
+
+- The Amazon Secret Manager secret to retrieve the private key used for signing
+  Merkle root updates. The access to the secret manager should be configured
+  via the host.
+
+      --eth-key-secret-name <eth-key-secret-name>
+          Secret name of the key stored in Amazon secret manager. [env: ETHCCD_RELAYER_ETH_PRIVATE_KEY_SECRET_NAME=]
+
+- The chain id corresponding to the network. This is used when sending transactions.
+      --chain-id <CHAIN_ID>
+          Chain ID. Goerli is 5, mainnet is 1. [env: ETHCCD_RELAYER_CHAIN_ID=]
+
+- The number of confirmations to require before considering Ethereum
+  transactions finalized.
+
+      --num-confirmations <NUM_CONFIRMATIONS>
+          Number of confirmations required on Ethereum before considering the transaction as final. [env: ETHCCD_RELAYER_NUM_CONFIRMATIONS=] [default: 10]
+
+- Timeout for individual requests to the Ethereum API.
+
+      --ethereum-request-timeout <ETHEREUM_REQUEST_TIMEOUT>
+          Timeout for requests to the Ethereum node. [env: ETHCCD_RELAYER_ETHEREUM_REQUEST_TIMEOUT=] [default: 10]
+
+- When sending transactions
+
+      --escalation-interval <ESCALATION_INTERVAL>
+          Interval (in seconds) on when to escalate the price of the transaction. [env: ETHCCD_RELAYER_MERKLE_ESCALATION_INTERVAL=] [default: 120]
+
+- Start warning that a transaction has not been confirmed after this amount of time (in seconds).
+
+      --warn-duration <WARN_DURATION>
+          When to start warning that the transaction has not yet been confirmed. [env: ETHCCD_RELAYER_MERKLE_WARN_DURATION=] [default: 120]
+
+- Minimum balance of the Ethereum account. If this is breached then the service
+  will stop. The account must then be topped up and service restarted.
+
+      --eth-min-balance <eth-min-balance>
+          Minimum balance of the Ethereum account. In microEther [env: ETHCCD_RELAYER_MIN_ETHEREUM_BALANCE=]
+
+### Concordium specific options
+
+- Link to the Concordium V2 GRPC API.
+
+      --concordium-api <concordium-api>
+          GRPC V2 interface of the Concordium node. [env: ETHCCD_RELAYER_CONCORDIUM_API=] [default: http://localhost:20000]
+
+- Maximum number of parallel queries to do when querying the Concordium node.
+  This is only relevant if the relayer is started a lot after the Contracts
+  are deployed, during initial catchup. It should otherwise be 1.
+
+      --concordium-max-parallel <MAX_PARALLEL>
+          Maximum number of parallel queries of the Concordium node. This is only useful in initial catchup if the relayer is started a long time after the bridge contracts are in operation. [env: ETHCCD_RELAYER_MAX_PARALLEL_QUERIES_CONCORDIUM=] [default: 1]
+
+- Maximum allowed time for a the last finalized block to be behind before failing and attempting to reconnect to the Concordium API.
+
+      --concordium-max-behind <MAX_BEHIND>
+          Maximum number of seconds the Concordium node's last finalized block can be behind before we log warnings. [env: ETHCCD_RELAYER_CONCORDIUM_MAX_BEHIND=] [default: 240]
+
+- Request timeout for each individual Concordium API request.
+
+      --request-timeout <REQUEST_TIMEOUT>
+          Timeout for requests to the Concordium node. [env: ETHCCD_RELAYER_CONCORDIUM_REQUEST_TIMEOUT=] [default: 10]
+
+- Address of the `BridgeManager` instance on Concordium. This is used both to
+  monitor for new events and to send deposit transactions
+
+      --bridge-manager-address <BRIDGE_MANAGER>
+          Address of the BridgeManger contract instance on Concordium. [env: ETHCCD_RELAYER_BRIDGE_MANAGER=]
+
+- Maximum NRG allowed for execution of deposits and token map transactions on
+  Concordium. This should generally not be changed from the default.
+
+      --max-energy <MAX_ENERGY>
+          Maximum energy to allow for transactions on Concordium. [env: ETHCCD_RELAYER_CONCORDIUM_MAX_ENERGY=] [default: 100000]
+
+- Minimum allowed balance of CCD on the Concordium sender account. If the
+  balance goes below this then the service will stop.
+
+      --ccd-min-balance <ccd-min-balance>
+          Minimum balance of the Concordium account. In microCCD [env: ETHCCD_RELAYER_MIN_CONCORDIUM_BALANCE=]
+
+- The path to the Concordium wallet, in the format that is exported from the
+  browser extension wallet. This option conflicts with `concordium-wallet-secret-name`
+
+      --concordium-wallet-file <concordium-wallet-file>
+          File with the Concordium wallet in the browser extension wallet export format. [env: ETHCCD_RELAYER_CONCORDIUM_WALLET_FILE=]
+
+- The Amazon Secret Manager secret to retrieve the Concordium wallet.
+  The access to the secret manager should be configured via the host.
+
+      --concordium-wallet-secret-name <concordium-wallet-secret-name>
+          File with the Concordium wallet in the browser extension wallet export format. [env: ETHCCD_RELAYER_CONCORDIUM_WALLET_SECRET_NAME=]
+
+## Logging levels.
+
+The service logs events of interest on `error`, `warn`, `info`, and `debug` levels.
+
+### Error
+
+Only critical errors are logged on this level and most of them lead to service
+shutdown. There are some errors logged on this level which should be manually
+investigated since they are most likely due to misconfiguration.
+
+### Warn
+
+This level is used to log situations where the service has experienced
+intermittent failure, such as loss of connectivity to, e.g., the database. The
+service should recover from those situations, but an abnormal number of warnings
+should be investigated to identify the root cause.
+
+### Info, Debug.
+
+These are for information purposes only and do not have to be monitored closely.
 
 ## Building
 
@@ -63,6 +242,61 @@ e.g., using
 git submodule update --init --recursive
 ```
 
+## Docker image
+
+A docker image containing the relayer and API server can be built using the
+provided [`Dockerfile`](./scripts/build.Dockerfile) as follows **from the root
+of the repository**.
+
+```
+docker build \
+    --build-arg build_image=rust:1.67-buster\
+    --build-arg base_image=debian:buster\
+    -f relayer/scripts/build.Dockerfile\
+    -t ccdeth_relayer:latest .
+```
+
+## Metrics
+
+The relayer service exposes a Prometheus exporter if configured with
+`ETHCCD_RELAYER_PROMETHEUS_SERVER` or `--prometheus-server` flag. The value
+should be `IP:PORT` to listen on. The metrics can be collected on
+`IP:PORT/metrics` endpoint. These can be used for monitoring the service for any
+irregularity.
+
+The following metrics are exposed
+- `concordium_account_balance` - Balance, in microCCD, of the sender account for
+  Concordium. This should be monitored so that it does not become too low. If
+  this value goes below `--ccd-min-balance` the service will shut down.
+- `concordium_height` - Largest processed height for Concordium. This indicates
+  progress. If this lingers then likely the service has trouble querying new
+  blocks from the Concordium node, or the Concordium node is behind.
+- `errors_total` - Number of errors emitted since start of the service. Errors
+  are only emitted on irregularities and in normal operation there should not be
+  any errors. The logs should be consulted if there are errors.
+- `warnings_total` - Number of warnings emitted since start of the service.
+  Warnings are non-critical in the sense that the service is expected to recover
+  from them. However a large spike in warnings indicates a problem and should be
+  investigated.
+- `ethereum_account_balance` - Balance, in microEther, of the sender account for
+  Ethereum. If this goes below `--eth-min-balance` then the service will stop.
+- `ethereum_height` - Largest processed height for Ethereum. This indicates
+  progress. If this lingers then likely the service has trouble querying new
+  blocks from Etheruem API.
+- `merkle_tree_size` - Current size of the Merkle tree for withdrawal approvals.
+- `num_completed_deposits` - Number deposits completed on Concordium since start.
+- `num_completed_withdrawals` - Number of withdrawals completed since start.
+- `num_deposits` -  Number deposits detected since start. This should be close
+  to number of completed deposits, but at any point in time there can be a
+  slight discrepancy. A large discrepancy indicates and issue.
+- `num_withdrawals` - Number of started withdrawals detected since start.
+  This will differ from `num_completed_withdrawals` since withdrawals are
+  batched and only happen every update interval.
+- `sent_concordium_transactions` - Number of transactions sent to Concordium since start.
+- `sent_ethereum_transactions` Number of transactions sent to Ethereum since start.
+- `timestamp_last_merkle_root` Unix timestamp in seconds of the last time a Merkle root was set.
+
+
 ## Generation of clients for Ethereum contracts.
 
 The relayer needs to interact with the root chain manager on Ethereum, and
@@ -70,7 +304,7 @@ listen for events emitted by the state sender contract. The `ethers.rs` library
 can generate these clients from the ABI of those contracts (specifically
 `src/erc20.rs`, `src/root_chain_manager.rs` and `src/state_sender.rs` are
 generated). The build script for the relayer can be used to generate these
-clients if the build is run using `generate-client` feature, i.e., 
+clients if the build is run using `generate-client` feature, i.e.,
 
 ```
 cargo build --feature=generate-client
