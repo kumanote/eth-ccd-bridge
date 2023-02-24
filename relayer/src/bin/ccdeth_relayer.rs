@@ -499,7 +499,10 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Using {ethereum_sender:#x} as the Ethereum wallet.");
 
     let balance = ethereum_client.get_balance(ethereum_sender, None).await?;
-    log::info!("Balance of the Ethereum sender account is {} microETH.", balance / 1_000_000_000_000u64);
+    log::info!(
+        "Balance of the Ethereum sender account is {} microETH.",
+        balance / 1_000_000_000_000u64
+    );
     let ethereum_nonce = ethereum_client
         .get_transaction_count(ethereum_sender, None)
         .await?;
