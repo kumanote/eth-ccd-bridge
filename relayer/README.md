@@ -242,6 +242,20 @@ e.g., using
 git submodule update --init --recursive
 ```
 
+## Docker image
+
+A docker image containing the relayer and API server can be built using the
+provided [`Dockerfile`](./scripts/build.Dockerfile) as follows **from the root
+of the repository**.
+
+```
+docker build \
+    --build-arg build_image=rust:1.67-buster\
+    --build-arg base_image=debian:buster\
+    -f relayer/scripts/build.Dockerfile\
+    -t ccdeth_relayer:latest .
+```
+
 ## Metrics
 
 The relayer service exposes a Prometheus exporter if configured with
