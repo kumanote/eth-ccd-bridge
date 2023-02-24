@@ -142,7 +142,8 @@ export const TransferProgress: React.FC<Props> = (props) => {
                         fontColor="TitleText"
                         fontLetterSpacing="0"
                     >
-                        {isWithdraw ? "Withdraw in progress" : "Deposit in progress"}
+                        {step <= 1 && (isWithdraw ? "Withdraw in progress" : "Deposit in progress")}
+                        {step > 1 && (isWithdraw ? "Withdraw processed" : "Deposit processed")}
                     </Text>
                 </ModalTitle>
                 <Content>

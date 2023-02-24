@@ -83,6 +83,7 @@ export const TableHeader = styled.th`
 `;
 
 export const TableRow = styled.tr`
+    cursor: pointer;
     position: relative;
     border-bottom: 1px solid #3232390f;
 `;

@@ -3,7 +3,7 @@ import { FC, useEffect } from "react";
 import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkpleProof";
 import { usePendingWithdrawals } from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { BridgeDirection, routes } from "src/constants/routes";
+import { routes } from "src/constants/routes";
 import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
 
 const WatchWithdrawal: FC<Components.Schemas.WalletWithdrawTx> = ({ origin_event_index, origin_tx_hash, status }) => {
@@ -17,7 +17,8 @@ const WatchWithdrawal: FC<Components.Schemas.WalletWithdrawTx> = ({ origin_event
 
     useEffect(() => {
         if (data?.proof) {
-            push(routes.history(BridgeDirection.Withdraw));
+            // Go to withdraw route of transaction to make it possible for the user to approve.
+            push(routes.withdraw.tx(origin_tx_hash));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data?.proof]);

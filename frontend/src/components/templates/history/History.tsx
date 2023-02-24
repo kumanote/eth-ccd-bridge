@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
+import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
 import { transactionUrl } from "src/helpers/ccdscan";
 import isDeposit from "src/helpers/checkTransaction";
@@ -36,13 +37,28 @@ const History = ({ depositSelected }: Props) => {
     const { replace } = useRouter();
     const { data: history, isLoading } = useWalletTransactions();
     const isMobile = useMediaQuery("(max-width: 540px)");
+    const { push } = useRouter();
 
     const [open, setOpen] = useState<number | undefined>();
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const getTransactionToken = useGetTransactionToken();
 
-    const rowClickHandler = (index: number) => {
+    const goToProgress = (transaction: Components.Schemas.WalletTx) => {
+        const txHash = isDeposit(transaction)
+            ? transaction.Deposit.origin_tx_hash
+            : transaction.Withdraw.origin_tx_hash;
+
+        if (!txHash) {
+            return;
+        }
+
+        const route = isDeposit(transaction) ? routes.deposit.tx(txHash) : routes.withdraw.tx(txHash);
+        push(route);
+    };
+
+    const rowClickHandler = (transaction: Components.Schemas.WalletTx, index: number) => {
         if (!isMobile) {
+            goToProgress(transaction);
             return;
         }
         if (open === index) {
@@ -157,7 +173,7 @@ const History = ({ depositSelected }: Props) => {
                                         return (
                                             <TableRow
                                                 key={transaction.Deposit.origin_tx_hash}
-                                                onClick={rowClickHandler.bind(undefined, index)}
+                                                onClick={() => rowClickHandler(transaction, index)}
                                             >
                                                 <TableData>
                                                     {isMobile && <InfoArrow isOpen={isOpen} />}
@@ -280,7 +296,7 @@ const History = ({ depositSelected }: Props) => {
                                         return (
                                             <TableRow
                                                 key={transaction.Withdraw.origin_tx_hash}
-                                                onClick={rowClickHandler.bind(undefined, index)}
+                                                onClick={() => rowClickHandler(transaction, index)}
                                             >
                                                 <TableData>
                                                     {isMobile && <InfoArrow isOpen={isOpen} />}
