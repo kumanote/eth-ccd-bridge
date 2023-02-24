@@ -9,6 +9,7 @@ use ccdeth_relayer::{
 use clap::Parser;
 use concordium::{
     id::types::AccountAddress,
+    smart_contracts::common::Amount,
     types::{AbsoluteBlockHeight, ContractAddress, WalletAccount},
     v2::{self, BlockIdentifier},
 };
@@ -113,6 +114,13 @@ struct EthereumConfig {
         default_value = "120"
     )]
     warn_duration: u64,
+    #[clap(
+        long = "eth-min-balance",
+        name = "eth-min-balance",
+        help = "Minimum balance of the Ethereum account. In microEther",
+        env = "ETHCCD_RELAYER_MIN_ETHEREUM_BALANCE"
+    )]
+    min_balance: u128,
 }
 
 impl EthereumConfig {
@@ -131,6 +139,7 @@ impl EthereumConfig {
             ethereum_request_timeout,
             escalation_interval,
             warn_duration,
+            min_balance,
         } = self;
         log::info!("Using {state_sender:#x} as the state sender address.");
         log::info!("Using {root_chain_manager:#x} as the root chain manager address.");
@@ -145,6 +154,7 @@ impl EthereumConfig {
         log::info!("Using {ethereum_request_timeout}s as the request timeout for Ethereum API.");
         log::info!("Will escalate price every {escalation_interval}s.");
         log::info!("Will warn after transaction is not confirmed after {warn_duration}s.");
+        log::info!("Requiring {min_balance} microETH on the sender account balance.");
     }
 }
 
@@ -197,6 +207,13 @@ struct ConcordiumConfig {
         env = "ETHCCD_RELAYER_CONCORDIUM_MAX_ENERGY"
     )]
     max_energy:      concordium::types::Energy,
+    #[clap(
+        long = "ccd-min-balance",
+        name = "ccd-min-balance",
+        help = "Minimum balance of the Concordium account. In microCCD",
+        env = "ETHCCD_RELAYER_MIN_CONCORDIUM_BALANCE"
+    )]
+    min_balance:     u64,
 }
 
 impl ConcordiumConfig {
@@ -208,6 +225,7 @@ impl ConcordiumConfig {
             request_timeout,
             bridge_manager,
             max_energy,
+            min_balance,
         } = self;
         log::info!("Using Concordium node at {}", api.uri());
         log::info!("Allowing up to {max_parallel} parallel queries of the Concordium node.");
@@ -215,6 +233,7 @@ impl ConcordiumConfig {
         log::info!("Using {request_timeout}s as the request timeout for Concordium.");
         log::info!("Using {bridge_manager} as bridge manager.");
         log::info!("Allowing up to {max_energy}NRG for Concordium tranasactions.");
+        log::info!("Requiring  {min_balance} microCCD on the Concordium sender account.");
     }
 }
 
@@ -322,6 +341,7 @@ async fn query_concordium_balance(
     metrics: ccdeth_relayer::metrics::Metrics,
     mut client: v2::Client,
     address: AccountAddress,
+    min_balance: Amount,
 ) -> anyhow::Result<()> {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -332,9 +352,14 @@ async fn query_concordium_balance(
             .await
         {
             Ok(ai) => {
-                metrics
-                    .concordium_balance
-                    .set(ai.response.account_amount.micro_ccd);
+                let balance = ai.response.account_amount;
+                metrics.concordium_balance.set(balance.micro_ccd);
+                if ai.response.account_amount < min_balance {
+                    anyhow::bail!(
+                        "Concordium account balance {balance} is below minimum required \
+                         {min_balance}."
+                    );
+                }
             }
             Err(e) => {
                 metrics.warnings_counter.inc();
@@ -348,6 +373,7 @@ async fn query_ethereum_balance<M: Middleware>(
     metrics: ccdeth_relayer::metrics::Metrics,
     client: M,
     address: ethers::prelude::Address,
+    min_balance: U256,
 ) -> anyhow::Result<()> {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -357,7 +383,13 @@ async fn query_ethereum_balance<M: Middleware>(
             Ok(balance) => {
                 metrics
                     .ethereum_balance
-                    .set((balance / 1_000_000).low_u64());
+                    .set((balance / 1_000_000_000_000u64).low_u64());
+                if balance < min_balance {
+                    anyhow::bail!(
+                        "Ethereum account balance {balance} is below minimum required \
+                         {min_balance}."
+                    );
+                }
             }
             Err(e) => {
                 metrics.warnings_counter.inc();
@@ -467,7 +499,7 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Using {ethereum_sender:#x} as the Ethereum wallet.");
 
     let balance = ethereum_client.get_balance(ethereum_sender, None).await?;
-    log::info!("Balance of the Ethereum sender account is {balance}.");
+    log::info!("Balance of the Ethereum sender account is {} microETH.", balance / 1_000_000_000_000u64);
     let ethereum_nonce = ethereum_client
         .get_transaction_count(ethereum_sender, None)
         .await?;
@@ -679,12 +711,18 @@ async fn main() -> anyhow::Result<()> {
             metrics.clone(),
             concordium_client,
             concordium_sender_address,
+            Amount::from_micro_ccd(app.concordium_config.min_balance),
         ),
     );
 
     let ethereum_balance_query_handle = spawn_cancel(
         died_sender.clone(),
-        query_ethereum_balance(metrics.clone(), ethereum_client, ethereum_sender),
+        query_ethereum_balance(
+            metrics.clone(),
+            ethereum_client,
+            ethereum_sender,
+            U256::from(app.ethereum_config.min_balance) * 1_000_000_000_000u64,
+        ),
     );
 
     // Wait for signal to be received.
