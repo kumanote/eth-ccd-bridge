@@ -4,9 +4,11 @@ import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkpleP
 import { usePendingWithdrawals } from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
+import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
 
-const WatchWithdrawal: FC<Components.Schemas.WalletWithdrawTx> = ({ origin_event_index, origin_tx_hash }) => {
+const WatchWithdrawal: FC<Components.Schemas.WalletWithdrawTx> = ({ origin_event_index, origin_tx_hash, status }) => {
     const { push } = useRouter();
+    const { remove } = useApprovedWithdrawalsStore();
 
     if (origin_tx_hash === undefined || origin_event_index === undefined) {
         throw new Error("Dependencies not available");
@@ -20,6 +22,12 @@ const WatchWithdrawal: FC<Components.Schemas.WalletWithdrawTx> = ({ origin_event
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data?.proof]);
+
+    useEffect(() => {
+        if (status === "processed") {
+            remove(origin_tx_hash);
+        }
+    }, [status, origin_tx_hash, remove]);
 
     return null;
 };

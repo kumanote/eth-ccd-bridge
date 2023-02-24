@@ -7,6 +7,7 @@ import useWatchWithdraw from "src/api-query/use-watch-withdraw/useWatchWithdraw"
 import { useEffect, useState } from "react";
 import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkpleProof";
 import useRootManagerContract from "src/contracts/use-root-manager";
+import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
 
 /** Interval in ms for how often to query for deposit status */
 const QUERY_INTERVAL = 10000;
@@ -26,7 +27,7 @@ const WithdrawTransactionStatus: NextPage = () => {
         refetchInterval: QUERY_INTERVAL,
     });
     const { withdraw } = useRootManagerContract();
-    const [approvalSubmitted, setApprovalSubmitted] = useState(false); // TODO: do this through localstorage instead...
+    const { addApproved, transactions: approvedTransactions } = useApprovedWithdrawalsStore();
 
     const { data: merkleProofData } = useEthMerkleProof(
         { event_id: txData?.concordium_event_id, tx_hash: tx },
@@ -44,7 +45,7 @@ const WithdrawTransactionStatus: NextPage = () => {
         setError: (message: string) => void,
         setStatus: (message: string | undefined) => void
     ) => {
-        if (merkleProofData?.proof === undefined || merkleProofData?.params === undefined)
+        if (merkleProofData?.proof === undefined || merkleProofData?.params === undefined || tx === undefined)
             throw new Error("Dependencies for withdrawal request not available");
 
         try {
@@ -55,14 +56,14 @@ const WithdrawTransactionStatus: NextPage = () => {
             await approvalTx.wait(1);
 
             setStatus(undefined);
-            setApprovalSubmitted(true);
+            addApproved(tx, approvalTx.hash);
         } catch {
             setError("Transacion rejected.");
         }
     };
 
-    const canWithdraw =
-        merkleProofData?.proof !== undefined && merkleProofData.params !== undefined && !approvalSubmitted;
+    const hasApproved = approvedTransactions[tx ?? ""] !== undefined;
+    const canWithdraw = merkleProofData?.proof !== undefined && merkleProofData.params !== undefined && !hasApproved;
 
     return (
         <TransferProgress
