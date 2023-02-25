@@ -1,1 +1,1 @@
-export { TransferProgress as default, TransferStep } from "./TransferProgress";
+export { TransferProgress as default } from "./TransferProgress";

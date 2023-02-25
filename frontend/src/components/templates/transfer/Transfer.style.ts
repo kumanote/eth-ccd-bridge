@@ -3,9 +3,6 @@ import theme from "../../../theme/theme";
 import Text from "../../atoms/text/text";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Container from "@components/atoms/container/Container";
-import Link from "next/link";
-
-export const StyledWrapper = styled(PageWrapper)``;
 
 export const StyledContainer = styled(Container)`
     padding: 27px 40px;
@@ -196,67 +193,4 @@ export const StyledWalletDisplay = styled.div<{
         `&::before {
   opacity: 1;
 }`}
-`;
-
-export const StyledForm = styled.form`
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
-    & > * {
-        margin-bottom: 8px;
-    }
-
-    & > :nth-child(2),
-    & > :last-child {
-        margin-top: 12px;
-        margin-bottom: 0;
-    }
-`;
-
-export const StyledWalletLabel = styled.label`
-    text-align: center;
-    min-width: 95px;
-    max-height: 26px;
-    padding: 7px 12px;
-    background: ${theme.colors.Brown};
-    border: none;
-    border-radius: 5px;
-    font-size: 10px;
-    color: white;
-    font-weight: 300;
-    cursor: pointer;
-    box-shadow: 0px 3px 6px #0000001c;
-    font-family: Roboto;
-`;
-
-export const StyledFileInput = styled.input`
-    opacity: 0;
-    width: 0;
-    height: 0;
-`;
-
-export const StyledFileInputWrapper = styled.div`
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    & > :first-child {
-        margin-right: 8px;
-    }
-    & > :last-child {
-        width: 100%;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-    }
-`;
-
-export const StyledPasswordInput = styled.input`
-    height: 21px;
-    &:focus {
-        outline: none !important;
-        border: 1px solid ${theme.colors.Brown};
-        box-shadow: 0 0 2px ${theme.colors.DarkYellow};
-    }
 `;

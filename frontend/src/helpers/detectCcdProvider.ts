@@ -1,6 +1,6 @@
 import { WalletApi } from "@concordium/browser-wallet-api-helpers";
 
-export async function detectCcdProvider(timeout = 5000): Promise<WalletApi> {
+async function detectCcdProvider(timeout = 5000): Promise<WalletApi> {
     return new Promise((resolve, reject) => {
         if (window.concordium) {
             resolve((window as any).concordium);

@@ -4,9 +4,11 @@ import { toWei } from "../helpers/number";
 import useWallet from "../hooks/use-wallet";
 import MOCK_ABI from "./abis/MOCK_ABI.json";
 
+const ERC20_ALLOWANCE = "1000000000000";
+
 const useGenerateContract = (address: string, enabled: boolean) => {
     const { context } = useWallet();
-    const amountToApprove = toWei("1000000000000");
+    const amountToApprove = toWei(ERC20_ALLOWANCE); // TODO: config.
 
     const getBalance = async (decimals: number) => {
         if (!enabled || !address || !context.library) return;
