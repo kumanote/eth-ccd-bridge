@@ -223,9 +223,9 @@ should be investigated to identify the root cause.
 
 These are for information purposes only and do not have to be monitored closely.
 
-## Building
+## Building the binaries
 
-The project is a pure Rust project, and can be build by running
+The project is a pure Rust project, and can be built by running
 
 ```shell
 cargo build --release
