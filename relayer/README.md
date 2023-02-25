@@ -356,5 +356,17 @@ The following configuration options are available
 
 - Maximum request handling duration, in milliseconds.
 
-      --request-timeout <REQUEST_TIMEOUT>
-          Request timeout in millisecons. [env: ETHCCD_API_REQUEST_TIMEOUT=] [default: 1000]
+- Log request and response headers. This is quite verbose, so should only be
+      used when diagnosing a problem.
+
+      --log-headers
+          Whether to log headers for requests and responses. [env: ETHCCD_API_LOG_HEADERS=]
+
+- The API server can serve static files from a given directory. This is intended
+  to serve token metadata. The files are served under `/assets/`
+ 
+      --assets-dir <ASSETS_DIR>
+          Serve files from the supplied directory under /assets. [env: ETHCCD_API_SERVE_ASSETS=]
+
+## Serving static files
+

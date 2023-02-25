@@ -9,7 +9,7 @@ use concordium::{
 };
 use concordium_rust_sdk as concordium;
 use postgres_types::FromSql;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio_postgres::NoTls;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse};
 use utoipa::{openapi::ObjectBuilder, OpenApi};
@@ -59,6 +59,18 @@ struct Api {
         env = "ETHCCD_API_REQUEST_TIMEOUT"
     )]
     request_timeout:    u64,
+    #[clap(
+        long = "assets-dir",
+        help = "Serve files from the supplied directory under /assets.",
+        env = "ETHCCD_API_SERVE_ASSETS"
+    )]
+    assets_dir:         Option<PathBuf>,
+    #[clap(
+        long = "log-headers",
+        help = "Whether to log headers for requests and responses.",
+        env = "ETHCCD_API_LOG_HEADERS"
+    )]
+    log_headers:        bool,
 }
 
 /// A unit struct used to anchor the generated openapi.json spec.
@@ -111,8 +123,15 @@ async fn main() -> anyhow::Result<()> {
 
     let openapi = ApiDoc::openapi();
 
+    // Serve static files.
+    let router = if let Some(assets_dir) = app.assets_dir {
+        axum::Router::new().nest_service("/assets", tower_http::services::ServeDir::new(assets_dir))
+    } else {
+        axum::Router::new()
+    };
+
     // build our application with a route
-    let api = axum::Router::new()
+    let api = router
         .route(
             "/api/v1/deposit/:tx_hash",
             axum::routing::get(watch_deposit),
@@ -138,9 +157,9 @@ async fn main() -> anyhow::Result<()> {
         .with_state(db)
         .layer(tower_http::trace::TraceLayer::new_for_http().
                make_span_with(DefaultMakeSpan::new().
-                              include_headers(true)).
+                              include_headers(app.log_headers)).
                on_response(DefaultOnResponse::new().
-                           include_headers(true)))
+                           include_headers(app.log_headers)))
         .layer(tower_http::timeout::TimeoutLayer::new(
             std::time::Duration::from_millis(app.request_timeout),
         ))
