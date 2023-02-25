@@ -1,9 +1,7 @@
-use anyhow::Context;
-use big_s::S;
 use concordium_rust_sdk::{
     common::types::{Amount, TransactionTime},
-    endpoints::{Client, QueryError},
-    id::{self, types::AccountAddress},
+    endpoints::QueryError,
+    id::types::AccountAddress,
     smart_contracts::common::{
         self as contracts_common, Address, ModuleReference, OwnedContractName, OwnedReceiveName,
     },
@@ -18,11 +16,11 @@ use concordium_rust_sdk::{
             InitContractPayload, UpdateContractPayload,
         },
         AccountTransactionEffects, BlockItemSummary, BlockItemSummaryDetails, ContractAddress,
-        Energy, RejectReason, TransactionType,
+        Energy, RejectReason, TransactionType, WalletAccount,
     },
+    v2,
 };
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{path::Path, str::FromStr};
 
 use crate::{
     contracts::{
@@ -39,14 +37,6 @@ pub const CIS2_UPGRADE_METHOD: &str = "cis2-bridgeable.upgrade";
 const CIS2_GRANT_ROLE_METHOD: &str = "cis2-bridgeable.grantRole";
 const CIS2_INIT_METHOD: &str = "init_cis2-bridgeable";
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-/// Helper to parse account keys.
-pub struct AccountData {
-    account_keys: id::types::AccountKeys,
-    address:      id::types::AccountAddress,
-}
-
 #[derive(Clone, Debug)]
 pub struct ModuleDeployed {
     pub module_ref: ModuleRef,
@@ -57,16 +47,15 @@ pub struct ContractInitialized {
     pub contract: ContractAddress,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Deployer {
-    pub client:      Client,
-    pub manager_key: String,
+    pub client:      v2::Client,
+    pub manager_key: WalletAccount,
 }
 
 impl Deployer {
-    pub fn new(client: Client, wallet_account_file: String) -> Result<Deployer, DeployError> {
-        let key_data = std::fs::read_to_string(wallet_account_file)
-            .context("Could not read the keys file.")?;
+    pub fn new(client: v2::Client, wallet_account_file: &Path) -> Result<Deployer, DeployError> {
+        let key_data = WalletAccount::from_json_file(wallet_account_file)?;
 
         Ok(Deployer {
             client,
@@ -75,7 +64,7 @@ impl Deployer {
     }
 
     pub async fn module_exists(&self, wasm_module: WasmModule) -> Result<bool, DeployError> {
-        let consensus_info = self.client.clone().get_consensus_status().await?;
+        let consensus_info = self.client.clone().get_consensus_info().await?;
 
         let latest_block = consensus_info.last_finalized_block;
 
@@ -112,8 +101,7 @@ impl Deployer {
             });
         }
 
-        let manager_account = self.get_manager_account()?;
-        let nonce = self.get_nonce(manager_account.address).await?;
+        let nonce = self.get_nonce(self.manager_key.address).await?;
 
         if !nonce.all_final {
             return Err(DeployError::NonceNotFinal);
@@ -122,8 +110,8 @@ impl Deployer {
         let expiry = TransactionTime::from_seconds((chrono::Utc::now().timestamp() + 300) as u64);
 
         let tx = deploy_module(
-            &manager_account.account_keys,
-            manager_account.address,
+            &self.manager_key,
+            self.manager_key.address,
             nonce.nonce,
             expiry,
             wasm_module,
@@ -165,7 +153,7 @@ impl Deployer {
         let param: Parameter = bytes.try_into()?;
 
         let payload = InitContractPayload {
-            init_name: OwnedContractName::new(S(CIS2_INIT_METHOD))?,
+            init_name: OwnedContractName::new(CIS2_INIT_METHOD.into())?,
             amount: Amount::from_micro_ccd(0),
             mod_ref: module_ref,
             param,
@@ -183,7 +171,7 @@ impl Deployer {
         let param: Parameter = Parameter::default();
 
         let payload = InitContractPayload {
-            init_name: OwnedContractName::new(S(BRIDGE_INIT_METHOD))?,
+            init_name: OwnedContractName::new(BRIDGE_INIT_METHOD.into())?,
             amount: Amount::from_micro_ccd(0),
             mod_ref: module_ref,
             param,
@@ -200,7 +188,7 @@ impl Deployer {
         contract: ContractAddress,
         method: &str,
     ) -> Result<(), DeployError> {
-        let consensus_info = self.client.clone().get_consensus_status().await?;
+        let consensus_info = self.client.clone().get_consensus_info().await?;
 
         let latest_block = consensus_info.last_finalized_block;
 
@@ -210,15 +198,14 @@ impl Deployer {
             .get_instance_info(contract, &latest_block)
             .await?;
 
-        let current_module_ref = state.source_module();
+        let current_module_ref = state.response.source_module();
 
         if current_module_ref == new_module_ref {
             println!("Contract already uses the new module.");
             return Ok(());
         }
 
-        let manager_account = self.get_manager_account()?;
-        let nonce = self.get_nonce(manager_account.address).await?;
+        let nonce = self.get_nonce(self.manager_key.address).await?;
 
         if !nonce.all_final {
             return Err(DeployError::NonceNotFinal);
@@ -241,11 +228,9 @@ impl Deployer {
             message:      bytes.try_into()?,
         };
 
-        let energy = self
-            .estimate_energy(update_payload.clone(), manager_account.address)
-            .await?;
+        let energy = self.estimate_energy(update_payload.clone()).await?;
 
-        self.update_contract(manager_account, update_payload, GivenEnergy::Add(energy))
+        self.update_contract(update_payload, GivenEnergy::Add(energy))
             .await?;
 
         Ok(())
@@ -255,8 +240,7 @@ impl Deployer {
         &self,
         payload: InitContractPayload,
     ) -> Result<ContractAddress, DeployError> {
-        let manager_account = self.get_manager_account()?;
-        let nonce = self.get_nonce(manager_account.address).await?;
+        let nonce = self.get_nonce(self.manager_key.address).await?;
 
         if !nonce.all_final {
             return Err(DeployError::NonceNotFinal);
@@ -266,8 +250,8 @@ impl Deployer {
         let energy = Energy { energy: 5000 };
 
         let tx = init_contract(
-            &manager_account.account_keys,
-            manager_account.address,
+            &self.manager_key,
+            self.manager_key.address,
             nonce.nonce,
             expiry,
             payload,
@@ -301,9 +285,7 @@ impl Deployer {
         contract: ContractAddress,
         role: BridgeRoles,
     ) -> Result<(), DeployError> {
-        let manager_account = self.get_manager_account()?;
-
-        let address = Address::Account(manager_account.address);
+        let address = Address::Account(self.manager_key.address);
 
         let params = BridgeGrantRoleParams { address, role };
         let bytes = contracts_common::to_bytes(&params);
@@ -315,11 +297,9 @@ impl Deployer {
             message:      bytes.try_into()?,
         };
 
-        let energy = self
-            .estimate_energy(update_payload.clone(), manager_account.address)
-            .await?;
+        let energy = self.estimate_energy(update_payload.clone()).await?;
 
-        self.update_contract(manager_account, update_payload, GivenEnergy::Add(energy))
+        self.update_contract(update_payload, GivenEnergy::Add(energy))
             .await?;
 
         Ok(())
@@ -331,8 +311,6 @@ impl Deployer {
         address: Address,
         role: CIS2BridgeableRoles,
     ) -> Result<(), DeployError> {
-        let manager_account = self.get_manager_account()?;
-
         let params = CIS2BridgeableGrantRoleParams { address, role };
         let bytes = contracts_common::to_bytes(&params);
 
@@ -343,11 +321,9 @@ impl Deployer {
             message:      bytes.try_into()?,
         };
 
-        let energy = self
-            .estimate_energy(update_payload.clone(), manager_account.address)
-            .await?;
+        let energy = self.estimate_energy(update_payload.clone()).await?;
 
-        self.update_contract(manager_account, update_payload, GivenEnergy::Add(energy))
+        self.update_contract(update_payload, GivenEnergy::Add(energy))
             .await?;
 
         Ok(())
@@ -355,11 +331,10 @@ impl Deployer {
 
     pub async fn update_contract(
         &self,
-        manager_account: AccountData,
         update_payload: UpdateContractPayload,
         energy: GivenEnergy,
     ) -> Result<(), DeployError> {
-        let nonce = self.get_nonce(manager_account.address).await?;
+        let nonce = self.get_nonce(self.manager_key.address).await?;
 
         if !nonce.all_final {
             return Err(DeployError::NonceNotFinal);
@@ -372,8 +347,8 @@ impl Deployer {
         let expiry = TransactionTime::from_seconds((chrono::Utc::now().timestamp() + 300) as u64);
 
         let tx = transactions::send::make_and_sign_transaction(
-            &manager_account.account_keys,
-            manager_account.address,
+            &self.manager_key,
+            self.manager_key.address,
             nonce.nonce,
             expiry,
             energy,
@@ -396,15 +371,11 @@ impl Deployer {
         Ok(())
     }
 
-    async fn estimate_energy(
-        &self,
-        payload: UpdateContractPayload,
-        manager_address: AccountAddress,
-    ) -> Result<Energy, DeployError> {
-        let consensus_info = self.client.clone().get_consensus_status().await?;
+    async fn estimate_energy(&self, payload: UpdateContractPayload) -> Result<Energy, DeployError> {
+        let consensus_info = self.client.clone().get_consensus_info().await?;
 
         let context = ContractContext {
-            invoker:   Some(Address::Account(manager_address)),
+            invoker:   Some(Address::Account(self.manager_key.address)),
             contract:  payload.address,
             amount:    payload.amount,
             method:    payload.receive_name,
@@ -415,10 +386,10 @@ impl Deployer {
         let result = self
             .client
             .clone()
-            .invoke_contract(&consensus_info.best_block, &context)
+            .invoke_instance(&consensus_info.best_block, &context)
             .await?;
 
-        match result {
+        match result.response {
             InvokeContractResult::Failure {
                 return_value,
                 reason,
@@ -443,14 +414,12 @@ impl Deployer {
         &self,
         address: AccountAddress,
     ) -> Result<AccountNonceResponse, DeployError> {
-        let nonce = self.client.clone().get_next_account_nonce(&address).await?;
+        let nonce = self
+            .client
+            .clone()
+            .get_next_account_sequence_number(&address)
+            .await?;
         Ok(nonce)
-    }
-
-    fn get_manager_account(&self) -> Result<AccountData, DeployError> {
-        let manager_address: AccountData = serde_json::from_str(self.manager_key.as_str())
-            .context("Could not parse the accounts file.")?;
-        Ok(manager_address)
     }
 
     fn parse_deploy_module_event(
@@ -464,9 +433,9 @@ impl Deployer {
                     reject_reason,
                 } => {
                     if transaction_type != Some(TransactionType::DeployModule) {
-                        return Err(DeployError::InvalidBlockItem(S("Expected transaction \
-                                                                    type to be DeployModule \
-                                                                    if rejected")));
+                        return Err(DeployError::InvalidBlockItem(
+                            "Expected transaction type to be DeployModule if rejected".into(),
+                        ));
                     }
 
                     match reject_reason {
@@ -487,15 +456,15 @@ impl Deployer {
                     return Ok(ModuleDeployed { module_ref });
                 }
                 _ => {
-                    return Err(DeployError::InvalidBlockItem(S(
-                        "invalid transaction effects"
-                    )))
+                    return Err(DeployError::InvalidBlockItem(
+                        "invalid transaction effects".into(),
+                    ))
                 }
             },
             _ => {
-                return Err(DeployError::InvalidBlockItem(S(
-                    "Expected Account transaction"
-                )));
+                return Err(DeployError::InvalidBlockItem(
+                    "Expected Account transaction".into(),
+                ));
             }
         }
     }
@@ -511,9 +480,9 @@ impl Deployer {
                     reject_reason,
                 } => {
                     if transaction_type != Some(TransactionType::InitContract) {
-                        return Err(DeployError::InvalidBlockItem(S("Expected transaction \
-                                                                    type to be InitContract \
-                                                                    if rejected")));
+                        return Err(DeployError::InvalidBlockItem(
+                            "Expected transaction type to be InitContract if rejected".into(),
+                        ));
                     }
 
                     return Err(DeployError::TransactionRejectedR(format!(
@@ -527,15 +496,15 @@ impl Deployer {
                     });
                 }
                 _ => {
-                    return Err(DeployError::InvalidBlockItem(S(
-                        "invalid transaction effects"
-                    )))
+                    return Err(DeployError::InvalidBlockItem(
+                        "invalid transaction effects".into(),
+                    ))
                 }
             },
             _ => {
-                return Err(DeployError::InvalidBlockItem(S(
-                    "Expected Account transaction"
-                )));
+                return Err(DeployError::InvalidBlockItem(
+                    "Expected Account transaction".into(),
+                ));
             }
         }
     }
@@ -548,9 +517,9 @@ impl Deployer {
                     reject_reason,
                 } => {
                     if transaction_type != Some(TransactionType::Update) {
-                        return Err(DeployError::InvalidBlockItem(S("Expected transaction \
-                                                                    type to be Update if \
-                                                                    rejected")));
+                        return Err(DeployError::InvalidBlockItem(
+                            "Expected transaction type to be Update if rejected".into(),
+                        ));
                     }
 
                     return Err(DeployError::TransactionRejectedR(format!(
@@ -562,15 +531,15 @@ impl Deployer {
                     return Ok(());
                 }
                 _ => {
-                    return Err(DeployError::InvalidBlockItem(S(
-                        "invalid transaction effects"
-                    )))
+                    return Err(DeployError::InvalidBlockItem(
+                        "invalid transaction effects".into(),
+                    ))
                 }
             },
             _ => {
-                return Err(DeployError::InvalidBlockItem(S(
-                    "Expected Account transaction"
-                )));
+                return Err(DeployError::InvalidBlockItem(
+                    "Expected Account transaction".into(),
+                ));
             }
         }
     }
