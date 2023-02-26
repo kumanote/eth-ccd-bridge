@@ -50,23 +50,28 @@ pub enum EthTransactionStatus {
     Clone,
     tokio_postgres::types::ToSql,
     tokio_postgres::types::FromSql,
-    serde::Serialize,
+    utoipa::ToSchema,
 )]
 #[postgres(name = "concordium_transaction_status")]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum TransactionStatus {
     /// Transaction was added to the database and not yet finalized.
     #[postgres(name = "pending")]
     #[serde(rename = "pending")]
+    #[schema(rename = "pending")]
     Pending,
-    /// Transaction was finalized, but failed.
+    /// Transaction was finalized.
     #[postgres(name = "failed")]
     #[serde(rename = "failed")]
+    #[schema(rename = "failed")]
     Failed,
     /// Transaction was finalized.
     #[postgres(name = "finalized")]
-    #[serde(rename = "finalized")]
+    #[serde(rename = "processed")]
+    #[schema(rename = "processed")]
     Finalized,
     #[postgres(name = "missing")]
+    #[schema(rename = "missing")]
     #[serde(rename = "missing")]
     Missing,
 }
@@ -848,6 +853,8 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
     }
 
     /// Return the maximum nonce of a pending transaction.
+    /// This is only intended to be used at program startup and does not handle
+    /// disconnects, etc.
     pub async fn submit_missing_txs(
         &self,
         mut client: v2::Client,
@@ -856,22 +863,34 @@ VALUES ($1, $2, $3, $4, $5, (SELECT tx_hash FROM concordium_events
         let mut next_nonce = None;
         for (tx_hash, tx) in txs {
             match &tx {
-                BlockItem::AccountTransaction(at) => next_nonce = Some(at.header.nonce.next()),
+                BlockItem::AccountTransaction(at) => {
+                    let status = client.get_block_item_status(&tx_hash).await;
+                    match status {
+                        Ok(_) => (),
+                        Err(e) if e.is_not_found() => {
+                            log::debug!("Submitting missing transaction {}.", tx_hash);
+                            if let Err(e) = client.send_block_item(&tx).await {
+                                if e.is_invalid_argument() {
+                                    // Something is wrong with this transaction
+                                    log::error!(
+                                        "Unable to resubmit transaction {e:#?}. Marking it as \
+                                         failed."
+                                    );
+                                    self.mark_concordium_tx(tx_hash, TransactionStatus::Failed)
+                                        .await?;
+                                }
+                            }
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+                    next_nonce = Some(at.header.nonce.next());
+                }
                 BlockItem::CredentialDeployment(_) => anyhow::bail!(
                     "Database invariant violation. Credential deployment in the database."
                 ),
                 BlockItem::UpdateInstruction(_) => anyhow::bail!(
                     "Database invariant violation. Update instruction in the database."
                 ),
-            }
-            let status = client.get_block_item_status(&tx_hash).await;
-            match status {
-                Ok(_) => (),
-                Err(e) if e.is_not_found() => {
-                    log::debug!("Submitting missing transaction {}.", tx_hash);
-                    client.send_block_item(&tx).await?;
-                }
-                Err(e) => return Err(e.into()),
             }
         }
         Ok(next_nonce)

@@ -21,13 +21,14 @@ use crate::{
     state_sender,
 };
 
-pub fn make_proof<A: PartialEq + Eq>(
-    leaves: impl IntoIterator<Item = (A, [u8; 32])>,
+pub fn make_proof<A: PartialEq + Eq, E>(
+    leaves: impl IntoIterator<Item = Result<(A, [u8; 32]), E>>,
     elem: A,
-) -> Option<MerkleProof<Keccak256Algorithm>> {
+) -> Result<Option<MerkleProof<Keccak256Algorithm>>, E> {
     let mut tree = MerkleTree::<Keccak256Algorithm>::new();
     let mut index = Vec::new();
-    for (i, (v, leaf)) in leaves.into_iter().enumerate() {
+    for (i, ok_or) in leaves.into_iter().enumerate() {
+        let (v, leaf) = ok_or?;
         tree.insert(leaf);
         if v == elem {
             index.push(i)
@@ -35,9 +36,9 @@ pub fn make_proof<A: PartialEq + Eq>(
     }
     if !index.is_empty() {
         tree.commit();
-        Some(tree.proof(&index))
+        Ok(Some(tree.proof(&index)))
     } else {
-        None
+        Ok(None)
     }
 }
 

@@ -2,46 +2,44 @@
 
 # Setup:
 
-Ensure you have this env sourced into your shell:
-```
-$ cat .env
-export CONCORDIUM_URL="http://139.59.140.84:10001"
-export CONCORDIUM_TOKEN="rpcadmin"
-export CONCORDIUM_MANAGER_ACCOUNT_FILE="mytmp/account-0.json"
-```
-
-Sync dependencies:
+Make sure to initialize and update the submodules of this repository
 
 ```
-$ git submodule init
-$ git submodule update
-
-$ cd deps/concordium-rust-sdk
-$ git submodule init
-$ git submodule update
-
-$ cd deps/concordium-rust-sdk/concordium-base
-$ git submodule init
-$ git submodule update
-
+git submodule update --init --recursive
 ```
 
-# Run make to build smart contract wasm and generate schema.
+Build and run the scripts using
+```
+cargo run
+```
+
+The following options are necessary
 
 ```
-$ make
+      --node <CONCORDIUM_URL>
+          V2 API of the concordium node. [default: http://localhost:20001]
+      --wallet <CONCORDIUM_WALLET>
+          Location of the Concordium wallet.
+      --tokens <TOKENS>
+          JSON file with a list of tokens.
+      --manager-source <MANAGER_SOURCE>
+          Location of the compiled BridgeManager contract.
+      --cis2-bridgeable <CIS2_SOURCE>
+          Source of the CIS2 token contract.
 ```
 
-It should generate this files in `data` directory:
+The `tokens` file should be a valid JSON file with a list of objects of the form
+```
+{
+    name: "USDC.eth",
+    token_metadata_url:  "http://domain/path",
+    token_metadata_hash: "6a6ca3243935653bf3b271aa1257a3f9351663757c66a498750d4622f81c08f5"
+}
+```
 
-```
-$ tree data
-data
-├── bridge_manager.bin
-├── bridge_manager.wasm.v1
-├── cis2_bridgeable.bin
-└── cis2_bridgeable.wasm.v1
-```
+The `wallet` parameter should be a Concordium wallet either exported from the
+Browser wallet or the new mobile wallets, or in the format emitted by the
+genesis tool.
 
 # Deploy contracts:
 

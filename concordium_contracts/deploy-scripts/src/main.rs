@@ -1,45 +1,35 @@
 pub mod contracts;
 pub mod deployer;
 
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Cursor, Write},
-};
-
+use crate::contracts::{BridgeRoles, CIS2BridgeableRoles};
 use anyhow::Context;
-use big_s::S;
+use clap::Parser;
 use concordium_rust_sdk::{
     endpoints::{self, RPCError},
     smart_contracts::common::{Address, NewContractNameError, NewReceiveNameError},
     types::{
+        hashes::TransactionHash,
         smart_contracts::{ExceedsParameterSize, ModuleRef, WasmModule},
         ContractAddress,
     },
+    v2,
 };
 use deployer::{Deployer, ModuleDeployed};
 use hex::FromHexError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::{
+    fs::File,
+    io::{BufWriter, Cursor, Write},
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
 
-use crate::{
-    contracts::{BridgeRoles, CIS2BridgeableRoles},
-    deployer::{BRIDGE_UPGRADE_METHOD, CIS2_UPGRADE_METHOD},
-};
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct Config {
-    pub concordium_url:   String,
-    pub concordium_token: String,
-
-    pub concordium_manager_account_file: String,
-}
-
-#[derive(Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct WrappedToken {
     pub name:                String,
     pub token_metadata_url:  String,
-    pub token_metadata_hash: String,
+    pub token_metadata_hash: TransactionHash,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,9 +50,7 @@ pub enum DeployError {
     #[error("concordium error: {0}")]
     RPCError(#[from] RPCError),
     #[error("transport error: {0}")]
-    TransportError(#[from] tonic::transport::Error),
-    #[error("config error: {0}")]
-    ConfigError(#[from] envy::Error),
+    TransportError(#[from] v2::Error),
     #[error("query error: {0}")]
     QueryError(#[from] endpoints::QueryError),
     #[error("anyhow error: {0}")]
@@ -111,7 +99,7 @@ fn module_deployed(module_ref: &str) -> Result<ModuleDeployed, DeployError> {
     Ok(module_deployed)
 }
 
-fn get_wasm_module(file: &str) -> Result<WasmModule, DeployError> {
+fn get_wasm_module(file: &Path) -> Result<WasmModule, DeployError> {
     let wasm_module =
         std::fs::read(file).context("Could not read the cis2_bridgeable.wasm.v1 file")?;
     let mut cursor = Cursor::new(wasm_module);
@@ -119,25 +107,25 @@ fn get_wasm_module(file: &str) -> Result<WasmModule, DeployError> {
     Ok(wasm_module)
 }
 
-async fn get_and_compare_metadata_hash(url: &str, hash: &str) -> Result<[u8; 32], DeployError> {
+async fn get_and_compare_metadata_hash(
+    url: &str,
+    hash: &TransactionHash,
+) -> Result<[u8; 32], DeployError> {
     let response = reqwest::get(url).await?;
     let metadata = response.text().await?;
 
-    let mut hasher = Sha256::new();
-    hasher.update(metadata);
-    let result = hasher.finalize();
+    let result: [u8; 32] = Sha256::digest(metadata).into();
 
-    let mut bytes = [0u8; 32];
-    hex::decode_to_slice(hash, &mut bytes)?;
-
-    if result.as_slice() != bytes {
+    if result.as_slice() != hash.as_ref() {
         return Err(DeployError::InvalidHash(format!(
-            "hashes do not match for url {}, expected: {:?}, got: {:?}",
-            url, bytes, result
+            "hashes do not match for url {}, expected: {}, got: {}",
+            url,
+            hash,
+            TransactionHash::from(result)
         )));
     }
 
-    Ok(bytes)
+    Ok(result)
 }
 
 async fn deploy_token(
@@ -237,116 +225,37 @@ async fn init_contracts(
     Ok(())
 }
 
-async fn upgrade_contracts(
-    deployer: &Deployer,
-    tokens: &[WrappedToken],
-    bridge_manager_module_ref: ModuleRef,
-    cis2_bridgeable_module_ref: ModuleRef,
-) -> Result<(), DeployError> {
-    let file = File::open("../latest.json")?;
-    let reader = BufReader::new(file);
-    let mut output: Output = serde_json::from_reader(reader)?;
-
-    println!("Upgrading bridge-manager....");
-    deployer
-        .upgrade_contract(
-            bridge_manager_module_ref,
-            output.bridge_manager,
-            BRIDGE_UPGRADE_METHOD,
-        )
-        .await?;
-
-    println!("Upgraded bridge-manager");
-
-    println!("");
-
-    println!("Upgrading cis2-bridgeable contracts....");
-
-    for token in tokens {
-        println!("Upgrading cis2-bridgeable {}....", token.name);
-
-        match output.tokens.iter().find(|t| t.name == token.name) {
-            Some(token_output) => {
-                deployer
-                    .upgrade_contract(
-                        cis2_bridgeable_module_ref,
-                        token_output.contract,
-                        CIS2_UPGRADE_METHOD,
-                    )
-                    .await?;
-            }
-            None => {
-                let output_token = deploy_token(
-                    deployer,
-                    token,
-                    cis2_bridgeable_module_ref,
-                    output.bridge_manager,
-                )
-                .await?;
-
-                output.tokens.push(output_token);
-            }
-        }
-    }
-
-    println!("");
-
-    let json = serde_json::to_string_pretty(&output)?;
-
-    println!("{}", json);
-
-    let file = File::create("../latest.json")?;
-    let mut writer = BufWriter::new(file);
-    writer.write_all(json.as_bytes())?;
-
-    Ok(())
+#[derive(clap::Parser, Debug)]
+#[clap(author, version, about)]
+struct DeployScripts {
+    #[clap(
+        long = "node",
+        default_value = "http://localhost:20001",
+        help = "V2 API of the concordium node."
+    )]
+    concordium_url:    v2::Endpoint,
+    #[clap(long = "wallet", help = "Location of the Concordium wallet.")]
+    concordium_wallet: PathBuf,
+    #[clap(long = "tokens", help = "JSON file with a list of tokens.")]
+    tokens:            PathBuf,
+    #[clap(
+        long = "manager-source",
+        help = "Location of the compiled BridgeManager contract."
+    )]
+    manager_source:    PathBuf,
+    #[clap(long = "cis2-bridgeable", help = "Source of the CIS2 token contract.")]
+    cis2_source:       PathBuf,
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), DeployError> {
-    let config = envy::from_env::<Config>()?;
+    let app: DeployScripts = DeployScripts::parse();
 
-    let concordium_client =
-        endpoints::Client::connect(config.concordium_url, config.concordium_token).await?;
+    let concordium_client = v2::Client::new(app.concordium_url).await?;
 
-    let deployer = Deployer::new(concordium_client, config.concordium_manager_account_file)?;
+    let deployer = Deployer::new(concordium_client, &app.concordium_wallet)?;
 
-    let mut upgrade = false;
-
-    if std::env::args().len() == 2 {
-        let command = std::env::args().nth(1).unwrap();
-
-        if command == S("upgrade") {
-            upgrade = true;
-        } else {
-            println!("Usage: {} [upgrade]", std::env::args().nth(0).unwrap());
-            return Ok(());
-        }
-    }
-
-    let tokens = [
-        WrappedToken {
-            name:                S("ETH.eth"),
-            token_metadata_url:  S("https://relayer-testnet.toni.systems/token/metadata/ETH.et"),
-            token_metadata_hash: S(
-                "08951bc955a7cc53d5d374d79be086357837cbacc7387e1803976bb6569ecaea",
-            ),
-        },
-        WrappedToken {
-            name:                S("MOCK.et"),
-            token_metadata_url:  S("https://relayer-testnet.toni.systems/token/metadata/MOCK.et"),
-            token_metadata_hash: S(
-                "9fe0f5ab1019deec299474bcc712afdee4aa59762cd6e6b1fc23223a36e96f6f",
-            ),
-        },
-        WrappedToken {
-            name:                S("USDC.et"),
-            token_metadata_url:  S("https://relayer-testnet.toni.systems/token/metadata/USDC.et"),
-            token_metadata_hash: S(
-                "be08a2ad4f7b9633b2cd2ee101b6555e512fc67556dd8234bfe05cdbccd574a0",
-            ),
-        },
-    ];
+    let tokens: Vec<WrappedToken> = serde_json::from_slice(&std::fs::read(app.tokens)?)?;
 
     // make sure we didn't mess up the hashes:
     for token in tokens.iter() {
@@ -355,7 +264,7 @@ async fn main() -> Result<(), DeployError> {
                 .await?;
     }
 
-    let wasm_module = get_wasm_module("data/cis2_bridgeable.wasm.v1")?;
+    let wasm_module = get_wasm_module(&app.manager_source)?;
     println!("Deploying cis2-bridgeable....");
     let cis2_bridgeable_module_ref = deployer.deploy_wasm_module(wasm_module).await?;
     println!(
@@ -365,7 +274,7 @@ async fn main() -> Result<(), DeployError> {
 
     println!("");
 
-    let wasm_module = get_wasm_module("data/bridge_manager.wasm.v1")?;
+    let wasm_module = get_wasm_module(&&app.cis2_source)?;
     println!("Deploying bridge-manager....");
     let bridge_manager_module_ref = deployer.deploy_wasm_module(wasm_module).await?;
     println!(
@@ -375,23 +284,13 @@ async fn main() -> Result<(), DeployError> {
 
     println!("");
 
-    if upgrade {
-        upgrade_contracts(
-            &deployer,
-            &tokens,
-            bridge_manager_module_ref.module_ref,
-            cis2_bridgeable_module_ref.module_ref,
-        )
-        .await?;
-    } else {
-        init_contracts(
-            &deployer,
-            &tokens,
-            bridge_manager_module_ref.module_ref,
-            cis2_bridgeable_module_ref.module_ref,
-        )
-        .await?;
-    }
+    init_contracts(
+        &deployer,
+        &tokens,
+        bridge_manager_module_ref.module_ref,
+        cis2_bridgeable_module_ref.module_ref,
+    )
+    .await?;
 
     Ok(())
 }

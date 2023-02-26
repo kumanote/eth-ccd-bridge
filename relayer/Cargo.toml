@@ -43,7 +43,12 @@ aws-config = "0.54"
 aws-sdk-secretsmanager = "0.24"
 prometheus = {version = "0.13", features = ["process"]}
 axum = "0.6"
-tower-http = {version = "0.3", features = ["timeout", "limit"]}
+axum-prometheus = { version = "0.3" }
+tracing-subscriber = { version = "0.3" }
+tracing = { version = "0.1" }
+deadpool-postgres = { version = "0.10" }
+tower-http = {version = "0.4", features = ["trace", "timeout", "limit", "cors", "fs"]}
+utoipa = { version = "3"}
 
 concordium-rust-sdk = { path = "../deps/concordium-rust-sdk/"}
 

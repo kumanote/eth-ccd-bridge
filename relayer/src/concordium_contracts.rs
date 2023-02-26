@@ -311,7 +311,7 @@ pub struct RevokeRoleEvent {
     role:    Roles,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, contracts_common::Serialize)]
 /// All possible events emitted by the bridge.
 pub enum BridgeEvent {
     TokenMap(TokenMapEvent),
@@ -331,58 +331,6 @@ impl BridgeEvent {
             BridgeEvent::Withdraw(we) => Some(we.event_index),
             BridgeEvent::GrantRole(_) => None,
             BridgeEvent::RevokeRole(_) => None,
-        }
-    }
-}
-
-/// Tag for the BridgeManager TokenMap event.
-const TOKEN_MAP_EVENT_TAG: u8 = u8::MAX;
-/// Tag for the BridgeManager Deposit event.
-const DEPOSIT_EVENT_TAG: u8 = u8::MAX - 1;
-/// Tag for the BridgeManager Withdraw event.
-const WITHDRAW_EVENT_TAG: u8 = u8::MAX - 2;
-const GRANT_ROLE_EVENT_TAG: u8 = 0;
-const REVOKE_ROLE_EVENT_TAG: u8 = 1;
-
-/// Serialization that must match that of the Contract.
-impl contracts_common::Serial for BridgeEvent {
-    fn serial<W: contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            BridgeEvent::TokenMap(event) => {
-                out.write_u8(TOKEN_MAP_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::Deposit(event) => {
-                out.write_u8(DEPOSIT_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::Withdraw(event) => {
-                out.write_u8(WITHDRAW_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::GrantRole(event) => {
-                out.write_u8(GRANT_ROLE_EVENT_TAG)?;
-                event.serial(out)
-            }
-            BridgeEvent::RevokeRole(event) => {
-                out.write_u8(REVOKE_ROLE_EVENT_TAG)?;
-                event.serial(out)
-            }
-        }
-    }
-}
-
-/// Deserialization that must match that of the contract.
-impl contracts_common::Deserial for BridgeEvent {
-    fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
-        let tag = source.read_u8()?;
-        match tag {
-            TOKEN_MAP_EVENT_TAG => TokenMapEvent::deserial(source).map(BridgeEvent::TokenMap),
-            DEPOSIT_EVENT_TAG => DepositEvent::deserial(source).map(BridgeEvent::Deposit),
-            WITHDRAW_EVENT_TAG => WithdrawEvent::deserial(source).map(BridgeEvent::Withdraw),
-            GRANT_ROLE_EVENT_TAG => GrantRoleEvent::deserial(source).map(BridgeEvent::GrantRole),
-            REVOKE_ROLE_EVENT_TAG => RevokeRoleEvent::deserial(source).map(BridgeEvent::RevokeRole),
-            _ => Err(contracts_common::ParseError::default()),
         }
     }
 }

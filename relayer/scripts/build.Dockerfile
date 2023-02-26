@@ -13,5 +13,5 @@ RUN apt-get update && \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/relayer/target/release/ccdeth_relayer /usr/local/bin/
-# COPY --from=build /build/relayer/target/release/api_server /usr/local/bin/
+COPY --from=build /build/relayer/target/release/api_server /usr/local/bin/
 
