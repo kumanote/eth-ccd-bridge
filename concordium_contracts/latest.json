@@ -1,30 +1,110 @@
 {
   "bridge_manager": {
-    "index": 3138,
+    "index": 3494,
     "subindex": 0
   },
   "tokens": [
     {
       "name": "ETH.eth",
-      "token_url": "https://relayer-testnet.toni.systems/token/metadata/ETH.et",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/ETH.json",
       "contract": {
-        "index": 3139,
+        "index": 3495,
         "subindex": 0
       }
     },
     {
-      "name": "MOCK.et",
-      "token_url": "https://relayer-testnet.toni.systems/token/metadata/MOCK.et",
+      "name": "USDC.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/USDC.json",
       "contract": {
-        "index": 3140,
+        "index": 3496,
         "subindex": 0
       }
     },
     {
-      "name": "USDC.et",
-      "token_url": "https://relayer-testnet.toni.systems/token/metadata/USDC.et",
+      "name": "WBTC.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/wBTC.json",
       "contract": {
-        "index": 3141,
+        "index": 3497,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "USDT.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/USDT.json",
+      "contract": {
+        "index": 3498,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "UNI.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/UNI.json",
+      "contract": {
+        "index": 3499,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "LINK.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/LINK.json",
+      "contract": {
+        "index": 3500,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "MANA.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/MANA.json",
+      "contract": {
+        "index": 3501,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "AAVE.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/AAVE.json",
+      "contract": {
+        "index": 3502,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "DAI.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/DAI.json",
+      "contract": {
+        "index": 3503,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "BUSD.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/BUSD.json",
+      "contract": {
+        "index": 3504,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "VNXAU.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/VNXAU.json",
+      "contract": {
+        "index": 3505,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "DOGE.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/DOGE.json",
+      "contract": {
+        "index": 3506,
+        "subindex": 0
+      }
+    },
+    {
+      "name": "SHIB.eth",
+      "token_url": "http://ethbridge.testnet.concordium.com/assets/SHIB.json",
+      "contract": {
+        "index": 3507,
         "subindex": 0
       }
     }
