@@ -75,13 +75,10 @@ impl Deployer {
             .clone()
             .get_module_source(&module_ref, &latest_block)
             .await;
-
         match module_ref {
             Ok(_) => Ok(true),
-            Err(e) => match e {
-                QueryError::NotFound => Ok(false),
-                _ => Err(e.into()),
-            },
+            Err(e) if e.is_not_found() => Ok(false),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -90,7 +87,6 @@ impl Deployer {
         wasm_module: WasmModule,
     ) -> Result<ModuleDeployed, DeployError> {
         let exists = self.module_exists(wasm_module.clone()).await?;
-
         if exists {
             println!(
                 "Module with reference {} already exists.",
@@ -108,7 +104,6 @@ impl Deployer {
         }
 
         let expiry = TransactionTime::from_seconds((chrono::Utc::now().timestamp() + 300) as u64);
-
         let tx = deploy_module(
             &self.manager_key,
             self.manager_key.address,

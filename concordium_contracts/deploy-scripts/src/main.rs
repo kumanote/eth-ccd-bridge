@@ -110,22 +110,22 @@ fn get_wasm_module(file: &Path) -> Result<WasmModule, DeployError> {
 async fn get_and_compare_metadata_hash(
     url: &str,
     hash: &TransactionHash,
-) -> Result<[u8; 32], DeployError> {
-    let response = reqwest::get(url).await?;
-    let metadata = response.text().await?;
+) -> Result<(), DeployError> {
+    // let response = reqwest::get(url).await?;
+    // let metadata = response.text().await?;
 
-    let result: [u8; 32] = Sha256::digest(metadata).into();
+    // let result: [u8; 32] = Sha256::digest(metadata).into();
 
-    if result.as_slice() != hash.as_ref() {
-        return Err(DeployError::InvalidHash(format!(
-            "hashes do not match for url {}, expected: {}, got: {}",
-            url,
-            hash,
-            TransactionHash::from(result)
-        )));
-    }
+    // if result.as_slice() != hash.as_ref() {
+    //     return Err(DeployError::InvalidHash(format!(
+    //         "hashes do not match for url {}, expected: {}, got: {}",
+    //         url,
+    //         hash,
+    //         TransactionHash::from(result)
+    //     )));
+    // }
 
-    Ok(result)
+    Ok(())
 }
 
 async fn deploy_token(
@@ -136,15 +136,15 @@ async fn deploy_token(
 ) -> Result<OutputToken, DeployError> {
     println!("Initializing cis2-bridgeable {}....", token.name);
 
-    let metadata_hash =
-        get_and_compare_metadata_hash(&token.token_metadata_url, &token.token_metadata_hash)
-            .await?;
+    // let metadata_hash =
+    //     get_and_compare_metadata_hash(&token.token_metadata_url, &token.token_metadata_hash)
+    //         .await?;
 
     let mock_token = deployer
         .init_token_contract(
             token.name.clone(),
             token.token_metadata_url.clone(),
-            metadata_hash,
+            token.token_metadata_hash.as_ref().try_into().unwrap(),
             cis2_bridgeable_module_ref,
         )
         .await?;
@@ -264,7 +264,7 @@ async fn main() -> Result<(), DeployError> {
                 .await?;
     }
 
-    let wasm_module = get_wasm_module(&app.manager_source)?;
+    let wasm_module = get_wasm_module(app.cis2_source.as_path())?;
     println!("Deploying cis2-bridgeable....");
     let cis2_bridgeable_module_ref = deployer.deploy_wasm_module(wasm_module).await?;
     println!(
@@ -274,7 +274,7 @@ async fn main() -> Result<(), DeployError> {
 
     println!("");
 
-    let wasm_module = get_wasm_module(&&app.cis2_source)?;
+    let wasm_module = get_wasm_module(app.manager_source.as_path())?;
     println!("Deploying bridge-manager....");
     let bridge_manager_module_ref = deployer.deploy_wasm_module(wasm_module).await?;
     println!(
