@@ -1132,9 +1132,9 @@ async fn insert_into_db(
                         };
                         let update = concordium_contracts::StateUpdate::Deposit(deposit);
                         // TODO estimate execution energy.
-                        let tx =
-                            bridge_manager.make_state_update_tx(bridge_manager.max_energy, &update);
-                        txs.push((event.tx_hash, tx));
+                        if let Some(tx) = bridge_manager.make_state_update_tx(&update).await? {
+                            txs.push((event.tx_hash, tx));
+                        }
                         deposits.push((event.tx_hash, id.low_u64(), amount, depositor, root_token));
                     }
                     ethereum::EthEvent::TokenMapped {
@@ -1152,8 +1152,9 @@ async fn insert_into_db(
                             child: child_token,
                         };
                         let update = concordium_contracts::StateUpdate::TokenMap(map);
-                        let tx = bridge_manager.make_state_update_tx(100_000.into(), &update);
-                        txs.push((event.tx_hash, tx));
+                        if let Some(tx) = bridge_manager.make_state_update_tx(&update).await? {
+                            txs.push((event.tx_hash, tx));
+                        }
                         maps.push((root_token, child_token, name.clone(), decimals));
                     }
                     ethereum::EthEvent::TokenUnmapped {
