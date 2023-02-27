@@ -6,11 +6,13 @@ import useCCDContract from "src/contracts/use-ccd-contract";
 import { routes } from "src/constants/routes";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useWallet from "@hooks/use-wallet";
+import { useRouter } from "next/router";
 
 const WithdrawOverview: NextPage = () => {
     const hasApproval = useRef(false);
     const { ccdContext } = useCCDWallet();
     const { context } = useWallet();
+    const { prefetch } = useRouter();
 
     const {
         withdraw: ccdWithdraw,
@@ -69,6 +71,7 @@ const WithdrawOverview: NextPage = () => {
             setStatus("Awaiting signature of withdrawal in Concordium wallet");
             const tx = await ccdWithdraw(amount, token, context?.account || "");
             hash = tx.hash;
+            prefetch(routes.withdraw.tx(hash));
         } catch {
             setError("Transaction was rejected.");
         }

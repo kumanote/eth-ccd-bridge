@@ -117,6 +117,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const {
         query: { reset = false },
         isReady,
+        prefetch,
     } = useRouter() as QueryRouter<TransferRouteQuery>;
     const { context, connect, disconnect } = useWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
@@ -195,6 +196,10 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reset, isReady]);
+
+    useEffect(() => {
+        prefetch(routes.history());
+    }, [prefetch]);
 
     const dropdownHandler = () => {
         setDropdown((prev) => !prev);

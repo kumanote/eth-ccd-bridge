@@ -7,6 +7,7 @@ import useRootManagerContract from "src/contracts/use-root-manager";
 import { routes } from "src/constants/routes";
 import useGenerateContract from "src/contracts/use-generate-contract";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
+import { useRouter } from "next/router";
 
 const WithdrawOverview: NextPage = () => {
     const { amount, token: selectedToken } = useTransactionFlowStore();
@@ -15,6 +16,7 @@ const WithdrawOverview: NextPage = () => {
         !!selectedToken && !!amount // plus it's disabled on the first render anyway
     );
     const { typeToVault, depositFor, depositEtherFor, estimateGas } = useRootManagerContract();
+    const { prefetch } = useRouter();
 
     /**
      * Gets the gas fee required to make the deposit.
@@ -79,6 +81,7 @@ const WithdrawOverview: NextPage = () => {
 
             setStatus("Awaiting signature of deposit in Ethereum wallet");
             const tx = await txPromise;
+            prefetch(routes.deposit.tx(tx.hash));
 
             setStatus("Waiting for transaction to finalize");
             await tx.wait(1); // wait for confirmed transaction
