@@ -408,7 +408,24 @@ where
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let client = contract.client();
     loop {
-        let number = client.get_block_number().await?;
+        let mut retry_num = 0;
+        let number = loop {
+            match client.get_block_number().await {
+                Ok(n) => break n,
+                Err(e) => {
+                    if retry_num <= 6 {
+                        metrics.warnings_total.inc();
+                        log::warn!("Failed querying block number. Will retry.");
+                        tokio::time::sleep(std::time::Duration::from_secs(1 << retry_num)).await;
+                        retry_num += 1;
+                    } else {
+                        metrics.errors_total.inc();
+                        log::error!("Too many retries trying to get block number.");
+                        return Err(e.into());
+                    }
+                }
+            }
+        };
         if block_number.saturating_add(num_confirmations) <= number.as_u64() {
             let block_events = get_eth_block_events(&contract, block_number, upper_block).await?;
             metrics.ethereum_height.set(upper_block as i64);
