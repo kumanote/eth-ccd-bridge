@@ -1,18 +1,7 @@
 const addresses = {
     /**
-     * Genesis Address
-     */
-    genesis: "0x0000000000000000000000000000000000000000",
-
-    /**
-     * wETH Address
-     */
-    weth: process.env.NEXT_PUBLIC_WETH_TOKEN_ADDRESS || "",
-
-    /**
      * ETH Address
      */
-    // eth: "__ETH__",
     eth: process.env.NEXT_PUBLIC_ETH_TOKEN_ADDRESS || "",
 
     /**
