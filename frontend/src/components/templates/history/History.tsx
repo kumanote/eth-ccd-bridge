@@ -1,4 +1,3 @@
-import InfoArrow from "@components/atoms/info-arrow/InfoArrow";
 import Text from "@components/atoms/text/text";
 import useMediaQuery from "@hooks/use-media-query";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
@@ -10,10 +9,11 @@ import React, { MouseEventHandler, useEffect, useState } from "react";
 import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
-import { transactionUrl } from "src/helpers/ccdscan";
+import { ccdTransactionUrl, ethTransactionUrl } from "src/helpers/chain-explorer";
 import isDeposit from "src/helpers/checkTransaction";
 import parseAmount from "src/helpers/parseAmount";
 import parseTxHash from "src/helpers/parseTxHash";
+import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
 import {
     ContentWrapper,
     HistoryTable,
@@ -38,6 +38,7 @@ const History = ({ depositSelected }: Props) => {
     const { data: history, isLoading } = useWalletTransactions();
     const isMobile = useMediaQuery("(max-width: 540px)");
     const { push } = useRouter();
+    const { transactions: approvedWithdrawals } = useApprovedWithdrawalsStore();
 
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const getTransactionToken = useGetTransactionToken();
@@ -58,6 +59,9 @@ const History = ({ depositSelected }: Props) => {
     const linkClick: MouseEventHandler = (e) => {
         e.stopPropagation();
     };
+
+    const getWithdrawEthHash = (withdrawTx: Components.Schemas.WalletWithdrawTx): string | undefined =>
+        withdrawTx.tx_hash ?? approvedWithdrawals[withdrawTx.origin_tx_hash ?? ""];
 
     useEffect(() => {
         if (isMobile) {
@@ -143,8 +147,8 @@ const History = ({ depositSelected }: Props) => {
                                 </TableRow>
                             </thead>
                             <tbody>
-                                {history.map((transaction, index) => {
-                                    const tokenReponse = getTransactionToken(transaction);
+                                {history.map((tx) => {
+                                    const tokenReponse = getTransactionToken(tx);
 
                                     if (tokenReponse.status !== "success" || tokenReponse.token === undefined) {
                                         return null; // TODO: handle this properly
@@ -152,19 +156,16 @@ const History = ({ depositSelected }: Props) => {
                                     {
                                         /* check if the transaction is a deposit or withdraw, then render based on that */
                                     }
-                                    if (isDeposit(transaction) && depositSelected) {
-                                        const processed = transaction.Deposit.status.includes("processed");
+                                    if (isDeposit(tx) && depositSelected) {
+                                        const processed = tx.Deposit.status.includes("processed");
 
                                         const parsedAmount = parseAmount(
-                                            transaction.Deposit.amount,
+                                            tx.Deposit.amount,
                                             tokenReponse.token.decimals
                                         );
 
                                         return (
-                                            <TableRow
-                                                key={transaction.Deposit.origin_tx_hash}
-                                                onClick={() => goToProgress(transaction)}
-                                            >
+                                            <TableRow key={tx.Deposit.origin_tx_hash} onClick={() => goToProgress(tx)}>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
                                                         Ethereum
@@ -184,16 +185,16 @@ const History = ({ depositSelected }: Props) => {
                                                     <>
                                                         <TableData>
                                                             <Text fontSize="10" fontWeight="light">
-                                                                {transaction.Deposit.origin_tx_hash ? (
+                                                                {tx.Deposit.origin_tx_hash ? (
                                                                     <a
-                                                                        href={`https://goerli.etherscan.io/tx/${transaction.Deposit.origin_tx_hash}`}
+                                                                        href={ethTransactionUrl(
+                                                                            tx.Deposit.origin_tx_hash
+                                                                        )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                         onClick={linkClick}
                                                                     >
-                                                                        {parseTxHash(
-                                                                            transaction.Deposit.origin_tx_hash
-                                                                        )}
+                                                                        {parseTxHash(tx.Deposit.origin_tx_hash)}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -202,16 +203,14 @@ const History = ({ depositSelected }: Props) => {
                                                         </TableData>
                                                         <TableData>
                                                             <Text fontSize="10" fontWeight="light">
-                                                                {transaction.Deposit.tx_hash ? (
+                                                                {tx.Deposit.tx_hash ? (
                                                                     <a
-                                                                        href={transactionUrl(
-                                                                            transaction.Deposit.tx_hash
-                                                                        )}
+                                                                        href={ccdTransactionUrl(tx.Deposit.tx_hash)}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                         onClick={linkClick}
                                                                     >
-                                                                        {parseTxHash(transaction.Deposit.tx_hash)}
+                                                                        {parseTxHash(tx.Deposit.tx_hash)}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -222,7 +221,7 @@ const History = ({ depositSelected }: Props) => {
                                                 )}
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {moment(transaction.Deposit.timestamp * 1000).fromNow()}
+                                                        {moment(tx.Deposit.timestamp * 1000).fromNow()}
                                                     </Text>
                                                 </TableData>
                                                 <TableData>
@@ -236,19 +235,18 @@ const History = ({ depositSelected }: Props) => {
                                                 </TableData>
                                             </TableRow>
                                         );
-                                    } else if (!isDeposit(transaction) && !depositSelected) {
-                                        const processed = transaction.Withdraw.status.includes("processed");
+                                    } else if (!isDeposit(tx) && !depositSelected) {
+                                        const processed = tx.Withdraw.status.includes("processed");
 
                                         const parsedAmount = parseAmount(
-                                            transaction.Withdraw.amount,
+                                            tx.Withdraw.amount,
                                             tokenReponse.token.decimals
                                         );
 
+                                        const ethHash = getWithdrawEthHash(tx.Withdraw);
+
                                         return (
-                                            <TableRow
-                                                key={transaction.Withdraw.origin_tx_hash}
-                                                onClick={() => goToProgress(transaction)}
-                                            >
+                                            <TableRow key={tx.Withdraw.origin_tx_hash} onClick={() => goToProgress(tx)}>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
                                                         Concordium
@@ -268,18 +266,16 @@ const History = ({ depositSelected }: Props) => {
                                                     <>
                                                         <TableData>
                                                             <Text fontSize="10" fontWeight="light">
-                                                                {transaction.Withdraw.origin_tx_hash ? (
+                                                                {tx.Withdraw.origin_tx_hash ? (
                                                                     <a
-                                                                        href={transactionUrl(
-                                                                            transaction.Withdraw.origin_tx_hash
+                                                                        href={ccdTransactionUrl(
+                                                                            tx.Withdraw.origin_tx_hash
                                                                         )}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                         onClick={linkClick}
                                                                     >
-                                                                        {parseTxHash(
-                                                                            transaction.Withdraw.origin_tx_hash
-                                                                        )}
+                                                                        {parseTxHash(tx.Withdraw.origin_tx_hash)}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -290,18 +286,16 @@ const History = ({ depositSelected }: Props) => {
                                                             <Text
                                                                 fontSize="10"
                                                                 fontWeight="light"
-                                                                fontColor={
-                                                                    transaction.Withdraw.tx_hash ? "Black" : "Yellow"
-                                                                }
+                                                                fontColor={ethHash ? "Black" : "Yellow"}
                                                             >
-                                                                {transaction.Withdraw.tx_hash ? (
+                                                                {ethHash ? (
                                                                     <a
-                                                                        href={`https://goerli.etherscan.io/tx/${transaction.Withdraw.tx_hash}`}
+                                                                        href={ethTransactionUrl(ethHash)}
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                         onClick={linkClick}
                                                                     >
-                                                                        {parseTxHash(transaction.Withdraw.tx_hash)}
+                                                                        {parseTxHash(ethHash)}
                                                                     </a>
                                                                 ) : (
                                                                     "Processing..."
@@ -312,7 +306,7 @@ const History = ({ depositSelected }: Props) => {
                                                 )}
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {moment(transaction.Withdraw.timestamp * 1000).fromNow()}
+                                                        {moment(tx.Withdraw.timestamp * 1000).fromNow()}
                                                     </Text>
                                                 </TableData>
                                                 <TableData>
