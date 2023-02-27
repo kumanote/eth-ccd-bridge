@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import { FC, useEffect } from "react";
-import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkpleProof";
+import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkleProof";
 import { usePendingWithdrawals } from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";

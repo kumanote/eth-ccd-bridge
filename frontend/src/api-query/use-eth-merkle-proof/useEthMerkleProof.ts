@@ -24,7 +24,7 @@ const useEthMerkleProof = (params: Partial<Params>, enabled = true) => {
             return data;
         },
         {
-            enabled: params.tx_hash !== undefined && params.event_id !== undefined && enabled,
+            enabled: params.tx_hash !== undefined && params.event_id !== undefined && params.event_id !== null && enabled,
             refetchInterval: (data) => {
                 if (data?.proof !== undefined) {
                     return false;

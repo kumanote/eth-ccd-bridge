@@ -5,7 +5,7 @@ import { QueryRouter } from "src/types/config";
 import { routes } from "src/constants/routes";
 import useWatchWithdraw from "src/api-query/use-watch-withdraw/useWatchWithdraw";
 import { useEffect, useState } from "react";
-import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkpleProof";
+import useEthMerkleProof from "src/api-query/use-eth-merkle-proof/useEthMerkleProof";
 import useRootManagerContract from "src/contracts/use-root-manager";
 import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
 
