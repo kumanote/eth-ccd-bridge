@@ -442,8 +442,11 @@ async fn main() -> anyhow::Result<()> {
                  one."
             )
         }
-        (Some(w), None) => WalletAccount::from_json_file(w)?,
-        (None, Some(sn)) => ccdeth_relayer::aws_secret_manager::get_concordium_keys_aws(sn).await?,
+        (Some(w), None) => WalletAccount::from_json_file(w)
+            .context("Unable to read Concordium wallet from the provided file.")?,
+        (None, Some(sn)) => ccdeth_relayer::aws_secret_manager::get_concordium_keys_aws(sn)
+            .await
+            .context("Unable to get Concordium wallet from Amazon secret manager.")?,
         (None, None) => {
             anyhow::bail!("Concordium keys were not provided.")
         }
@@ -461,7 +464,8 @@ async fn main() -> anyhow::Result<()> {
             ))
             .connect_timeout(std::time::Duration::from_secs(10))
             .https_only(true)
-            .build()?;
+            .build()
+            .context("Unable to construct network client to access Ethereum API.")?;
         Http::new_with_client(app.ethereum_config.api, network_client)
     };
     let ethereum_client = RetryClient::new(
@@ -487,7 +491,8 @@ async fn main() -> anyhow::Result<()> {
         }
         (Some(w), None) => w.with_chain_id(app.ethereum_config.chain_id),
         (None, Some(sn)) => ccdeth_relayer::aws_secret_manager::get_ethereum_keys_aws(sn)
-            .await?
+            .await
+            .context("Unable to get Ethereum wallet from Amazon secret manager.")?
             .with_chain_id(app.ethereum_config.chain_id),
         (None, None) => {
             anyhow::bail!("Ethereum keys were not provided.")
@@ -497,14 +502,18 @@ async fn main() -> anyhow::Result<()> {
     let ethereum_sender = wallet.address();
     log::info!("Using {ethereum_sender:#x} as the Ethereum wallet.");
 
-    let balance = ethereum_client.get_balance(ethereum_sender, None).await?;
+    let balance = ethereum_client
+        .get_balance(ethereum_sender, None)
+        .await
+        .context("Unable to get initial balance of the Ethereum sender")?;
     log::info!(
         "Balance of the Ethereum sender account is {} microETH.",
         balance / 1_000_000_000_000u64
     );
     let ethereum_nonce = ethereum_client
         .get_transaction_count(ethereum_sender, None)
-        .await?;
+        .await
+        .context("Unable to get nonce for the Ethereum account")?;
     log::info!("Nonce of the Ethereum sender account is {ethereum_nonce}.");
 
     // Set up signal handlers before doing anything non-trivial so we have some sort
@@ -518,7 +527,8 @@ async fn main() -> anyhow::Result<()> {
         set_shutdown(stop_sender, died_receiver),
     );
 
-    let (registry, metrics) = ccdeth_relayer::metrics::Metrics::new()?;
+    let (registry, metrics) = ccdeth_relayer::metrics::Metrics::new()
+        .context("Unable to construct new metrics object.")?;
     if let Some(prometheus_server) = app.prometheus_server {
         log::info!("Starting prometheus server at {prometheus_server}.");
         spawn_cancel(
@@ -547,7 +557,8 @@ async fn main() -> anyhow::Result<()> {
         {
             app.concordium_config
                 .api
-                .tls_config(ClientTlsConfig::new())?
+                .tls_config(ClientTlsConfig::new())
+                .context("Unable to construct TLS configuration for the Concordium API.")?
         } else {
             app.concordium_config.api
         };
@@ -556,14 +567,21 @@ async fn main() -> anyhow::Result<()> {
                 app.concordium_config.request_timeout,
             ))
             .connect_timeout(std::time::Duration::from_secs(10));
-        v2::Client::new(ep).await?
+        v2::Client::new(ep)
+            .await
+            .context("Unable to connect Concordium node.")?
     };
     {
         let lfb = concordium_client
             .get_consensus_info()
-            .await?
+            .await
+            .context("Unable to get Consensus info.")?
             .last_finalized_block;
-        let bi = concordium_client.get_block_info(lfb).await?.response;
+        let bi = concordium_client
+            .get_block_info(lfb)
+            .await
+            .context("Unable to get block information about last finalized block")?
+            .response;
         if chrono::Utc::now().signed_duration_since(bi.block_slot_time)
             > chrono::Duration::seconds(app.concordium_config.max_behind.into())
         {
@@ -575,8 +593,13 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let (last_ethereum, last_concordium, db) = Database::new(&app.db_config).await?;
-    let start_nonce = db.submit_missing_txs(concordium_client.clone()).await?;
+    let (last_ethereum, last_concordium, db) = Database::new(&app.db_config)
+        .await
+        .context("Unable to connect to the database.")?;
+    let start_nonce = db
+        .submit_missing_txs(concordium_client.clone())
+        .await
+        .context("Unable to submit missing transactions.")?;
 
     let bridge_manager_client = BridgeManagerClient::new(
         concordium_client.clone(),
@@ -599,7 +622,8 @@ async fn main() -> anyhow::Result<()> {
         app.ethereum_config.state_sender_creation_block_number,
         app.ethereum_config.num_confirmations,
     )
-    .await?;
+    .await
+    .context("Unable to find starting point for Ethereum monitoring")?;
     log::info!(
         "Found starting point on Ethereum chain at start = {start_number}, end = {upper_number})"
     );
@@ -608,13 +632,15 @@ async fn main() -> anyhow::Result<()> {
         last_concordium,
         app.concordium_config.bridge_manager,
     )
-    .await?;
+    .await
+    .context("Unable to find starting point for Concordium monitoring.")?;
 
     log::info!("Starting at {concordium_start_height} on the Concordium chain.");
 
     let (max_marked_event_index, leaves) = db
         .pending_withdrawals(bridge_manager_client.clone())
-        .await?;
+        .await
+        .context("Unable to get pending withdrawals.")?;
 
     // To spawn
 
@@ -622,7 +648,10 @@ async fn main() -> anyhow::Result<()> {
     let (ccd_transaction_sender, ccd_transaction_receiver) = tokio::sync::mpsc::channel(50);
     let (merkle_setter_sender, merkle_setter_receiver) = tokio::sync::mpsc::channel(50);
 
-    let pending_merkle_set = db.pending_ethereum_tx().await?;
+    let pending_merkle_set = db
+        .pending_ethereum_tx()
+        .await
+        .context("Unable to get pending Merkle tree.")?;
 
     // Now we set up the main service, after we have established a baseline.
     // The different tasks communicate using channels established above.
@@ -667,7 +696,8 @@ async fn main() -> anyhow::Result<()> {
             max_marked_event_index,
             std::time::Duration::from_secs(app.ethereum_config.escalation_interval),
             std::time::Duration::from_secs(app.ethereum_config.warn_duration),
-        )?;
+        )
+        .context("Unable to construct the client for setting Merkle roots.")?;
 
         spawn_cancel(
             died_sender.clone(),
