@@ -50,11 +50,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         } as ContractAddress;
 
         const receiveName = `${contractNames.cis2Bridgeable}.updateOperator`;
-
         const rawSchema = hexToBase64(cis2Bridgeable);
-
         const provider = await detectCcdProvider();
-
         const userInput = [
             {
                 update: {
@@ -105,22 +102,11 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         if (!ethAddress) {
             throw new Error("ETH address is undefined");
         }
-        // if (!energy) {
-        //   throw new Error("Energy is undefined");
-        // }
-
-        // const maxContractExecutionEnergy = BigInt(
-        //   Math.ceil((energy * 10 ** (ccdToken.decimals / 2)) / 100) * 100
-        // );
 
         const maxContractExecutionEnergy = BigInt(30000);
-
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
-
         const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
-
         const rawSchema = hexToBase64(bridgeManager);
-
         const provider = await detectCcdProvider();
 
         const txHash = await provider.sendTransaction(
@@ -222,7 +208,6 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         const provider = await detectCcdProvider();
-
         const userInput = [
             {
                 owner: {
@@ -251,8 +236,6 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             moduleFileBuffer
         );
 
-        console.log(userInput, params);
-
         const res = await provider.getJsonRpcClient().invokeContract({
             invoker: new AccountAddress(ccdAccount),
             contract: {
@@ -265,12 +248,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             energy: BigInt(30000),
         });
 
-        console.log("res", res);
-
         const isApproved = decodeOperatorOf((res as any).returnValue);
-
-        console.log("isApproved", isApproved);
-
         return isApproved;
     };
 
@@ -293,7 +271,6 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         const provider = await detectCcdProvider();
-
         const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
 
         const userInput = {
@@ -307,7 +284,6 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         };
 
         const moduleFileBuffer = Buffer.from(hexToBase64(bridgeManager), "base64");
-
         const params = serializeUpdateContractParameters(
             contractNames.bridgeManager,
             "withdraw",
@@ -347,14 +323,11 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         const provider = await detectCcdProvider();
-
         const contractAddress = {
             index: BigInt(token.ccd_contract.index),
             subindex: BigInt(token.ccd_contract.subindex),
         };
-
         const moduleFileBuffer = Buffer.from(hexToBase64(cis2Bridgeable), "base64");
-
         const userInput = [
             {
                 update: {

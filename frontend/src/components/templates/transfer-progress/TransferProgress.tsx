@@ -237,6 +237,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             fontWeight="light"
                             fontColor="TitleText"
                             fontLetterSpacing="0"
+                            align="center"
                         >
                             <>
                                 {status !== undefined && status.message}
@@ -246,7 +247,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                                             ? "You can now see it in your transaction history!"
                                             : props.canWithdraw
                                             ? 'Click "Approve" below to submit your withdraw approval.'
-                                            : "When returning to the bridge, you can fininsh the withdraw from the transaction history (if not done already)."
+                                            : "When returning to the bridge, you can return to this view by clicking the withdraw from the transaction history."
                                         : step > 1
                                         ? "You can now see your finished transaction in History!"
                                         : "After the transaction is processed you can also check it in your transaction history.")}

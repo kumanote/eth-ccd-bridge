@@ -1,7 +1,6 @@
 import styled from "styled-components";
 import theme from "../../../theme/theme";
 import Text from "../../atoms/text/text";
-import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Container from "@components/atoms/container/Container";
 
 export const StyledContainer = styled(Container)`

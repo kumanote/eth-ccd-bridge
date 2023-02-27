@@ -1,7 +1,7 @@
 import type { NextPage } from "next";
 import TransferOverview from "@components/templates/transfer-overview";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { ContractTransaction } from "ethers";
+import { ContractTransaction, errors } from "ethers";
 import addresses from "@config/addresses";
 import useRootManagerContract from "src/contracts/use-root-manager";
 import { routes } from "src/constants/routes";
@@ -43,7 +43,7 @@ const WithdrawOverview: NextPage = () => {
 
             const gas = await estimateGas(amount, selectedToken, "deposit");
             return parseFloat(gas as string);
-        } catch (error: any) {
+        } catch (error) {
             // TODO: remove...
             console.error("gas reason:", error);
 
@@ -87,11 +87,8 @@ const WithdrawOverview: NextPage = () => {
             await tx.wait(1); // wait for confirmed transaction
 
             return routes.deposit.tx(tx.hash);
-        } catch (error: any) {
-            // TODO: remove
-            console.dir("Deposit error:", error);
-
-            if (error.message.includes("ACTION_REJECTED")) {
+        } catch (error) {
+            if (error.message.includes(errors.ACTION_REJECTED)) {
                 setError("Transaction was rejected.");
             } else {
                 setError(error.message);
