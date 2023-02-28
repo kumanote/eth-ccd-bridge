@@ -187,7 +187,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             return false;
         }
 
-        return nAmount < Number(tokenBalance);
+        return nAmount <= Number(tokenBalance);
     }, [amount, tokenBalance]);
 
     useEffect(() => {
