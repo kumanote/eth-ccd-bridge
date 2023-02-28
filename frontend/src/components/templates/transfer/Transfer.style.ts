@@ -137,6 +137,8 @@ export const DropdownList = styled.div<{ open: boolean }>`
     opacity: 0;
     pointer-events: none;
     transition: 0.2s all;
+    max-height: 156px;
+    overflow: auto;
     & > * {
         width: 100%;
         cursor: pointer;
