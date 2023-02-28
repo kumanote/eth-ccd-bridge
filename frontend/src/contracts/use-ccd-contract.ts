@@ -30,11 +30,9 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
         }
-
         if (maxContractExecutionEnergy === undefined) {
             throw new Error("Energy is undefined");
         }
-
         if (token.ccd_contract?.index === undefined || token.ccd_contract.subindex === undefined) {
             throw new Error("Contract address undefined");
         }
@@ -84,8 +82,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
     const withdraw = async function (
         amount: bigint,
         token?: Components.Schemas.TokenMapItem,
-        ethAddress?: string
-        // energy?: number
+        ethAddress?: string,
+        maxContractExecutionEnergy?: bigint
     ): Promise<string> {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
@@ -94,11 +92,13 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
+        if (maxContractExecutionEnergy === undefined) {
+            throw new Error("Energy is undefined");
+        }
         if (!ethAddress) {
             throw new Error("ETH address is undefined");
         }
 
-        const maxContractExecutionEnergy = BigInt(30000);
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
         const rawSchema = hexToBase64(bridgeManager);
         const provider = await detectCcdProvider();
@@ -286,7 +286,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             energy: BigInt(30000),
         });
 
-        if (!res || res.tag === "failure" || !res.returnValue) {
+        if (!res || res.tag === "failure") {
             throw new Error(
                 `RPC call 'invokeContract' on method '${contractNames.bridgeManager}.withdraw' of contract '${
                     bridgeManagerContract.index
