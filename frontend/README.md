@@ -34,7 +34,7 @@ The project depends on a number of configuration options that can be set through
 
 **For Ethereum**
 
--   `NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK`: Ethereum network to use.
+-   `NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK`: Ethereum network ID to use (number). As an example, Goerli test network has the 5 as its ID. 
 -   `NEXT_PUBLIC_ETHEREUM_EXPLORER_URL`: Ethereum block explorer to use. This is expected to include a placeholder for a transaction hash in the form of `{}`, i.e `https://goerli.etherscan.io/tx/{}` for the Goerli test network.
 -   `NEXT_PUBLIC_ROOT_MANAGER_ADDRESS`: Address of main Ethereum contract [RootChainManager](../ethereum_contracts/contracts/root).
 -   `NEXT_PUBLIC_GENERATE_ETHER_PREDICATE_ADDRESS`: Address of Ethereum contract for generating predicate addresses for ETH.

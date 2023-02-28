@@ -1,6 +1,6 @@
 import { BigNumber, ContractTransaction, ethers } from "ethers";
 import { toWei } from "../helpers/number";
-import useWallet from "../hooks/use-wallet";
+import useEthWallet from "../hooks/use-eth-wallet";
 import ROOTMANAGER_ABI from "./abis/ROOTMANAGER_ABI.json";
 import bs58check from "bs58check";
 import addresses from "@config/addresses";
@@ -8,7 +8,7 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import useCCDWallet from "@hooks/use-ccd-wallet";
 
 const useRootManagerContract = () => {
-    const { context } = useWallet();
+    const { context } = useEthWallet();
     const {
         ccdContext: { account: ccdAccount },
     } = useCCDWallet();

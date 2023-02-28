@@ -2,7 +2,7 @@ import { useQuery, UseQueryOptions } from "react-query";
 import { CacheKeys } from "src/constants/CacheKeys";
 import { Components, Paths } from "./__generated__/AxiosClient";
 import useAxiosClient from "../store/axios-client";
-import useWallet from "@hooks/use-wallet";
+import useEthWallet from "@hooks/use-eth-wallet";
 import isDeposit from "src/helpers/checkTransaction";
 import { isDefined } from "src/helpers/basic";
 
@@ -84,7 +84,7 @@ export const useWatchDeposit = (params?: WatchDepositParams, options?: WatchDepo
 };
 
 export const useWalletTransactions = () => {
-    const { context } = useWallet();
+    const { context } = useEthWallet();
     const { getClient } = useAxiosClient();
 
     const wallet = context?.account;

@@ -1,13 +1,13 @@
 import addresses from "@config/addresses";
 import { BigNumber, ContractTransaction, ethers } from "ethers";
 import { toWei } from "../helpers/number";
-import useWallet from "../hooks/use-wallet";
+import useEthWallet from "../hooks/use-eth-wallet";
 import MOCK_ABI from "./abis/MOCK_ABI.json";
 
 const ERC20_ALLOWANCE = "1000000000000";
 
 const useGenerateContract = (address: string, enabled: boolean) => {
-    const { context } = useWallet();
+    const { context } = useEthWallet();
     const amountToApprove = toWei(ERC20_ALLOWANCE);
 
     const getBalance = async (decimals: number) => {

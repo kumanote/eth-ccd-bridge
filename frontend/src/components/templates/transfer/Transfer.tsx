@@ -3,7 +3,7 @@ import Input from "@components/atoms/input/input";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Logo from "@components/molecules/logo/Logo";
 import useCCDWallet from "@hooks/use-ccd-wallet";
-import useWallet from "@hooks/use-wallet";
+import useEthWallet from "@hooks/use-eth-wallet";
 import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
 import Link from "next/link";
@@ -119,7 +119,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         isReady,
         prefetch,
     } = useRouter() as QueryRouter<TransferRouteQuery>;
-    const { context, connect, disconnect } = useWallet();
+    const { context, connect, disconnect } = useEthWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
     const { push } = useRouter();
     const { isTablet } = useContext(appContext);

@@ -1,7 +1,7 @@
 import Text from "@components/atoms/text/text";
 import useMediaQuery from "@hooks/use-media-query";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
-import useWallet from "@hooks/use-wallet";
+import useEthWallet from "@hooks/use-eth-wallet";
 import moment from "moment";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -33,7 +33,7 @@ type Props = {
 };
 
 const History = ({ depositSelected }: Props) => {
-    const { context } = useWallet();
+    const { context } = useEthWallet();
     const { replace } = useRouter();
     const { data: history, isLoading } = useWalletTransactions();
     const isMobile = useMediaQuery("(max-width: 540px)");
