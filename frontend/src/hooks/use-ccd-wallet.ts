@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from "react";
-import detectCcdProvider from "src/helpers/detectCcdProvider";
+import { useCallback } from "react";
+import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
 
 // local storage wording:
@@ -11,7 +11,7 @@ const useCCDWallet = () => {
     const deleteCCDWallet = useCCDWalletStore((state) => state.deleteCCDWallet);
 
     const connectCCD = useCallback(async () => {
-        detectCcdProvider()
+        detectConcordiumProvider()
             .then((provider) => provider.connect())
             .then((accAddress) => {
                 if (accAddress) {
@@ -19,7 +19,7 @@ const useCCDWallet = () => {
                 }
             })
             .then(() => {
-                detectCcdProvider()
+                detectConcordiumProvider()
                     // Check if the user is connected to testnet by checking if the testnet genesisBlock exists.
                     // Throw a warning and disconnect if not. We only want to
                     // allow users to interact with our testnet smart contracts.
@@ -45,7 +45,7 @@ const useCCDWallet = () => {
             });
 
         localStorage["CCP_CCD_connected"] = true;
-    }, []);
+    }, [deleteCCDWallet, setCCDWallet]);
 
     const disconnectCCD = async () => {
         deleteCCDWallet();

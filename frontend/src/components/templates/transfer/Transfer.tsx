@@ -9,7 +9,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import useTokens from "src/api-query/use-tokens/useTokens";
+import { useTokens } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";

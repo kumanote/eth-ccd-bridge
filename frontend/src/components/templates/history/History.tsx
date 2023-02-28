@@ -6,7 +6,7 @@ import moment from "moment";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { MouseEventHandler, useEffect, useState } from "react";
-import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
+import { useWalletTransactions } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
 import { ccdTransactionUrl, ethTransactionUrl } from "src/helpers/chain-explorer";

@@ -8,7 +8,7 @@ const ERC20_ALLOWANCE = "1000000000000";
 
 const useGenerateContract = (address: string, enabled: boolean) => {
     const { context } = useWallet();
-    const amountToApprove = toWei(ERC20_ALLOWANCE); // TODO: config.
+    const amountToApprove = toWei(ERC20_ALLOWANCE);
 
     const getBalance = async (decimals: number) => {
         if (!enabled || !address || !context.library) return;

@@ -9,7 +9,7 @@ import useGenerateContract from "src/contracts/use-generate-contract";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
 import { useRouter } from "next/router";
 
-const WithdrawOverview: NextPage = () => {
+const DepositOverview: NextPage = () => {
     const { amount, token: selectedToken } = useTransactionFlowStore();
     const { checkAllowance } = useGenerateContract(
         selectedToken?.eth_address as string, // address or empty string because the address is undefined on first renders
@@ -44,9 +44,6 @@ const WithdrawOverview: NextPage = () => {
             const gas = await estimateGas(amount, selectedToken, "deposit");
             return parseFloat(gas as string);
         } catch (error) {
-            // TODO: remove...
-            console.error("gas reason:", error);
-
             // else, the user did not approve or doesn't have enought tokens and we see the error
             if (error?.reason) {
                 throw new Error(error?.reason);
@@ -99,4 +96,4 @@ const WithdrawOverview: NextPage = () => {
     return <TransferOverview handleSubmit={onSubmit} requestGasFee={getGasFee} />;
 };
 
-export default WithdrawOverview;
+export default DepositOverview;

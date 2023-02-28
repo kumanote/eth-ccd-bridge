@@ -21,10 +21,10 @@ import { useTransactionFlowStore } from "src/store/transaction-flow";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { useMemo, useState } from "react";
 import { QueryRouter } from "src/types/config";
-import useWalletTransactions from "src/api-query/use-wallet-transactions/useWalletTransactions";
 import isDeposit from "src/helpers/checkTransaction";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import parseAmount from "src/helpers/parseAmount";
+import { useWalletTransactions } from "src/api-query/queries";
 
 type Status = {
     message: string;
@@ -221,15 +221,13 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {props.isWithdraw
-                                ? step > 1
-                                    ? "Withdraw Processed!"
-                                    : props.canWithdraw
+                            {!props.isWithdraw && (step > 1 ? "Deposit processed!" : "Your deposit is in progress")}
+                            {props.isWithdraw && step > 1 && "Withdraw processed!"}
+                            {props.isWithdraw &&
+                                step <= 1 &&
+                                (props.canWithdraw
                                     ? "Your withdraw is ready for approval."
-                                    : "Your withdraw is in progress. Please come back later."
-                                : step > 1
-                                ? "Deposit Processed!"
-                                : "Your deposit is in progress."}
+                                    : "Your withdraw is in progress. Please come back later.")}
                         </Text>
                         <Text
                             fontFamily="Roboto"
@@ -241,16 +239,19 @@ export const TransferProgress: React.FC<Props> = (props) => {
                         >
                             <>
                                 {status !== undefined && status.message}
-                                {status === undefined &&
-                                    (props.isWithdraw
-                                        ? step > 1
-                                            ? "You can now see it in your transaction history!"
-                                            : props.canWithdraw
-                                            ? 'Click "Approve" below to submit your withdraw approval.'
-                                            : "When returning to the bridge, you can return to this view by clicking the withdraw from the transaction history."
-                                        : step > 1
-                                        ? "You can now see your finished transaction in History!"
-                                        : "After the transaction is processed you can also check it in your transaction history.")}
+                                {status === undefined && (
+                                    <>
+                                        {step > 1 && "You can now see your finished transaction in History!"}
+                                        {step <= 1 &&
+                                            !props.isWithdraw &&
+                                            "After the transaction is processed you can also check it in your transaction history."}
+                                        {props.isWithdraw &&
+                                            step <= 1 &&
+                                            (props.canWithdraw
+                                                ? 'Click "Approve" below to submit your withdraw approval.'
+                                                : "When returning to the bridge, you can return to this view by clicking the withdraw from the transaction history.")}
+                                    </>
+                                )}
                             </>
                         </Text>
                     </InfoContainer>

@@ -3,12 +3,9 @@ import {
     AccountTransactionType,
     CcdAmount,
     ContractAddress,
-    HttpProvider,
-    JsonRpcClient,
-    TransactionExpiry,
     UpdateContractPayload,
 } from "@concordium/common-sdk";
-import { calculateEnergyCost, serializeUpdateContractParameters } from "@concordium/web-sdk";
+import { serializeUpdateContractParameters } from "@concordium/web-sdk";
 import addresses from "@config/addresses";
 import contractNames from "@config/contractNames";
 import { bridgeManager, cis2Bridgeable } from "@config/schemas";
@@ -17,7 +14,7 @@ import { Buffer } from "buffer/index";
 import { ethers } from "ethers";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
-import detectCcdProvider from "src/helpers/detectCcdProvider";
+import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import hexToBase64 from "src/helpers/hexToBase64";
 
 /** Polling interval for CCD transactions in MS */
@@ -51,7 +48,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
         const receiveName = `${contractNames.cis2Bridgeable}.updateOperator`;
         const rawSchema = hexToBase64(cis2Bridgeable);
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
         const userInput = [
             {
                 update: {
@@ -90,7 +87,6 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         amount: string,
         token?: Components.Schemas.TokenMapItem,
         ethAddress?: string
-        // energy?: number
     ): Promise<{ result: boolean; hash: string }> {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
@@ -107,7 +103,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
         const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
         const rawSchema = hexToBase64(bridgeManager);
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
 
         const txHash = await provider.sendTransaction(
             ccdAccount,
@@ -135,7 +131,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
     };
 
     const getTransactionStatus = async (hash: string) => {
-        const provider = detectCcdProvider();
+        const provider = detectConcordiumProvider();
         return (await provider).getJsonRpcClient().getTransactionStatus(hash);
     };
 
@@ -176,7 +172,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             Buffer.from(hexToBase64(cis2Bridgeable), "base64")
         );
 
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
         const res = await provider.getJsonRpcClient().invokeContract({
             method: `${contractNames.cis2Bridgeable}.balanceOf`,
             contract: {
@@ -207,7 +203,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             throw new Error("ccdTokenAddress is undefined");
         }
 
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
         const userInput = [
             {
                 owner: {
@@ -253,7 +249,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
     };
 
     const getLatestFinalizedBlock = async function () {
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
 
         const res = await provider.getJsonRpcClient().getConsensusStatus();
 
@@ -270,7 +266,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             throw new Error("ETH address is undefined");
         }
 
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
         const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
 
         const userInput = {
@@ -322,7 +318,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             throw new Error("ccdToken is undefined");
         }
 
-        const provider = await detectCcdProvider();
+        const provider = await detectConcordiumProvider();
         const contractAddress = {
             index: BigInt(token.ccd_contract.index),
             subindex: BigInt(token.ccd_contract.subindex),
