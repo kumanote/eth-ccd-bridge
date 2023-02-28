@@ -2,9 +2,9 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import create from "zustand";
 
 type TransactionFlowStore = {
-    amount?: string;
+    amount?: bigint;
     token?: Components.Schemas.TokenMapItem;
-    setAmount(amount: string): void;
+    setAmount(amount: bigint): void;
     setToken(token: Components.Schemas.TokenMapItem): void;
     clear(): void;
 };

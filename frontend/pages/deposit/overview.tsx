@@ -61,7 +61,7 @@ const WithdrawOverview: NextPage = () => {
      */
     const onSubmit = async (
         token: Components.Schemas.TokenMapItem,
-        amount: string,
+        amount: bigint,
         setError: (message: string) => void,
         setStatus: (message: string) => void
     ): Promise<string | undefined> => {

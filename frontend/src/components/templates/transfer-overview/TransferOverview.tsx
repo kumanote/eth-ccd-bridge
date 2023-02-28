@@ -27,7 +27,7 @@ type BaseProps = {
      */
     handleSubmit(
         token: Components.Schemas.TokenMapItem,
-        amount: string,
+        amount: bigint,
         setError: (message: string) => void,
         setStatus: (message: string) => void
     ): Promise<string | undefined>;
@@ -93,9 +93,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
         }
 
         setPendingSubmission(true);
-
         const nextRoute = await handleSubmit(selectedToken, amount, setError, setInfo);
-
         setPendingSubmission(false);
 
         if (nextRoute) {
@@ -119,7 +117,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
                         fontLetterSpacing="0"
                     >
                         {isWithdraw
-                            ? "Wtidhraw should take up to 10 minutes to complete."
+                            ? "Withdraw should take up to 10 minutes to complete." // TODO: wrong.. get more precise estimate from endpoint
                             : "Deposit should take up to 5 minutes to complete."}
                     </Text>
                     <div style={{ marginTop: 12 }} />

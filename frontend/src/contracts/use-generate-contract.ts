@@ -10,24 +10,20 @@ const useGenerateContract = (address: string, enabled: boolean) => {
     const { context } = useWallet();
     const amountToApprove = toWei(ERC20_ALLOWANCE); // TODO: config.
 
-    const getBalance = async (decimals: number) => {
-        if (!enabled || !address || !context.library) return;
+    const getBalance = async (): Promise<bigint> => {
+        if (!enabled || !address || !context.library) throw new Error("Expected context not available");
         const provider = context.library;
 
         let balance;
 
         if (address === addresses.eth) {
-            balance = await provider.getBalance(context.account!);
+            balance = await provider.getBalance(context.account);
         } else {
             const generatedContract = new ethers.Contract(address, MOCK_ABI, provider);
             balance = await generatedContract.balanceOf(context.account);
         }
 
-        if (decimals === 18) {
-            return Number(ethers.utils.formatEther(balance));
-        } else {
-            return balance / 10 ** decimals;
-        }
+        return BigInt(balance);
     };
 
     const allowance = async (erc20PredicateAddress: string): Promise<BigNumber> => {
@@ -47,7 +43,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
     };
 
     const approve = async (erc20PredicateAddress: string) => {
-        if (!enabled || !erc20PredicateAddress! || !address || !context.library) return;
+        if (!enabled || !erc20PredicateAddress || !address || !context.library) return;
         const signer = context.library?.getSigner();
 
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
