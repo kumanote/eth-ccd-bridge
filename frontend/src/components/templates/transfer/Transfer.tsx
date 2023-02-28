@@ -126,7 +126,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const { push } = useRouter();
     const { isTablet } = useContext(appContext);
     const { token, amount = 0n, setToken, setAmount, clear: clearTransactionFlow } = useTransactionFlowStore();
-    const [inputAmount, setInputAmount] = useState(amount.toString());
 
     // Keeps track of whether "continue" has been pressed. Used to not show validation error message prematurely.
     const [submitted, setSubmitted] = useState(false);
@@ -162,6 +161,9 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             return toFraction(tokenDecimalsToResolution(token.decimals))(amount);
         },
         [token]
+    );
+    const [inputAmount, setInputAmount] = useState(
+        token !== undefined && amount !== undefined ? toTokenDecimalAmount(amount) ?? "0" : "0"
     );
 
     // tokens available in the dropdown
