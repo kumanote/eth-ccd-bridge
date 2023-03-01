@@ -58,22 +58,6 @@ const useEthWallet = () => {
         }
     }, [context]);
 
-    useEffect(() => {
-        if (localStorage["CCP_ETH_connecting"] === true) return;
-
-        if (localStorage["CCP_ETH_connected"] && !context.account) {
-            try {
-                localStorage["CCP_ETH_connecting"] = true;
-                connect().then(() => {
-                    delete localStorage["CCP_ETH_connecting"];
-                });
-            } catch (error) {
-                delete localStorage["CCP_ETH_connected"];
-                delete localStorage["CCP_ETH_connecting"];
-            }
-        }
-    }, [context]);
-
     return {
         context,
         connect,
