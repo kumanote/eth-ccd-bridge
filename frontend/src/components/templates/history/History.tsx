@@ -28,6 +28,10 @@ import {
     TabsWrapper,
 } from "./History.style";
 
+const linkClick: MouseEventHandler = (e) => {
+    e.stopPropagation();
+};
+
 type Props = {
     depositSelected: boolean;
 };
@@ -54,10 +58,6 @@ const History = ({ depositSelected }: Props) => {
 
         const route = isDeposit(transaction) ? routes.deposit.tx(txHash) : routes.withdraw.tx(txHash);
         push(route);
-    };
-
-    const linkClick: MouseEventHandler = (e) => {
-        e.stopPropagation();
     };
 
     const getWithdrawEthHash = (withdrawTx: Components.Schemas.WalletWithdrawTx): string | undefined =>
@@ -97,7 +97,7 @@ const History = ({ depositSelected }: Props) => {
     }, []);
 
     useEffect(() => {
-        // Effects only run client-side, nextJS router is only available on the client.
+        // NextJS router is only available on the client, so we use `useEffect` to defer running this until the first client side render.
         if (!context.account) {
             replace(routes.deposit.path);
         }

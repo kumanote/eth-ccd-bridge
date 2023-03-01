@@ -8,9 +8,6 @@ import useRootManagerContract from "src/contracts/use-root-manager";
 import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
 import { useEthMerkleProof, useWatchWithdraw } from "src/api-query/queries";
 
-/** Interval in ms for how often to query for deposit status */
-const QUERY_INTERVAL = 10000;
-
 type Query = {
     tx: string;
 };
@@ -23,7 +20,6 @@ const WithdrawTransactionStatus: NextPage = () => {
     } = useRouter() as QueryRouter<Query>;
     const { data: txData } = useWatchWithdraw(tx !== undefined ? { tx_hash: tx } : undefined, {
         enabled: tx !== undefined,
-        refetchInterval: QUERY_INTERVAL,
     });
     const { withdraw } = useRootManagerContract();
     const { addApproved, transactions: approvedTransactions } = useApprovedWithdrawalsStore();

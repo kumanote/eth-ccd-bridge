@@ -11,9 +11,9 @@ import { isDefined } from "src/helpers/basic";
  */
 const MERKLE_UPDATE_INTERVAL = 60000;
 /**
- * Interval in ms for querying transaction history
+ * Interval in ms for querying in general
  */
-const HISTORY_UPDATE_INTERVAL = 10000;
+const QUERY_UPDATE_INTERVAL = 10000;
 
 type WatchWithdrawParams = Paths.WatchWithdrawTx.PathParameters;
 type WatchWithdrawOptions = UseQueryOptions<
@@ -39,6 +39,10 @@ export const useWatchWithdraw = (params?: WatchWithdrawParams, options?: WatchWi
             refetchInterval: (data, query) => {
                 if (data?.concordium_event_id !== undefined) {
                     return false;
+                }
+
+                if (options?.refetchInterval === undefined) {
+                    return QUERY_UPDATE_INTERVAL;
                 }
 
                 return typeof options?.refetchInterval === "function"
@@ -75,6 +79,10 @@ export const useWatchDeposit = (params?: WatchDepositParams, options?: WatchDepo
                     return false;
                 }
 
+                if (options?.refetchInterval === undefined) {
+                    return QUERY_UPDATE_INTERVAL;
+                }
+
                 return typeof options?.refetchInterval === "function"
                     ? options?.refetchInterval(data, query)
                     : options?.refetchInterval ?? false;
@@ -101,7 +109,7 @@ export const useWalletTransactions = () => {
             const { data } = await client?.wallet_txs({ wallet });
             return data;
         },
-        { refetchInterval: HISTORY_UPDATE_INTERVAL }
+        { refetchInterval: QUERY_UPDATE_INTERVAL }
     );
 };
 
