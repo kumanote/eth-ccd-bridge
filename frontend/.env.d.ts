@@ -20,9 +20,12 @@ declare global {
 
             // Providers
             /**
-             * The ethereum network ID
+             * The ethereum network ID represented by an integer
              */
-            NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string; // TODO: What's this? Document...
+            NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string;
+            /**
+             * The ethereum block explorer corresponding to the provided network ID
+             */
             NEXT_PUBLIC_ETHEREUM_EXPLORER_URL: string; // TODO: What's this? Document...
             // NEXT_PUBLIC_ETHEREUM_PROVIDER_KEY: string; // TODO: What's this? Document...
             // NEXT_PUBLIC_INFURA_PROJECT_ID: string; // TODO: What's this? Document...
@@ -37,7 +40,7 @@ declare global {
             /**
              * Bridge manager contract index. For now, the accompanying subindex is assumed to be 0.
              */
-            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: number; // TODO: Don't assume the subindex is 0, as sometime it might not be...
+            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: string; // TODO: Don't assume the subindex is 0, as sometime it might not be...
 
             /**
              * URL of the bridge API.
