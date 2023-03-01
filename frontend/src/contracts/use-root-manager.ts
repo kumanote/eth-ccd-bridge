@@ -17,7 +17,7 @@ const useRootManagerContract = () => {
         ? "0x" + Buffer.from(Uint8Array.prototype.slice.call(bs58check.decode(ccdAccount || ""), 1)).toString("hex")
         : "";
 
-    const typeToVault = async () => {
+    const typeToVault = async (): Promise<string> => {
         if (!context.library || !enabled) return "";
 
         const signer = context.library.getSigner();

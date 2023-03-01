@@ -20,7 +20,7 @@ declare global {
 
             // Providers
             /**
-             * The ethereum network ID represented by an integer
+             * The ethereum network ID represented by an integer.
              */
             NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string;
             /**

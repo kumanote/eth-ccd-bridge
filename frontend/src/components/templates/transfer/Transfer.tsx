@@ -330,9 +330,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             value={inputAmount}
                             onChange={(e) => setInputAmount(e.target.value)}
                             type="number"
-                            step="0.01"
-                            min="0.0"
-                            max={decimalTokenBalance}
                             valid={isValidAmount || !submitted}
                         />
                         {isLoggedIn && token && decimalTokenBalance && (

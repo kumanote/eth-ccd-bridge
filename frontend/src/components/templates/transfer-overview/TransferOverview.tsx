@@ -37,7 +37,9 @@ type WithdrawProps = BaseProps & {
 };
 type DepositProps = BaseProps & {
     isWithdraw?: false;
-    requestGasFee(): Promise<number>;
+    requestGasFee(): Promise<number | undefined>;
+    requestAllowance(setError: (message: string) => void, setStatus: (message: string) => void): Promise<boolean>;
+    needsAllowance: boolean | undefined;
 };
 
 type Props = WithdrawProps | DepositProps;
@@ -49,26 +51,26 @@ export const TransferOverview: React.FC<Props> = (props) => {
     const { back, replace, push } = useRouter();
     const { amount, token: selectedToken } = useTransactionFlowStore();
     const { ccdContext } = useCCDWallet();
+    const hasAllowance = !props.isWithdraw && !props.needsAllowance && props.needsAllowance !== undefined;
 
     /**
      * Gas fee, only available for deposits (otherwise defaults to 0 and is ignored for withdrawals).
      */
-    const gasFee =
-        useAsyncMemo(
-            async () => {
-                if (props.isWithdraw) {
-                    return undefined;
-                }
+    const gasFee = useAsyncMemo(
+        async () => {
+            if (props.isWithdraw || !hasAllowance) {
+                return undefined;
+            }
 
-                if (amount === undefined || selectedToken === undefined) {
-                    throw new Error("Invalid page context.");
-                }
+            if (amount === undefined || selectedToken === undefined) {
+                throw new Error("Invalid page context.");
+            }
 
-                return props.requestGasFee();
-            },
-            (e) => setStatus(e.message),
-            [props.isWithdraw]
-        ) ?? 0;
+            return props.requestGasFee();
+        },
+        (e) => setStatus({ isError: true, message: e.message }),
+        [props.isWithdraw, hasAllowance]
+    );
 
     const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
 
@@ -93,7 +95,19 @@ export const TransferOverview: React.FC<Props> = (props) => {
         }
 
         setPendingSubmission(true);
-        const nextRoute = await handleSubmit(selectedToken, amount, setError, setInfo);
+
+        let canSubmit = true;
+        if (!hasAllowance && !props.isWithdraw) {
+            canSubmit = await props.requestAllowance(setError, setInfo);
+        }
+
+        let nextRoute: string | undefined;
+        if (!canSubmit) {
+            setError("Allowance request rejected");
+        } else {
+            nextRoute = await handleSubmit(selectedToken, amount, setError, setInfo);
+        }
+
         setPendingSubmission(false);
 
         if (nextRoute) {
@@ -155,11 +169,13 @@ export const TransferOverview: React.FC<Props> = (props) => {
                             fontColor="TitleText"
                             fontLetterSpacing="0"
                         >
-                            {`${isWithdraw ? "" : "~"}${
-                                isWithdraw ? "It will be visible when signing the transaction." : gasFee
-                            } ${isWithdraw ? "" : "ETH"} ${isWithdraw ? "" : "("} ${
-                                isWithdraw ? "" : (gasFee * ethPrice).toFixed(4)
-                            } ${isWithdraw ? "" : "USD)"}`}
+                            {isWithdraw && "It will be visible when signing the transaction."}
+                            {!isWithdraw &&
+                                gasFee === undefined &&
+                                `${selectedToken.eth_name} allowance needed to estimate network fee.`}
+                            {!isWithdraw &&
+                                gasFee !== undefined &&
+                                `~${gasFee} ETH (${(gasFee * ethPrice).toFixed(4)} USD)`}
                         </Text>
                     </StyledProcessWrapper>
 
@@ -206,7 +222,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
                                     fontLetterSpacing="0"
                                 >
                                     {!isWithdraw
-                                        ? `(${(gasFee * ethPrice).toFixed(4)} USD)`
+                                        ? gasFee && `(${(gasFee * ethPrice).toFixed(4)} USD)`
                                         : "Gas estimation will be available after completing the CCD transaction."}
                                 </Text>
                             </StyledProcessWrapper>

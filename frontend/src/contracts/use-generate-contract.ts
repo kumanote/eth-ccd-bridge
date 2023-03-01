@@ -26,7 +26,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         return BigInt(balance);
     };
 
-    const allowance = async (erc20PredicateAddress: string): Promise<BigNumber> => {
+    const hasAllowance = async (erc20PredicateAddress: string): Promise<boolean> => {
         if (!enabled || !erc20PredicateAddress || !address || !context.library) {
             throw new Error("Expected necessary parameters to be available");
         }
@@ -34,12 +34,15 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         const signer = context.library?.getSigner();
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
 
-        return await generatedContract.allowance(
+        const response: BigNumber = await generatedContract.allowance(
             // Owner
             context.account,
             // Spender
             erc20PredicateAddress
         );
+
+        // 0x00 is the hex value of the `BigNumber` from the response if an allowance hasn't been approved yet.
+        return response._hex !== "0x00";
     };
 
     const approve = async (erc20PredicateAddress: string) => {
@@ -61,22 +64,12 @@ const useGenerateContract = (address: string, enabled: boolean) => {
      * Returns `ContractTransaction` or undefined if allowance has already been given.
      * Throws if necessary parameters are not available when function is invoked.
      */
-    const checkAllowance = async (
-        erc20PredicateAddress: string,
-        onRequireApproval?: () => void
-    ): Promise<ContractTransaction | undefined> => {
+    const checkAllowance = async (erc20PredicateAddress: string): Promise<ContractTransaction> => {
         if (!enabled || !erc20PredicateAddress) {
             throw new Error("Expected necessary parameters to be available");
         }
-        const allowResponse = await allowance(erc20PredicateAddress);
-
-        if (allowResponse._hex !== "0x00") {
-            // Allowance has already been given
-            return undefined;
-        }
 
         try {
-            onRequireApproval?.();
             return await approve(erc20PredicateAddress);
         } catch (err) {
             throw new Error("You need to approve token spending");
@@ -84,7 +77,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
     };
 
     return {
-        allowance,
+        hasAllowance,
         approve,
         getBalance,
         checkAllowance,
