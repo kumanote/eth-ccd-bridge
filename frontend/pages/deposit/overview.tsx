@@ -79,7 +79,7 @@ const DepositOverview: NextPage = () => {
             const gas = await estimateGas(amount, selectedToken, "deposit");
             return parseFloat(gas as string);
         } catch (error) {
-            // else, the user did not approve or doesn't have enought tokens and we see the error
+            // The user did not approve or doesn't have enough tokens and we show the error
             if (error?.reason) {
                 throw new Error(error?.reason);
             } else {
