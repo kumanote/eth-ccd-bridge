@@ -131,7 +131,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
                         fontLetterSpacing="0"
                     >
                         {isWithdraw
-                            ? "Withdraw should take up to 10 minutes to complete." // TODO: wrong.. get more precise estimate from endpoint
+                            ? "Withdraw should take up to 10 minutes to complete."
                             : "Deposit should take up to 5 minutes to complete."}
                     </Text>
                     <div style={{ marginTop: 12 }} />
