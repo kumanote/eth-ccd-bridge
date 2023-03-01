@@ -17,7 +17,7 @@ use concordium_rust_sdk::{
         AbsoluteBlockHeight, Address, BlockItemSummary, ContractAddress, Energy, Nonce,
         RejectReason, WalletAccount,
     },
-    v2,
+    v2::{self, BlockIdentifier},
 };
 use futures::{StreamExt, TryStreamExt};
 use std::sync::Arc;
@@ -207,12 +207,62 @@ impl BridgeManager {
     /// Construct a update transaction that can be sent to execute the provided
     /// [`StateUpdate`]. The expiry time of the transaction is set for 1d.
     ///
-    /// This **does not** send the transaction.
-    pub fn make_state_update_tx(
+    /// This function will dry run the transaction first. If the tranasction is
+    /// rejected because the action has already been processed on the chain then
+    /// `Ok(None)` is returned. If the transaction fails for some other reason
+    /// then it is retried, and if it is not successful after 6 attempts
+    /// an error is returned.
+    ///
+    /// Dry run is attempted in the last finalized block.
+    ///
+    /// This **does not** send the transaction, but does dry run the update.
+    pub async fn make_state_update_tx(
         &mut self,
-        execution_energy: Energy,
         update: &StateUpdate,
-    ) -> BlockItem<EncodedPayload> {
+    ) -> anyhow::Result<Option<BlockItem<EncodedPayload>>> {
+        let mut iter_num = 0;
+        let (mut execution_energy, payload) = loop {
+            match self
+                .dry_run_state_update(update, BlockIdentifier::LastFinal)
+                .await
+            {
+                Ok(v) => match v {
+                    DryRunReturn::Success {
+                        used_energy,
+                        payload,
+                    } => break (used_energy, payload),
+                    DryRunReturn::DuplicateOperation => {
+                        return Ok(None);
+                    }
+                    DryRunReturn::OtherError { reason } => {
+                        log::error!(
+                            "Unexpected response from dry running state update. This is a \
+                             configuration error: {reason:#?}"
+                        );
+                        anyhow::bail!(
+                            "Unexpected response from dry running state update. This is a \
+                             configuration error: {reason:#?}"
+                        );
+                    }
+                },
+                Err(e) => {
+                    log::warn!("Unable to dry run state update due to: {e:#}");
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000 << iter_num)).await;
+            iter_num += 1;
+            anyhow::ensure!(
+                iter_num <= 6,
+                "Too many retries trying to run state update."
+            );
+        };
+        // Add an extra 1000 NRG to prevent race conditions in case the cost changes
+        // slightly due to withdrawals.
+        execution_energy = execution_energy.energy.saturating_add(1000).into();
+        anyhow::ensure!(
+            execution_energy <= self.max_energy,
+            "Estimated energy exceeds maximum allowed"
+        );
         // Set 1d expiry.
         let expiry: TransactionTime =
             TransactionTime::from_seconds((chrono::Utc::now().timestamp() + 24 * 60 * 60) as u64);
@@ -225,21 +275,10 @@ impl BridgeManager {
             self.sender.address,
             nonce,
             expiry,
-            self.make_payload(update),
+            payload,
             execution_energy,
         );
-        tx.into()
-    }
-
-    /// Make and send the update transaction.
-    pub async fn send_state_update(
-        &mut self,
-        execution_energy: Energy,
-        update: &StateUpdate,
-    ) -> anyhow::Result<TransactionHash> {
-        let bi = self.make_state_update_tx(execution_energy, update);
-        let hash = self.client.client.send_block_item(&bi).await?;
-        Ok(hash)
+        Ok(Some(tx.into()))
     }
 }
 

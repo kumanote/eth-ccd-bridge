@@ -286,7 +286,7 @@ where
                 log::debug!("New mapping for ERC20 token at {:#x}.", decoded.root_token);
                 let contract = crate::erc20::Erc20::new(decoded.root_token, client.clone());
                 let name = contract
-                    .name()
+                    .symbol()
                     .call()
                     .await
                     .context("Unable to get name of a token.")?;
