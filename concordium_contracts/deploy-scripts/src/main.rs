@@ -17,7 +17,6 @@ use concordium_rust_sdk::{
 use deployer::{Deployer, ModuleDeployed};
 use hex::FromHexError;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     fs::File,
     io::{BufWriter, Cursor, Write},
@@ -107,27 +106,6 @@ fn get_wasm_module(file: &Path) -> Result<WasmModule, DeployError> {
     Ok(wasm_module)
 }
 
-async fn get_and_compare_metadata_hash(
-    url: &str,
-    hash: &TransactionHash,
-) -> Result<(), DeployError> {
-    // let response = reqwest::get(url).await?;
-    // let metadata = response.text().await?;
-
-    // let result: [u8; 32] = Sha256::digest(metadata).into();
-
-    // if result.as_slice() != hash.as_ref() {
-    //     return Err(DeployError::InvalidHash(format!(
-    //         "hashes do not match for url {}, expected: {}, got: {}",
-    //         url,
-    //         hash,
-    //         TransactionHash::from(result)
-    //     )));
-    // }
-
-    Ok(())
-}
-
 async fn deploy_token(
     deployer: &Deployer,
     token: &WrappedToken,
@@ -135,10 +113,6 @@ async fn deploy_token(
     bridge_manager: ContractAddress,
 ) -> Result<OutputToken, DeployError> {
     println!("Initializing cis2-bridgeable {}....", token.name);
-
-    // let metadata_hash =
-    //     get_and_compare_metadata_hash(&token.token_metadata_url, &token.token_metadata_hash)
-    //         .await?;
 
     let mock_token = deployer
         .init_token_contract(
@@ -197,7 +171,7 @@ async fn init_contracts(
         .await?;
     println!("Granted Manager address Manager role on bridge-manager");
 
-    println!("");
+    println!();
 
     let mut output = Output {
         bridge_manager,
@@ -209,14 +183,14 @@ async fn init_contracts(
             deploy_token(deployer, token, cis2_bridgeable_module_ref, bridge_manager).await?;
         output.tokens.push(output_token);
 
-        println!("");
+        println!();
     }
 
-    println!("");
+    println!();
 
     let json = serde_json::to_string_pretty(&output)?;
 
-    println!("{}", json);
+    println!("{json}");
 
     let file = File::create("../latest.json")?;
     let mut writer = BufWriter::new(file);
@@ -257,32 +231,32 @@ async fn main() -> Result<(), DeployError> {
 
     let tokens: Vec<WrappedToken> = serde_json::from_slice(&std::fs::read(app.tokens)?)?;
 
-    // make sure we didn't mess up the hashes:
-    for token in tokens.iter() {
-        let _ =
-            get_and_compare_metadata_hash(&token.token_metadata_url, &token.token_metadata_hash)
-                .await?;
-    }
+    // // make sure we didn't mess up the hashes:
+    // for token in tokens.iter() {
+    //     let _ =
+    //         get_and_compare_metadata_hash(&token.token_metadata_url,
+    // &token.token_metadata_hash)             .await?;
+    // }
 
     let wasm_module = get_wasm_module(app.cis2_source.as_path())?;
     println!("Deploying cis2-bridgeable....");
     let cis2_bridgeable_module_ref = deployer.deploy_wasm_module(wasm_module).await?;
     println!(
         "Deployed cis2-bridgeable, module_ref: {}",
-        cis2_bridgeable_module_ref.module_ref.to_string()
+        cis2_bridgeable_module_ref.module_ref
     );
 
-    println!("");
+    println!();
 
     let wasm_module = get_wasm_module(app.manager_source.as_path())?;
     println!("Deploying bridge-manager....");
     let bridge_manager_module_ref = deployer.deploy_wasm_module(wasm_module).await?;
     println!(
         "Deployed bridge-manager, module_ref: {}",
-        bridge_manager_module_ref.module_ref.to_string()
+        bridge_manager_module_ref.module_ref
     );
 
-    println!("");
+    println!();
 
     init_contracts(
         &deployer,

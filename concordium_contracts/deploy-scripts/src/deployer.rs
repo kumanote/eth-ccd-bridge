@@ -1,6 +1,5 @@
 use concordium_rust_sdk::{
     common::types::{Amount, TransactionTime},
-    endpoints::QueryError,
     id::types::AccountAddress,
     smart_contracts::common::{
         self as contracts_common, Address, ModuleReference, OwnedContractName, OwnedReceiveName,
@@ -118,7 +117,7 @@ impl Deployer {
             .clone()
             .send_block_item(&bi)
             .await
-            .map_err(|e| DeployError::TransactionRejected(e))?;
+            .map_err(DeployError::TransactionRejected)?;
 
         let (_, block_item) = self.client.clone().wait_until_finalized(&tx_hash).await?;
 
@@ -126,8 +125,7 @@ impl Deployer {
 
         println!(
             "Transaction finalized, tx_hash={} module_ref={}",
-            tx_hash,
-            module_deployed.module_ref.to_string(),
+            tx_hash, module_deployed.module_ref,
         );
 
         Ok(module_deployed)
@@ -206,7 +204,7 @@ impl Deployer {
             return Err(DeployError::NonceNotFinal);
         }
 
-        let slice: &[u8] = &new_module_ref.as_ref();
+        let slice: &[u8] = new_module_ref.as_ref();
         let slice: [u8; 32] = slice.try_into().unwrap();
         let modref: ModuleReference = ModuleReference::from(slice);
 
@@ -260,8 +258,8 @@ impl Deployer {
             .clone()
             .send_block_item(&bi)
             .await
-            .map_err(|e| DeployError::TransactionRejected(e))?;
-        println!("Sent tx: {}", tx_hash.to_string());
+            .map_err(DeployError::TransactionRejected)?;
+        println!("Sent tx: {tx_hash}");
 
         let (_, block_item) = self.client.clone().wait_until_finalized(&tx_hash).await?;
 
@@ -356,8 +354,8 @@ impl Deployer {
             .clone()
             .send_block_item(&bi)
             .await
-            .map_err(|e| DeployError::TransactionRejected(e))?;
-        println!("Sent tx: {}", tx_hash.to_string());
+            .map_err(DeployError::TransactionRejected)?;
+        println!("Sent tx: {tx_hash}");
 
         let (_, block_item) = self.client.clone().wait_until_finalized(&tx_hash).await?;
 
@@ -390,8 +388,8 @@ impl Deployer {
                 reason,
                 used_energy,
             } => Err(DeployError::InvokeContractFailed(format!(
-                "contract invoke failed: {:?}, used_energy={}, return value={:?}",
-                reason, used_energy, return_value,
+                "contract invoke failed: {reason:?}, used_energy={used_energy}, return \
+                 value={return_value:?}"
             ))),
             InvokeContractResult::Success {
                 return_value: _,
@@ -399,7 +397,7 @@ impl Deployer {
                 used_energy,
             } => {
                 let e = used_energy.energy;
-                println!("Estimated energy: {}", e);
+                println!("Estimated energy: {e}");
                 Ok(Energy { energy: e + 100 })
             }
         }
@@ -434,33 +432,24 @@ impl Deployer {
                     }
 
                     match reject_reason {
-                        RejectReason::ModuleHashAlreadyExists { contents } => {
-                            return Ok(ModuleDeployed {
-                                module_ref: contents,
-                            })
-                        }
-                        _ => {
-                            return Err(DeployError::TransactionRejectedR(format!(
-                                "module deploy rejected with reason: {:?}",
-                                reject_reason
-                            )))
-                        }
+                        RejectReason::ModuleHashAlreadyExists { contents } => Ok(ModuleDeployed {
+                            module_ref: contents,
+                        }),
+                        _ => Err(DeployError::TransactionRejectedR(format!(
+                            "module deploy rejected with reason: {reject_reason:?}"
+                        ))),
                     }
                 }
                 AccountTransactionEffects::ModuleDeployed { module_ref } => {
-                    return Ok(ModuleDeployed { module_ref });
+                    Ok(ModuleDeployed { module_ref })
                 }
-                _ => {
-                    return Err(DeployError::InvalidBlockItem(
-                        "invalid transaction effects".into(),
-                    ))
-                }
+                _ => Err(DeployError::InvalidBlockItem(
+                    "invalid transaction effects".into(),
+                )),
             },
-            _ => {
-                return Err(DeployError::InvalidBlockItem(
-                    "Expected Account transaction".into(),
-                ));
-            }
+            _ => Err(DeployError::InvalidBlockItem(
+                "Expected Account transaction".into(),
+            )),
         }
     }
 
@@ -481,26 +470,21 @@ impl Deployer {
                     }
 
                     return Err(DeployError::TransactionRejectedR(format!(
-                        "contract init rejected with reason: {:?}",
-                        reject_reason
+                        "contract init rejected with reason: {reject_reason:?}"
                     )));
                 }
                 AccountTransactionEffects::ContractInitialized { data } => {
-                    return Ok(ContractInitialized {
+                    Ok(ContractInitialized {
                         contract: data.address,
-                    });
+                    })
                 }
-                _ => {
-                    return Err(DeployError::InvalidBlockItem(
-                        "invalid transaction effects".into(),
-                    ))
-                }
+                _ => Err(DeployError::InvalidBlockItem(
+                    "invalid transaction effects".into(),
+                )),
             },
-            _ => {
-                return Err(DeployError::InvalidBlockItem(
-                    "Expected Account transaction".into(),
-                ));
-            }
+            _ => Err(DeployError::InvalidBlockItem(
+                "Expected Account transaction".into(),
+            )),
         }
     }
 
@@ -518,24 +502,17 @@ impl Deployer {
                     }
 
                     return Err(DeployError::TransactionRejectedR(format!(
-                        "contract update rejected with reason: {:?}",
-                        reject_reason
+                        "contract update rejected with reason: {reject_reason:?}"
                     )));
                 }
-                AccountTransactionEffects::ContractUpdateIssued { effects: _ } => {
-                    return Ok(());
-                }
-                _ => {
-                    return Err(DeployError::InvalidBlockItem(
-                        "invalid transaction effects".into(),
-                    ))
-                }
+                AccountTransactionEffects::ContractUpdateIssued { effects: _ } => Ok(()),
+                _ => Err(DeployError::InvalidBlockItem(
+                    "invalid transaction effects".into(),
+                )),
             },
-            _ => {
-                return Err(DeployError::InvalidBlockItem(
-                    "Expected Account transaction".into(),
-                ));
-            }
+            _ => Err(DeployError::InvalidBlockItem(
+                "Expected Account transaction".into(),
+            )),
         }
     }
 }
