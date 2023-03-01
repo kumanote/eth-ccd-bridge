@@ -50,6 +50,20 @@ The project depends on a number of configuration options that can be set through
 -   `NEXT_PUBLIC_BRIDGE_MANAGER`: Hex encoded contract schema for Concordium [bridge manager contract](../concordium_contracts/bridge-manager).
 -   `NEXT_PUBLIC_CIS2_BRIDGEABLE`: Hex encoded contract schema for Concordium [cis2-bridgeable contract](../concordium_contracts/cis2-bridgeable).
 
+### Docker
+
+The project can be built and run with docker by executing
+
+```bash
+docker build -t eth-ccd-bridge-app .
+```
+
+and
+
+```bash
+docker run -p 3000:3000 eth-ccd-bridge-app
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
