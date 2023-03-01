@@ -71,23 +71,17 @@ impl From<LogError> for CustomContractError {
 
 /// Mapping errors related to contract invocations to CustomContractError.
 impl<T> From<CallContractError<T>> for CustomContractError {
-    fn from(_cce: CallContractError<T>) -> Self {
-        Self::InvokeContractError
-    }
+    fn from(_cce: CallContractError<T>) -> Self { Self::InvokeContractError }
 }
 
 /// Mapping errors related to contract invocations to CustomContractError.
 impl From<TransferError> for CustomContractError {
-    fn from(_te: TransferError) -> Self {
-        Self::InvokeTransferError
-    }
+    fn from(_te: TransferError) -> Self { Self::InvokeTransferError }
 }
 
 /// Mapping CustomContractError to ContractError
 impl From<CustomContractError> for ContractError {
-    fn from(c: CustomContractError) -> Self {
-        Cis2Error::Custom(c)
-    }
+    fn from(c: CustomContractError) -> Self { Cis2Error::Custom(c) }
 }
 
 #[derive(Serial, DeserialWithState, Deletable)]
@@ -101,13 +95,13 @@ struct AddressRoleState<S> {
 #[concordium(state_parameter = "S")]
 struct State<S> {
     /// Contract is paused if `paused = true` and unpaused if `paused = false`.
-    paused: bool,
-    roles: StateMap<Address, AddressRoleState<S>, S>,
-    root_mapping: StateMap<EthAddress, ContractAddress, S>,
-    child_mapping: StateMap<ContractAddress, EthAddress, S>,
-    emit_event_index: u64,
-    withdraw_fee: Amount,
-    treasurer_address: AccountAddress,
+    paused:               bool,
+    roles:                StateMap<Address, AddressRoleState<S>, S>,
+    root_mapping:         StateMap<EthAddress, ContractAddress, S>,
+    child_mapping:        StateMap<ContractAddress, EthAddress, S>,
+    emit_event_index:     u64,
+    withdraw_fee:         Amount,
+    treasurer_address:    AccountAddress,
     processed_operations: StateSet<u64, S>,
 }
 
@@ -141,8 +135,8 @@ struct ViewAllRolesState {
     all_roles: Vec<(Address, ViewRolesState)>,
 }
 
-/// View function that returns the entire `roles` content of the state. Meant for
-/// monitoring.
+/// View function that returns the entire `roles` content of the state. Meant
+/// for monitoring.
 #[receive(
     contract = "bridge-manager",
     name = "viewRoles",
@@ -168,13 +162,13 @@ fn contract_view_roles<S: HasStateApi>(
 #[derive(Serialize, SchemaType)]
 struct ViewTokenMappings {
     /// Token mappings from ethereum address to concordium contract address.
-    root_mappings: Vec<(EthAddress, ContractAddress)>,
+    root_mappings:  Vec<(EthAddress, ContractAddress)>,
     /// Token mappings from concordium contract address to ethereum address.
     child_mappings: Vec<(ContractAddress, EthAddress)>,
 }
 
-/// View function that returns the entire `tokenMappings` content of the state. Meant for
-/// monitoring.
+/// View function that returns the entire `tokenMappings` content of the state.
+/// Meant for monitoring.
 #[receive(
     contract = "bridge-manager",
     name = "viewTokenMappings",
@@ -206,11 +200,11 @@ fn contract_view_token_mappings<S: HasStateApi>(
 #[derive(Serialize, SchemaType, PartialEq)]
 struct ViewConfigurationState {
     /// Contract is paused if `paused = true` and unpaused if `paused = false`.
-    paused: bool,
+    paused:            bool,
     /// The current event index that has been logged in the last withdraw event.
-    emit_event_index: u64,
+    emit_event_index:  u64,
     /// The fee to be paid when initiating a withdrawal of tokens.
-    withdraw_fee: Amount,
+    withdraw_fee:      Amount,
     /// The address of the treasury receiving the above fees.
     treasurer_address: AccountAddress,
 }
@@ -229,9 +223,9 @@ fn contract_view_configuration<S: HasStateApi>(
     let state = host.state();
 
     Ok(ViewConfigurationState {
-        paused: state.paused,
-        emit_event_index: state.emit_event_index,
-        withdraw_fee: state.withdraw_fee,
+        paused:            state.paused,
+        emit_event_index:  state.emit_event_index,
+        withdraw_fee:      state.withdraw_fee,
         treasurer_address: state.treasurer_address,
     })
 }
@@ -245,9 +239,7 @@ pub enum Roles {
 
 /// Manual implementation of the `EthAddressSchema` to display it in hex.
 impl schema::SchemaType for EthAddress {
-    fn get_type() -> schema::Type {
-        schema::Type::ByteArray(20)
-    }
+    fn get_type() -> schema::Type { schema::Type::ByteArray(20) }
 }
 
 #[derive(Serialize, Debug, Copy, Clone, PartialEq, Eq)]
@@ -257,17 +249,17 @@ pub struct EthAddress {
 
 #[derive(Serialize, SchemaType)]
 pub struct DepositOperation {
-    pub id: u64,
-    pub user: Address,
-    pub root: EthAddress,
-    pub amount: ContractTokenAmount,
+    pub id:       u64,
+    pub user:     Address,
+    pub root:     EthAddress,
+    pub amount:   ContractTokenAmount,
     pub token_id: TokenIdU64,
 }
 
 #[derive(Serialize, SchemaType)]
 pub struct TokenMapOperation {
-    pub id: u64,
-    pub root: EthAddress,
+    pub id:    u64,
+    pub root:  EthAddress,
     pub child: ContractAddress,
 }
 #[derive(Serialize, SchemaType)]
@@ -280,13 +272,13 @@ impl<S: HasStateApi> State<S> {
     /// Creates a new state with no one owning any tokens by default.
     fn new(state_builder: &mut StateBuilder<S>, treasurer: AccountAddress) -> Self {
         State {
-            paused: false,
-            roles: state_builder.new_map(),
-            root_mapping: state_builder.new_map(),
-            child_mapping: state_builder.new_map(),
-            emit_event_index: 0u64,
-            withdraw_fee: Amount::from_micro_ccd(0),
-            treasurer_address: treasurer,
+            paused:               false,
+            roles:                state_builder.new_map(),
+            root_mapping:         state_builder.new_map(),
+            child_mapping:        state_builder.new_map(),
+            emit_event_index:     0u64,
+            withdraw_fee:         Amount::from_micro_ccd(0),
+            treasurer_address:    treasurer,
             processed_operations: state_builder.new_set(),
         }
     }
@@ -345,19 +337,13 @@ impl<S: HasStateApi> State<S> {
         self
     }
 
-    fn set_withdraw_fee(&mut self, fee: Amount) {
-        self.withdraw_fee = fee;
-    }
+    fn set_withdraw_fee(&mut self, fee: Amount) { self.withdraw_fee = fee; }
 
-    fn set_treasurer(&mut self, treasurer: AccountAddress) {
-        self.treasurer_address = treasurer;
-    }
-    fn set_operation(&mut self, op: u64) {
-        self.processed_operations.insert(op);
-    }
-    fn has_operation(&self, op: u64) -> bool {
-        self.processed_operations.contains(&op)
-    }
+    fn set_treasurer(&mut self, treasurer: AccountAddress) { self.treasurer_address = treasurer; }
+
+    fn set_operation(&mut self, op: u64) { self.processed_operations.insert(op); }
+
+    fn has_operation(&self, op: u64) -> bool { self.processed_operations.contains(&op) }
 }
 // Contract functions
 
@@ -376,7 +362,7 @@ fn contract_init<S: HasStateApi>(
     state.grant_role(&invoker, Roles::Admin, state_builder);
     logger.log(&BridgeEvent::GrantRole(GrantRoleEvent {
         address: invoker,
-        role: Roles::Admin,
+        role:    Roles::Admin,
     }))?;
     state.set_withdraw_fee(Amount::from_micro_ccd(0u64));
 
@@ -388,7 +374,7 @@ fn contract_init<S: HasStateApi>(
 #[derive(Serialize, SchemaType)]
 pub struct HasRoleQueryParamaters {
     pub address: Address,
-    pub role: Roles,
+    pub role:    Roles,
 }
 
 /// The response which is sent back when calling the contract function
@@ -396,9 +382,7 @@ pub struct HasRoleQueryParamaters {
 #[derive(Serialize, SchemaType)]
 pub struct HasRoleQueryResponse(pub bool);
 impl From<bool> for HasRoleQueryResponse {
-    fn from(ok: bool) -> Self {
-        HasRoleQueryResponse(ok)
-    }
+    fn from(ok: bool) -> Self { HasRoleQueryResponse(ok) }
 }
 
 /// Tagged event to be serialized for the event log.
@@ -414,27 +398,27 @@ pub enum BridgeEvent {
 
 #[derive(Serialize, SchemaType)]
 pub struct TokenMapEvent {
-    pub id: u64,
-    pub root: EthAddress,
+    pub id:    u64,
+    pub root:  EthAddress,
     pub child: ContractAddress,
 }
 
 #[derive(Serialize, SchemaType)]
 pub struct DepositEvent {
-    pub id: u64,
+    pub id:       u64,
     pub contract: ContractAddress,
-    pub amount: ContractTokenAmount,
+    pub amount:   ContractTokenAmount,
     pub token_id: TokenIdU64,
 }
 
 #[derive(Serialize, SchemaType)]
 pub struct WithdrawEvent {
-    pub id: u64,
-    pub contract: ContractAddress,
-    pub amount: ContractTokenAmount,
+    pub id:          u64,
+    pub contract:    ContractAddress,
+    pub amount:      ContractTokenAmount,
     pub ccd_address: Address,
     pub eth_address: EthAddress,
-    pub token_id: TokenIdU64,
+    pub token_id:    TokenIdU64,
 }
 
 // A GrantRoleEvent introduced by this smart contract.
@@ -442,14 +426,14 @@ pub struct WithdrawEvent {
 pub struct GrantRoleEvent {
     /// Address that has been given the role
     address: Address,
-    role: Roles,
+    role:    Roles,
 }
 // A RevokeRoleEvent introduced by this smart contract.
 #[derive(Serialize, SchemaType)]
 pub struct RevokeRoleEvent {
     /// Address that has been revoked the role
     address: Address,
-    role: Roles,
+    role:    Roles,
 }
 /// Check if an address has a role.
 /// TODO Should this be batched like the rest of the functions ?
@@ -478,7 +462,7 @@ fn contract_has_role<S: HasStateApi>(
 #[derive(Serialize, SchemaType)]
 pub struct GrantRoleParams {
     pub address: Address,
-    pub role: Roles,
+    pub role:    Roles,
 }
 
 /// Grant Permission to an address
@@ -513,7 +497,7 @@ fn contract_grant_role<S: HasStateApi>(
     state.grant_role(&params.address, params.role, state_builder);
     logger.log(&BridgeEvent::GrantRole(GrantRoleEvent {
         address: params.address,
-        role: params.role,
+        role:    params.role,
     }))?;
     Ok(())
 }
@@ -522,7 +506,7 @@ fn contract_grant_role<S: HasStateApi>(
 #[derive(Serialize, SchemaType)]
 pub struct RemoveRoleParams {
     pub address: Address,
-    pub role: Roles,
+    pub role:    Roles,
 }
 
 /// Remove Permission to an address
@@ -563,7 +547,7 @@ fn contract_remove_role<S: HasStateApi>(
     state.remove_role(&params.address, params.role);
     logger.log(&BridgeEvent::RevokeRole(RevokeRoleEvent {
         address: params.address,
-        role: params.role,
+        role:    params.role,
     }))?;
     Ok(())
 }
@@ -652,7 +636,7 @@ fn contract_set_treasurer<S: HasStateApi>(
 #[derive(Serialize, SchemaType)]
 struct UpgradeParams {
     /// The new module reference.
-    module: ModuleReference,
+    module:  ModuleReference,
     /// Optional entrypoint to call in the new module after upgrade.
     migrate: Option<(OwnedEntrypointName, OwnedParameter)>,
 }
@@ -741,8 +725,8 @@ fn contract_set_paused<S: HasStateApi>(
 
 #[derive(Serialize, SchemaType)]
 pub struct DepositParams {
-    pub address: Address,
-    pub amount: ContractTokenAmount,
+    pub address:  Address,
+    pub amount:   ContractTokenAmount,
     pub token_id: TokenIdU64,
 }
 #[receive(
@@ -783,8 +767,8 @@ fn contract_receive_state_update<S: HasStateApi>(
             state.set_operation(op.id);
             state.map_token(&op.root, &op.child);
             logger.log(&BridgeEvent::TokenMap(TokenMapEvent {
-                id: op.id,
-                root: op.root,
+                id:    op.id,
+                root:  op.root,
                 child: op.child,
             }))?;
         }
@@ -795,8 +779,8 @@ fn contract_receive_state_update<S: HasStateApi>(
             );
             state.set_operation(op.id);
             let deposit_params = DepositParams {
-                address: op.user,
-                amount: op.amount,
+                address:  op.user,
+                amount:   op.amount,
                 token_id: op.token_id,
             };
 
@@ -811,9 +795,9 @@ fn contract_receive_state_update<S: HasStateApi>(
                 Amount { micro_ccd: 0 },
             )?;
             logger.log(&BridgeEvent::Deposit(DepositEvent {
-                id: op.id,
+                id:       op.id,
                 contract: child_token,
-                amount: deposit_params.amount,
+                amount:   deposit_params.amount,
                 token_id: deposit_params.token_id,
             }))?;
         }
@@ -824,16 +808,16 @@ fn contract_receive_state_update<S: HasStateApi>(
 #[derive(Serialize, SchemaType)]
 pub struct WithdrawParams {
     pub eth_address: EthAddress,
-    pub amount: ContractTokenAmount,
-    pub token: ContractAddress,
-    pub token_id: TokenIdU64,
+    pub amount:      ContractTokenAmount,
+    pub token:       ContractAddress,
+    pub token_id:    TokenIdU64,
 }
 
 // The parameter type for the contract function `withdraw`.
 #[derive(Serialize, SchemaType)]
 pub struct Cis2WithdrawParams {
-    pub address: Address,
-    pub amount: ContractTokenAmount,
+    pub address:  Address,
+    pub amount:   ContractTokenAmount,
     pub token_id: TokenIdU64,
 }
 #[receive(
@@ -875,8 +859,8 @@ fn contract_withdraw<S: HasStateApi>(
     host.invoke_transfer(&treasurer, amount)?;
 
     let params = Cis2WithdrawParams {
-        amount: withdraw_params.amount,
-        address: sender,
+        amount:   withdraw_params.amount,
+        address:  sender,
         token_id: withdraw_params.token_id,
     };
     host.state_mut().increment_emit_event_index();
@@ -890,12 +874,12 @@ fn contract_withdraw<S: HasStateApi>(
     )?;
 
     logger.log(&BridgeEvent::Withdraw(WithdrawEvent {
-        id: event_index,
-        contract: withdraw_params.token,
-        amount: withdraw_params.amount,
+        id:          event_index,
+        contract:    withdraw_params.token,
+        amount:      withdraw_params.amount,
         ccd_address: sender,
         eth_address: withdraw_params.eth_address,
-        token_id: params.token_id,
+        token_id:    params.token_id,
     }))?;
 
     Ok(())
@@ -923,16 +907,14 @@ mod tests {
     };
 
     const CIS2_ADDRESS: ContractAddress = ContractAddress {
-        index: 42,
+        index:    42,
         subindex: 0,
     };
 
-    fn token_amount(amount: u64) -> ContractTokenAmount {
-        let amount = TokenAmountU256(amount.into());
-        ContractTokenAmount::from(amount)
-    }
+    fn token_amount(amount: u64) -> ContractTokenAmount { TokenAmountU256(amount.into()) }
 
-    /// Test helper function which creates a contract state with admin granted to ACCOUNT_0
+    /// Test helper function which creates a contract state with admin granted
+    /// to ACCOUNT_0
     fn initial_state<S: HasStateApi>(state_builder: &mut StateBuilder<S>) -> State<S> {
         let mut state = State::new(state_builder, ACCOUNT_2);
         state.grant_role(&ADDRESS_0, Roles::Admin, state_builder);
@@ -968,7 +950,7 @@ mod tests {
                 .logs
                 .contains(&to_bytes(&BridgeEvent::GrantRole(GrantRoleEvent {
                     address: ADDRESS_0,
-                    role: Roles::Admin
+                    role:    Roles::Admin,
                 }))),
             "Missing event for the new admin"
         );
@@ -994,12 +976,12 @@ mod tests {
             processed_operations: state_builder.new_set(),
         };
 
-        let mut host = TestHost::new(state, builder);
+        let host = TestHost::new(state, builder);
 
         let ctx = TestReceiveContext::empty();
 
         // Check state configuration
-        let configuration_result = contract_view_configuration(&ctx, &mut host);
+        let configuration_result = contract_view_configuration(&ctx, &host);
 
         claim_eq!(
             configuration_result,
@@ -1029,7 +1011,7 @@ mod tests {
                 .logs
                 .contains(&to_bytes(&BridgeEvent::GrantRole(GrantRoleEvent {
                     address: ADDRESS_0,
-                    role: Roles::Admin
+                    role:    Roles::Admin,
                 }))),
             "Missing event for the new admin"
         );
@@ -1039,7 +1021,7 @@ mod tests {
         let mut host = TestHost::new(state, builder);
         let parameter = GrantRoleParams {
             address: ADDRESS_1,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1059,27 +1041,27 @@ mod tests {
                 .logs
                 .contains(&to_bytes(&BridgeEvent::GrantRole(GrantRoleEvent {
                     address: ADDRESS_1,
-                    role: Roles::Mapper
+                    role:    Roles::Mapper,
                 }))),
             "Missing event for grant role"
         );
 
         let query = HasRoleQueryParamaters {
             address: ADDRESS_1,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let query_bytes = to_bytes(&query);
 
         ctx.set_parameter(&query_bytes);
 
-        let has_role_result = contract_has_role(&ctx, &mut host);
+        let has_role_result = contract_has_role(&ctx, &host);
         claim!(has_role_result.is_ok(), "has role error");
         claim!(has_role_result.unwrap().0, "ADDRESS1 has manager role");
 
         // Remove role
         let parameter = RemoveRoleParams {
             address: ADDRESS_1,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1092,7 +1074,7 @@ mod tests {
                 .logs
                 .contains(&to_bytes(&BridgeEvent::RevokeRole(RevokeRoleEvent {
                     address: ADDRESS_1,
-                    role: Roles::Mapper
+                    role:    Roles::Mapper,
                 }))),
             "Missing event for revoke role"
         );
@@ -1100,13 +1082,13 @@ mod tests {
         // Check has role again
         let query = HasRoleQueryParamaters {
             address: ADDRESS_1,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let query_bytes = to_bytes(&query);
 
         ctx.set_parameter(&query_bytes);
 
-        let has_role_result = contract_has_role(&ctx, &mut host);
+        let has_role_result = contract_has_role(&ctx, &host);
         claim!(has_role_result.is_ok(), "has role error");
         claim!(
             !has_role_result.unwrap().0,
@@ -1116,7 +1098,7 @@ mod tests {
         // Remove role for not existing address
         let parameter = RemoveRoleParams {
             address: ADDRESS_2,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1127,7 +1109,8 @@ mod tests {
     }
 
     /// Test `view_roles` function displays the `roles` content of the state.
-    /// Add the ADMIN and MAPPER role to ACCOUNT_0 and the MAPPER role to ACCOUNT_1.
+    /// Add the ADMIN and MAPPER role to ACCOUNT_0 and the MAPPER role to
+    /// ACCOUNT_1.
     #[concordium_test]
     fn test_view_roles() {
         let mut ctx = TestInitContext::empty();
@@ -1145,7 +1128,7 @@ mod tests {
         let mut host = TestHost::new(state, builder);
         let parameter = GrantRoleParams {
             address: ADDRESS_1,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1160,7 +1143,7 @@ mod tests {
 
         let parameter = GrantRoleParams {
             address: ADDRESS_0,
-            role: Roles::Mapper,
+            role:    Roles::Mapper,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1174,7 +1157,7 @@ mod tests {
         );
 
         // Testing the `viewRoles` function
-        let roles_result = contract_view_roles(&ctx, &mut host);
+        let roles_result = contract_view_roles(&ctx, &host);
 
         let roles = roles_result.expect_report("Calling contract_view_roles expected to succeed.");
 
@@ -1189,7 +1172,7 @@ mod tests {
             (
                 concordium_std::Address::Account(ACCOUNT_0),
                 ViewRolesState {
-                    roles: vec![Roles::Admin, Roles::Mapper]
+                    roles: vec![Roles::Admin, Roles::Mapper],
                 }
             ),
             "ACCOUNT_0 should have the roles Admin and Mapper"
@@ -1199,7 +1182,7 @@ mod tests {
             (
                 concordium_std::Address::Account(ACCOUNT_1),
                 ViewRolesState {
-                    roles: vec![Roles::Mapper]
+                    roles: vec![Roles::Mapper],
                 }
             ),
             "ACCOUNT_1 should have the role Mapper"
@@ -1224,7 +1207,7 @@ mod tests {
         let mut host = TestHost::new(state, builder);
         let parameter = GrantRoleParams {
             address: ADDRESS_2,
-            role: Roles::StateSyncer,
+            role:    Roles::StateSyncer,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1236,8 +1219,8 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_0 is allowed to grant role");
 
         let parameter = StateUpdate::TokenMap(TokenMapOperation {
-            id: 1u64,
-            root: ETH_ADDRESS,
+            id:    1u64,
+            root:  ETH_ADDRESS,
             child: CIS2_ADDRESS,
         });
 
@@ -1250,18 +1233,12 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_2  is allowed to state update");
 
         claim!(
-            host.state()
-                .root_mapping
-                .get(&ETH_ADDRESS)
-                .unwrap()
-                .deref()
-                .clone()
-                == CIS2_ADDRESS,
+            *host.state().root_mapping.get(&ETH_ADDRESS).unwrap().deref() == CIS2_ADDRESS,
             "Mapping must be succesfull"
         );
 
         // Check `viewTokenMappings` function
-        let token_mappings_result = contract_view_token_mappings(&ctx, &mut host);
+        let token_mappings_result = contract_view_token_mappings(&ctx, &host);
 
         let token_mappings = token_mappings_result
             .expect_report("Calling contract_view_token_mappings expected to succeed.");
@@ -1296,7 +1273,7 @@ mod tests {
         let mut host = TestHost::new(state, builder);
         let parameter = GrantRoleParams {
             address: ADDRESS_2,
-            role: Roles::StateSyncer,
+            role:    Roles::StateSyncer,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1308,8 +1285,8 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_0 is allowed to grant role");
 
         let parameter = StateUpdate::TokenMap(TokenMapOperation {
-            id: 1u64,
-            root: ETH_ADDRESS,
+            id:    1u64,
+            root:  ETH_ADDRESS,
             child: CIS2_ADDRESS,
         });
 
@@ -1329,13 +1306,7 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_2  is allowed to state update");
 
         claim!(
-            host.state()
-                .root_mapping
-                .get(&ETH_ADDRESS)
-                .unwrap()
-                .deref()
-                .clone()
-                == CIS2_ADDRESS,
+            *host.state().root_mapping.get(&ETH_ADDRESS).unwrap().deref() == CIS2_ADDRESS,
             "Mapping must be succesfull"
         );
 
@@ -1362,10 +1333,10 @@ mod tests {
             ),
         );
         let parameter = StateUpdate::Deposit(DepositOperation {
-            id: 2u64,
-            user: ADDRESS_1,
-            root: ETH_ADDRESS,
-            amount: token_amount(42),
+            id:       2u64,
+            user:     ADDRESS_1,
+            root:     ETH_ADDRESS,
+            amount:   token_amount(42),
             token_id: TokenIdU64(0),
         });
 
@@ -1384,7 +1355,7 @@ mod tests {
 
         ctx.set_parameter(&parameter_bytes);
         // Check `isProcessed` function
-        let is_processed_result = contract_is_processed(&ctx, &mut host);
+        let is_processed_result = contract_is_processed(&ctx, &host);
 
         claim_eq!(
             is_processed_result,
@@ -1410,7 +1381,7 @@ mod tests {
         let mut host = TestHost::new(state, builder);
         let parameter = GrantRoleParams {
             address: ADDRESS_2,
-            role: Roles::StateSyncer,
+            role:    Roles::StateSyncer,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1422,8 +1393,8 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_0 is allowed to grant role");
 
         let parameter = StateUpdate::TokenMap(TokenMapOperation {
-            id: 1u64,
-            root: ETH_ADDRESS,
+            id:    1u64,
+            root:  ETH_ADDRESS,
             child: CIS2_ADDRESS,
         });
 
@@ -1443,27 +1414,21 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_2  is allowed to state update");
 
         claim!(
-            host.state()
-                .root_mapping
-                .get(&ETH_ADDRESS)
-                .unwrap()
-                .deref()
-                .clone()
-                == CIS2_ADDRESS,
+            *host.state().root_mapping.get(&ETH_ADDRESS).unwrap().deref() == CIS2_ADDRESS,
             "Mapping must be succesfull"
         );
 
         let parameter = WithdrawParams {
             eth_address: ETH_WALLET_ADDRESS,
-            amount: token_amount(42),
-            token_id: TokenIdU64(0),
-            token: CIS2_ADDRESS,
+            amount:      token_amount(42),
+            token_id:    TokenIdU64(0),
+            token:       CIS2_ADDRESS,
         };
 
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
         ctx.set_sender(Address::Contract(ContractAddress {
-            index: 1,
+            index:    1,
             subindex: 2,
         }));
         ctx.set_parameter(&parameter_bytes);
@@ -1497,7 +1462,7 @@ mod tests {
         let mut host = TestHost::new(state, builder);
         let parameter = GrantRoleParams {
             address: ADDRESS_2,
-            role: Roles::StateSyncer,
+            role:    Roles::StateSyncer,
         };
         let parameter_bytes = to_bytes(&parameter);
         let mut ctx = TestReceiveContext::empty();
@@ -1509,8 +1474,8 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_0 is allowed to grant role");
 
         let parameter = StateUpdate::TokenMap(TokenMapOperation {
-            id: 1u64,
-            root: ETH_ADDRESS,
+            id:    1u64,
+            root:  ETH_ADDRESS,
             child: CIS2_ADDRESS,
         });
 
@@ -1530,23 +1495,16 @@ mod tests {
         claim!(result.is_ok(), "ADDRESS_2  is allowed to state update");
 
         claim!(
-            host.state()
-                .root_mapping
-                .get(&ETH_ADDRESS)
-                .unwrap()
-                .deref()
-                .clone()
-                == CIS2_ADDRESS,
+            *host.state().root_mapping.get(&ETH_ADDRESS).unwrap().deref() == CIS2_ADDRESS,
             "Mapping must be succesfull"
         );
         let entrypoint_withdraw = OwnedEntrypointName::new_unchecked("withdraw".into());
-        /*
-                pub struct WithdrawParams {
-            pub eth_address: EthAddress,
-            pub amount: ContractTokenAmount,
-            pub token: ContractAddress,
-            pub token_id: TokenIdU64,
-        } */
+        // pub struct WithdrawParams {
+        // pub eth_address: EthAddress,
+        // pub amount: ContractTokenAmount,
+        // pub token: ContractAddress,
+        // pub token_id: TokenIdU64,
+        // }
         // We are simulating reentrancy with this mock because we mutate the state.
         host.setup_mock_entrypoint(
             CIS2_ADDRESS,
@@ -1570,9 +1528,9 @@ mod tests {
         );
         let parameter = WithdrawParams {
             eth_address: ETH_WALLET_ADDRESS,
-            amount: token_amount(42),
-            token_id: TokenIdU64(0),
-            token: CIS2_ADDRESS,
+            amount:      token_amount(42),
+            token_id:    TokenIdU64(0),
+            token:       CIS2_ADDRESS,
         };
 
         let parameter_bytes = to_bytes(&parameter);
@@ -1744,7 +1702,7 @@ mod tests {
 
         // and parameter.
         let parameter = UpgradeParams {
-            module: new_module_ref,
+            module:  new_module_ref,
             migrate: Some((migration_entrypoint.clone(), OwnedParameter(Vec::new()))),
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -1772,7 +1730,7 @@ mod tests {
 
         // and parameter.
         let parameter = UpgradeParams {
-            module: new_module_ref,
+            module:  new_module_ref,
             migrate: None,
         };
         let parameter_bytes = to_bytes(&parameter);
