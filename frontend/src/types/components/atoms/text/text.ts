@@ -1,5 +1,3 @@
-export type Size = "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "h7" | "h8";
-
 export type ThemeColor =
     | "DarkGrey"
     | "White"
@@ -15,8 +13,8 @@ export type ThemeColor =
     | "Yellow";
 
 export type Family = "Roboto" | "Helvetica";
-
 export type Weight = "regular" | "light" | "bold";
+export type TextAlignment = "left" | "center" | "right";
 
 export type TextProps = {
     fontSize?: string;
@@ -24,4 +22,5 @@ export type TextProps = {
     fontWeight?: Weight;
     fontFamily?: Family;
     fontLetterSpacing?: string;
+    align?: TextAlignment;
 };

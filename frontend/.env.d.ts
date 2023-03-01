@@ -12,22 +12,21 @@ declare global {
             // NEXT_PUBLIC_STATE_SENDER_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
             // NEXT_PUBLIC_PROXY_ADMIN_ADDRESS: string; // TODO: Doesn't seem like this is used? Can this be removed?
 
-
             // Ethereum token contract addresses
             /**
              * Address of the ETH ethereum contract
              */
             NEXT_PUBLIC_ETH_TOKEN_ADDRESS: string;
-            /**
-             * Address of the wETH ethereum contract
-             */
-            NEXT_PUBLIC_WETH_TOKEN_ADDRESS: string;
 
             // Providers
             /**
-             * The ethereum network ID
+             * The ethereum network ID represented by an integer
              */
-            NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string; // TODO: What's this? Document...
+            NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK: string;
+            /**
+             * The ethereum block explorer corresponding to the provided network ID
+             */
+            NEXT_PUBLIC_ETHEREUM_EXPLORER_URL: string; // TODO: What's this? Document...
             // NEXT_PUBLIC_ETHEREUM_PROVIDER_KEY: string; // TODO: What's this? Document...
             // NEXT_PUBLIC_INFURA_PROJECT_ID: string; // TODO: What's this? Document...
 
@@ -39,9 +38,9 @@ declare global {
 
             // Concordium contract addresses
             /**
-             * Bridge manager contract index. For now, the accompanying subindex is assumed to be 0. 
+             * Bridge manager contract index. For now, the accompanying subindex is assumed to be 0.
              */
-            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: number; // TODO: Don't assume the subindex is 0, as sometime it might not be...
+            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: string; // TODO: Don't assume the subindex is 0, as sometime it might not be...
 
             /**
              * URL of the bridge API.

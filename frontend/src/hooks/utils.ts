@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 export const useAsyncMemo = <ReturnType>(
     getResult: () => Promise<ReturnType>,
-    handleError: (e: Error) => void = () => {},
+    handleError: (e: any) => void = () => {},
     deps?: any[]
 ): ReturnType | undefined => {
     const [result, setResult] = useState<ReturnType>();

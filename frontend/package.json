@@ -7,7 +7,8 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "fmt": "yarn lint --fix"
+        "fmt": "yarn lint --fix",
+        "ts-check": "tsc --noEmit"
     },
     "dependencies": {
         "@concordium/browser-wallet-api-helpers": "^2.0.0",
@@ -40,6 +41,8 @@
         "@types/react": "18.0.9",
         "@types/react-dom": "18.0.3",
         "@types/styled-components": "^5.1.25",
+        "@typescript-eslint/eslint-plugin": "^5.53.0",
+        "@typescript-eslint/parser": "^5.53.0",
         "eslint": "8.15.0",
         "eslint-config-next": "12.1.6",
         "eslint-config-prettier": "^8.6.0",

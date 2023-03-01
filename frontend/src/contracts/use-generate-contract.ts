@@ -1,12 +1,14 @@
 import addresses from "@config/addresses";
 import { BigNumber, ContractTransaction, ethers } from "ethers";
 import { toWei } from "../helpers/number";
-import useWallet from "../hooks/use-wallet";
+import useEthWallet from "../hooks/use-eth-wallet";
 import MOCK_ABI from "./abis/MOCK_ABI.json";
 
+const ERC20_ALLOWANCE = "1000000000000";
+
 const useGenerateContract = (address: string, enabled: boolean) => {
-    const { context } = useWallet();
-    const amountToApprove = toWei("1000000000000");
+    const { context } = useEthWallet();
+    const amountToApprove = toWei(ERC20_ALLOWANCE);
 
     const getBalance = async (decimals: number) => {
         if (!enabled || !address || !context.library) return;
@@ -63,7 +65,10 @@ const useGenerateContract = (address: string, enabled: boolean) => {
      * Returns `ContractTransaction` or undefined if allowance has already been given.
      * Throws if necessary parameters are not available when function is invoked.
      */
-    const checkAllowance = async (erc20PredicateAddress: string): Promise<ContractTransaction | undefined> => {
+    const checkAllowance = async (
+        erc20PredicateAddress: string,
+        onRequireApproval?: () => void
+    ): Promise<ContractTransaction | undefined> => {
         if (!enabled || !erc20PredicateAddress) {
             throw new Error("Expected necessary parameters to be available");
         }
@@ -75,6 +80,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         }
 
         try {
+            onRequireApproval?.();
             return await approve(erc20PredicateAddress);
         } catch (err) {
             throw new Error("You need to approve token spending");

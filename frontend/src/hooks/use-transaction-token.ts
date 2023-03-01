@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import useTokens from "src/api-query/use-tokens/useTokens";
+import { useTokens } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import isDeposit from "src/helpers/checkTransaction";
 

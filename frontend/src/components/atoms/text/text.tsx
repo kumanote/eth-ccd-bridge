@@ -1,7 +1,7 @@
-import { HTMLAttributes } from "react";
+import { FC, HTMLAttributes } from "react";
 import { TextProps } from "../../../types/components/atoms/text/text";
 import { StyledText } from "./text.style";
-const Text: React.FC<TextProps & HTMLAttributes<HTMLDivElement>> = ({
+const Text: FC<TextProps & HTMLAttributes<HTMLDivElement>> = ({
     fontSize = "14",
     fontColor = "TitleText",
     fontWeight = "regular",

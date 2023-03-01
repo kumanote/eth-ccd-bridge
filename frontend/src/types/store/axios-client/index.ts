@@ -1,6 +1,6 @@
 import { AxiosClient as Client } from "../../../api-query/__generated__/AxiosClient";
 
-export interface AxiosClientState {
+interface AxiosClientState {
     client: Client | undefined;
 }
 

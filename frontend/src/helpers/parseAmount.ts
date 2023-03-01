@@ -9,9 +9,6 @@ const parseAmount = (amount: string, decimals: number): number => {
     }
 
     let parsedAmount;
-
-    console.log(amount, decimals);
-
     if (decimals === 18) {
         parsedAmount = Number(parseFloat(ethers.utils.formatEther(amount)).toFixed(4));
     } else {

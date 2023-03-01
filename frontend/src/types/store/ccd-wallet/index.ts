@@ -1,11 +1,11 @@
-export interface CCDWalletState {
+interface CCDWalletState {
     ccdContext: {
         account: string | null;
         isActive: boolean;
     };
 }
 
-export interface CCDWalletActions {
+interface CCDWalletActions {
     setCCDWallet: (ccdWallet: string) => void;
     deleteCCDWallet: () => void;
 }
