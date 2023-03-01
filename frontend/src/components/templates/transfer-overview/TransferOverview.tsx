@@ -39,6 +39,9 @@ type DepositProps = BaseProps & {
     isWithdraw?: false;
     requestGasFee(): Promise<number | undefined>;
     requestAllowance(setError: (message: string) => void, setStatus: (message: string) => void): Promise<boolean>;
+    /**
+     * `undefined` is treated as value hasn't been loaded yet
+     */
     needsAllowance: boolean | undefined;
 };
 
