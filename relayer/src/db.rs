@@ -1131,7 +1131,6 @@ async fn insert_into_db(
                             token_id: cis2::TokenId::new_unchecked(vec![0u8; 8]),
                         };
                         let update = concordium_contracts::StateUpdate::Deposit(deposit);
-                        // TODO estimate execution energy.
                         if let Some(tx) = bridge_manager.make_state_update_tx(&update).await? {
                             txs.push((event.tx_hash, tx));
                         }

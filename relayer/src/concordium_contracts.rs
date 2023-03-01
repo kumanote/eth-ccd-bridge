@@ -207,6 +207,14 @@ impl BridgeManager {
     /// Construct a update transaction that can be sent to execute the provided
     /// [`StateUpdate`]. The expiry time of the transaction is set for 1d.
     ///
+    /// This function will dry run the transaction first. If the tranasction is
+    /// rejected because the action has already been processed on the chain then
+    /// `Ok(None)` is returned. If the transaction fails for some other reason
+    /// then it is retried, and if it is not successful after 6 attempts
+    /// an error is returned.
+    ///
+    /// Dry run is attempted in the last finalized block.
+    ///
     /// This **does not** send the transaction, but does dry run the update.
     pub async fn make_state_update_tx(
         &mut self,
@@ -228,6 +236,10 @@ impl BridgeManager {
                     }
                     DryRunReturn::OtherError { reason } => {
                         log::error!(
+                            "Unexpected response from dry running state update. This is a \
+                             configuration error: {reason:#?}"
+                        );
+                        anyhow::bail!(
                             "Unexpected response from dry running state update. This is a \
                              configuration error: {reason:#?}"
                         );
