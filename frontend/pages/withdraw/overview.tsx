@@ -20,6 +20,7 @@ const WithdrawOverview: NextPage = () => {
         hasApprove,
         estimateApprove,
         transactionFinalization,
+        estimateWithdraw,
     } = useCCDContract(ccdContext.account, !!ccdContext.account);
 
     const requestWithdrawApproval = async (
@@ -30,7 +31,7 @@ const WithdrawOverview: NextPage = () => {
             const approvalFee = await estimateApprove(token);
 
             setStatus("Awaiting allowance approval in Concordium wallet");
-            const { hash } = await ccdApprove(token, approvalFee);
+            const hash = await ccdApprove(token, approvalFee);
 
             setStatus("Waiting for transaction to finalize");
             return await transactionFinalization(hash);
@@ -45,7 +46,7 @@ const WithdrawOverview: NextPage = () => {
      */
     const onSubmit = async (
         token: Components.Schemas.TokenMapItem,
-        amount: string,
+        amount: bigint,
         setError: (message: string) => void,
         setStatus: (message: string) => void
     ): Promise<string | undefined> => {
@@ -68,9 +69,10 @@ const WithdrawOverview: NextPage = () => {
 
         let hash: string | undefined;
         try {
+            const withdrawFee = await estimateWithdraw(amount, token, context.account || "");
+
             setStatus("Awaiting signature of withdrawal in Concordium wallet");
-            const tx = await ccdWithdraw(amount, token, context?.account || "");
-            hash = tx.hash;
+            hash = await ccdWithdraw(amount, token, context?.account || "", withdrawFee);
             prefetch(routes.withdraw.tx(hash));
         } catch {
             setError("Transaction was rejected.");

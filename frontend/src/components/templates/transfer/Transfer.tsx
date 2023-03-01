@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTokens } from "src/api-query/queries";
+import { toResolution, toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";
@@ -43,6 +44,7 @@ import {
     StyledWalletDisplay,
     SwapLink,
 } from "./Transfer.style";
+import { formatAmount, tokenDecimalsToResolution } from "src/helpers/number";
 
 interface ChainType {
     id: number;
@@ -123,7 +125,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
     const { push } = useRouter();
     const { isTablet } = useContext(appContext);
-    const { token, amount = "0", setToken, setAmount, clear: clearTransactionFlow } = useTransactionFlowStore();
+    const { token, amount = 0n, setToken, setAmount, clear: clearTransactionFlow } = useTransactionFlowStore();
 
     // Keeps track of whether "continue" has been pressed. Used to not show validation error message prematurely.
     const [submitted, setSubmitted] = useState(false);
@@ -140,6 +142,29 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const transferButtonDisabled = !isLoggedIn || !token;
     const nextRoute = useMemo(() => (isDeposit ? routes.deposit.overview : routes.withdraw.overview), [isDeposit]);
     const swapRoute = useMemo(() => (isDeposit ? routes.withdraw.path : routes.deposit.path), [isDeposit]);
+    const toTokenIntegerAmount = useCallback(
+        (decimalAmount: string) => {
+            if (token === undefined) {
+                throw new Error("Token expected to be available");
+            }
+
+            return toResolution(tokenDecimalsToResolution(token.decimals))(decimalAmount);
+        },
+        [token]
+    );
+    const toTokenDecimalAmount = useCallback(
+        (amount: bigint) => {
+            if (token === undefined) {
+                throw new Error("Token expected to be available");
+            }
+
+            return toFraction(tokenDecimalsToResolution(token.decimals))(amount);
+        },
+        [token]
+    );
+    const [inputAmount, setInputAmount] = useState(
+        token !== undefined && amount !== undefined ? toTokenDecimalAmount(amount) ?? "0" : "0"
+    );
 
     // tokens available in the dropdown
     const tokens = useMemo(() => {
@@ -155,11 +180,18 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 return undefined;
             }
 
-            return isDeposit ? getEthTokenBalance(token.decimals) : getCcdTokenBalance(token);
+            return isDeposit ? getEthTokenBalance() : getCcdTokenBalance(token);
         },
         noOp,
         [isLoggedIn, token, getCcdTokenBalance, getEthTokenBalance]
     );
+    const decimalTokenBalance = useMemo(() => {
+        if (tokenBalance === undefined || token === undefined) {
+            return undefined;
+        }
+
+        return toTokenDecimalAmount(tokenBalance);
+    }, [tokenBalance, token, toTokenDecimalAmount]);
 
     const chains: ChainType[] = [
         {
@@ -181,14 +213,22 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     ];
 
     const isValidAmount = useMemo(() => {
-        const nAmount = Number(amount);
-
-        if (nAmount <= 0 || Number.isNaN(nAmount)) {
-            return false;
+        if (token === undefined || tokenBalance === undefined) {
+            return true;
         }
 
-        return nAmount <= Number(tokenBalance);
-    }, [amount, tokenBalance]);
+        try {
+            const nAmount = toTokenIntegerAmount(inputAmount) ?? 0n;
+
+            if (nAmount <= 0n) {
+                return false;
+            }
+
+            return nAmount <= tokenBalance;
+        } catch {
+            return false;
+        }
+    }, [inputAmount, tokenBalance, token, toTokenIntegerAmount]);
 
     useEffect(() => {
         if (reset && isReady) {
@@ -213,13 +253,19 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const submitHandler = useCallback(() => {
         setSubmitted(true);
 
-        if (!isValidAmount) {
+        if (!isValidAmount || token === undefined) {
             // Abort.
             return;
         }
 
+        const tokenAmount = toTokenIntegerAmount(inputAmount);
+        if (tokenAmount === undefined) {
+            throw new Error("Could not convert input to token amount");
+        }
+
+        setAmount(tokenAmount);
         push({ pathname: nextRoute });
-    }, [isValidAmount, push, nextRoute]);
+    }, [isValidAmount, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
 
     return (
         <PageWrapper>
@@ -248,7 +294,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                         <Dropdown onClick={dropdownHandler}>
                             <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
                         </Dropdown>
-                        <Button variant="max" onClick={() => setAmount(tokenBalance?.toString() ?? "")}>
+                        <Button variant="max" onClick={() => setInputAmount(tokenBalance?.toString() ?? "")}>
                             <Text fontSize="10" fontWeight="light">
                                 Max
                             </Text>
@@ -281,15 +327,14 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                     </MaxGapRow>
                     <MaxGapRow input>
                         <Input
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            value={inputAmount}
+                            onChange={(e) => setInputAmount(e.target.value)}
                             type="number"
-                            max={tokenBalance}
                             valid={isValidAmount || !submitted}
                         />
-                        {isLoggedIn && token && (
+                        {isLoggedIn && token && decimalTokenBalance && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
-                                Balance:&nbsp;{tokenBalance?.toFixed(4)}
+                                Balance:&nbsp;{formatAmount(decimalTokenBalance)}
                             </Text>
                         )}
                     </MaxGapRow>

@@ -1,5 +1,4 @@
 import { BigNumber, ContractTransaction, ethers } from "ethers";
-import { toWei } from "../helpers/number";
 import useEthWallet from "../hooks/use-eth-wallet";
 import ROOTMANAGER_ABI from "./abis/ROOTMANAGER_ABI.json";
 import bs58check from "bs58check";
@@ -18,7 +17,7 @@ const useRootManagerContract = () => {
         ? "0x" + Buffer.from(Uint8Array.prototype.slice.call(bs58check.decode(ccdAccount || ""), 1)).toString("hex")
         : "";
 
-    const typeToVault = async () => {
+    const typeToVault = async (): Promise<string> => {
         if (!context.library || !enabled) return "";
 
         const signer = context.library.getSigner();
@@ -33,7 +32,7 @@ const useRootManagerContract = () => {
     };
 
     const depositFor = async (
-        amount: string,
+        amount: bigint,
         selectedToken: Components.Schemas.TokenMapItem
     ): Promise<ContractTransaction> => {
         if (!context.library || !enabled || !ccdUser) {
@@ -43,19 +42,12 @@ const useRootManagerContract = () => {
         const signer = context.library.getSigner();
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
-        let parsedAmount;
-        if (selectedToken.decimals === 18) {
-            parsedAmount = toWei(amount);
-        } else {
-            parsedAmount = Number(amount) * 10 ** selectedToken.decimals;
-        }
-
-        const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
+        const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [amount.toString()]);
 
         return rootContract.depositFor(context.account, ccdUser, selectedToken.eth_address, depositData);
     };
 
-    const depositEtherFor = async (amount: string): Promise<ContractTransaction> => {
+    const depositEtherFor = async (amount: bigint): Promise<ContractTransaction> => {
         if (!context.library || !enabled || !ccdUser) {
             throw new Error("Expected deposit dependecies to be available");
         }
@@ -63,7 +55,7 @@ const useRootManagerContract = () => {
         const signer = context.library.getSigner();
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
 
-        return rootContract.depositEtherFor(context.account, ccdUser, { value: toWei(amount) });
+        return rootContract.depositEtherFor(context.account, ccdUser, { value: amount.toString() });
     };
 
     const withdraw = async (params: Components.Schemas.WithdrawParams, proof: string): Promise<ContractTransaction> => {
@@ -94,7 +86,7 @@ const useRootManagerContract = () => {
     };
 
     const estimateGas = async (
-        amount: string,
+        amount: bigint,
         selectedToken: Components.Schemas.TokenMapItem,
         type: "deposit" | "withdraw",
         params?: Components.Schemas.WithdrawParams,
@@ -107,20 +99,14 @@ const useRootManagerContract = () => {
 
         let gasLimit: BigNumber;
         if (type === "deposit") {
+            const stringAmount = amount.toString();
             if (selectedToken.eth_address === addresses.eth) {
                 console.log("depositEtherFor estimate", ccdUser);
                 gasLimit = await rootContract.estimateGas.depositEtherFor(context.account, ccdUser, {
-                    value: toWei(amount),
+                    value: stringAmount,
                 });
             } else {
-                let parsedAmount;
-                if (selectedToken.decimals === 18) {
-                    parsedAmount = toWei(amount);
-                } else {
-                    parsedAmount = Number(amount) * 10 ** selectedToken.decimals;
-                }
-
-                const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [parsedAmount]);
+                const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [stringAmount]);
                 gasLimit = await rootContract.estimateGas.depositFor(
                     context.account,
                     ccdUser,
@@ -130,20 +116,24 @@ const useRootManagerContract = () => {
                 );
             }
         } else {
-            const partsLength = proof!.length / 64;
+            if (proof === undefined || params === undefined) {
+                throw new Error("Expected both params and proof arguments to be defined");
+            }
+
+            const partsLength = proof.length / 64;
             const parts = [];
             for (let i = 0; i < partsLength; i++) {
-                parts.push("0x" + proof!.substring(i * 64, (i + 1) * 64));
+                parts.push("0x" + proof.substring(i * 64, (i + 1) * 64));
             }
 
             const parsedParams = {
-                ccdIndex: params!.ccd_index,
-                ccdSubIndex: params!.ccd_sub_index,
-                amount: params!.amount,
-                userWallet: params!.user_wallet,
-                ccdTxHash: "0x" + params!.ccd_tx_hash,
-                ccdEventIndex: params!.ccd_event_index,
-                tokenId: params!.token_id,
+                ccdIndex: params.ccd_index,
+                ccdSubIndex: params.ccd_sub_index,
+                amount: params.amount,
+                userWallet: params.user_wallet,
+                ccdTxHash: "0x" + params.ccd_tx_hash,
+                ccdEventIndex: params.ccd_event_index,
+                tokenId: params.token_id,
             };
 
             gasLimit = await rootContract.estimateGas.withdraw(parsedParams, parts);

@@ -26,20 +26,16 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         subindex: BigInt(0),
     } as ContractAddress;
 
-    const approve = async (token: Components.Schemas.TokenMapItem, energy?: number) => {
+    const approve = async (token: Components.Schemas.TokenMapItem, maxContractExecutionEnergy?: bigint) => {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
         }
-
-        if (!energy) {
+        if (maxContractExecutionEnergy === undefined) {
             throw new Error("Energy is undefined");
         }
-
         if (token.ccd_contract?.index === undefined || token.ccd_contract.subindex === undefined) {
             throw new Error("Contract address undefined");
         }
-
-        const maxContractExecutionEnergy = BigInt(Math.ceil((energy * 10 ** (token.decimals / 2)) / 100) * 100);
 
         const contractAddress = {
             index: BigInt(token.ccd_contract?.index),
@@ -72,22 +68,23 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 amount: new CcdAmount(BigInt(0)),
                 address: contractAddress,
                 receiveName: receiveName,
-                maxContractExecutionEnergy: maxContractExecutionEnergy,
+                maxContractExecutionEnergy,
             } as UpdateContractPayload,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             userInput as any,
             rawSchema,
             2
         );
 
-        // TODO: redundant, result can be removed.
-        return { result: !!txHash, hash: txHash };
+        return txHash;
     };
 
     const withdraw = async function (
-        amount: string,
+        amount: bigint,
         token?: Components.Schemas.TokenMapItem,
-        ethAddress?: string
-    ): Promise<{ result: boolean; hash: string }> {
+        ethAddress?: string,
+        maxContractExecutionEnergy?: bigint
+    ): Promise<string> {
         if (!ccdAccount || !enabled) {
             throw new Error("No account available");
         }
@@ -95,13 +92,14 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
+        if (maxContractExecutionEnergy === undefined) {
+            throw new Error("Energy is undefined");
+        }
         if (!ethAddress) {
             throw new Error("ETH address is undefined");
         }
 
-        const maxContractExecutionEnergy = BigInt(30000);
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
-        const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
         const rawSchema = hexToBase64(bridgeManager);
         const provider = await detectConcordiumProvider();
 
@@ -116,7 +114,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             } as UpdateContractPayload,
             {
                 eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
-                amount: parsedAmount.toString(),
+                amount: amount.toString(),
                 token: {
                     index: token.ccd_contract.index,
                     subindex: token.ccd_contract.subindex,
@@ -127,7 +125,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             2
         );
 
-        return { result: !!txHash, hash: txHash };
+        return txHash;
     };
 
     const getTransactionStatus = async (hash: string) => {
@@ -153,7 +151,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         });
     };
 
-    const balanceOf = async function (token: Components.Schemas.TokenMapItem): Promise<number> {
+    const balanceOf = async function (token: Components.Schemas.TokenMapItem): Promise<bigint> {
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract.subindex === undefined) {
             throw new Error("ccdToken is undefined");
         }
@@ -188,12 +186,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         // The return value is an array. The value stored in the array starts at position 4 of the return value.
-        const balanceOf = BigInt(leb.unsigned.decode(Buffer.from(res.returnValue.slice(4), "hex")));
-
-        // if it has 18 decimals, use ether util for precision
-        return token.decimals !== 18
-            ? +balanceOf.toString() / 10 ** token.decimals
-            : +ethers.utils.formatEther(balanceOf.toString());
+        return BigInt(leb.unsigned.decode(Buffer.from(res.returnValue.slice(4), "hex")));
     };
 
     const hasApprove = async (ccdTokenAddress?: { index?: number; subindex?: number }) => {
@@ -244,19 +237,18 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             energy: BigInt(30000),
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const isApproved = decodeOperatorOf((res as any).returnValue);
         return isApproved;
     };
 
     const getLatestFinalizedBlock = async function () {
         const provider = await detectConcordiumProvider();
-
         const res = await provider.getJsonRpcClient().getConsensusStatus();
-
         return res.lastFinalizedBlock;
     };
 
-    const estimateWithdraw = async (amount: string, token?: Components.Schemas.TokenMapItem, ethAddress?: string) => {
+    const estimateWithdraw = async (amount: bigint, token?: Components.Schemas.TokenMapItem, ethAddress?: string) => {
         if (!enabled || !ccdAccount) return;
 
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract.subindex === undefined) {
@@ -267,11 +259,9 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         const provider = await detectConcordiumProvider();
-        const parsedAmount = parseInt((Number(amount) * 10 ** token.decimals).toString());
-
         const userInput = {
             eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
-            amount: parsedAmount.toString(),
+            amount: amount.toString(),
             token: {
                 index: token.ccd_contract.index,
                 subindex: token.ccd_contract.subindex,
@@ -296,22 +286,23 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             energy: BigInt(30000),
         });
 
-        if (!res || res.tag === "failure" || !res.returnValue) {
+        if (!res || res.tag === "failure") {
             throw new Error(
                 `RPC call 'invokeContract' on method '${contractNames.bridgeManager}.withdraw' of contract '${
                     bridgeManagerContract.index
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 }' failed with rejectReason ${(res as any)?.reason?.rejectReason}`
             );
         }
 
-        const parsedResult = Number(res?.usedEnergy.toString()) / 10 ** (token.decimals / 2); //energy to ccd
+        if (res === undefined) {
+            return undefined;
+        }
 
-        const estimateCcd = +(parsedResult + 0.4 * parsedResult).toFixed(4); //add 40% of the result
-
-        return estimateCcd;
+        return (res.usedEnergy * 150n) / 100n; // Overestimate by 50%
     };
 
-    const estimateApprove = async (token?: Components.Schemas.TokenMapItem) => {
+    const estimateApprove = async (token?: Components.Schemas.TokenMapItem): Promise<bigint | undefined> => {
         if (!enabled || !ccdAccount) return;
 
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
@@ -356,11 +347,11 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             energy: BigInt(30000),
         });
 
-        const parsedResult = Number(res?.usedEnergy.toString()) / 10 ** (token.decimals / 2); //energy to ccd
+        if (res === undefined) {
+            return undefined;
+        }
 
-        const estimateCcd = +(parsedResult + 0.4 * parsedResult); //add 40% of the result
-
-        return estimateCcd;
+        return (res.usedEnergy * 150n) / 100n; // Overestimate by 50%
     };
 
     return {

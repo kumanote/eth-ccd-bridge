@@ -10,27 +10,23 @@ const useGenerateContract = (address: string, enabled: boolean) => {
     const { context } = useEthWallet();
     const amountToApprove = toWei(ERC20_ALLOWANCE);
 
-    const getBalance = async (decimals: number) => {
-        if (!enabled || !address || !context.library) return;
+    const getBalance = async (): Promise<bigint> => {
+        if (!enabled || !address || !context.library) throw new Error("Expected context not available");
         const provider = context.library;
 
         let balance;
 
         if (address === addresses.eth) {
-            balance = await provider.getBalance(context.account!);
+            balance = await provider.getBalance(context.account);
         } else {
             const generatedContract = new ethers.Contract(address, MOCK_ABI, provider);
             balance = await generatedContract.balanceOf(context.account);
         }
 
-        if (decimals === 18) {
-            return Number(ethers.utils.formatEther(balance));
-        } else {
-            return balance / 10 ** decimals;
-        }
+        return BigInt(balance);
     };
 
-    const allowance = async (erc20PredicateAddress: string): Promise<BigNumber> => {
+    const hasAllowance = async (erc20PredicateAddress: string): Promise<boolean> => {
         if (!enabled || !erc20PredicateAddress || !address || !context.library) {
             throw new Error("Expected necessary parameters to be available");
         }
@@ -38,16 +34,19 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         const signer = context.library?.getSigner();
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
 
-        return await generatedContract.allowance(
+        const response: BigNumber = await generatedContract.allowance(
             // Owner
             context.account,
             // Spender
             erc20PredicateAddress
         );
+
+        // 0x00 is the hex value of the `BigNumber` from the response if an allowance hasn't been approved yet.
+        return response._hex !== "0x00";
     };
 
     const approve = async (erc20PredicateAddress: string) => {
-        if (!enabled || !erc20PredicateAddress! || !address || !context.library) return;
+        if (!enabled || !erc20PredicateAddress || !address || !context.library) return;
         const signer = context.library?.getSigner();
 
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
@@ -65,22 +64,12 @@ const useGenerateContract = (address: string, enabled: boolean) => {
      * Returns `ContractTransaction` or undefined if allowance has already been given.
      * Throws if necessary parameters are not available when function is invoked.
      */
-    const checkAllowance = async (
-        erc20PredicateAddress: string,
-        onRequireApproval?: () => void
-    ): Promise<ContractTransaction | undefined> => {
+    const checkAllowance = async (erc20PredicateAddress: string): Promise<ContractTransaction> => {
         if (!enabled || !erc20PredicateAddress) {
             throw new Error("Expected necessary parameters to be available");
         }
-        const allowResponse = await allowance(erc20PredicateAddress);
-
-        if (allowResponse._hex !== "0x00") {
-            // Allowance has already been given
-            return undefined;
-        }
 
         try {
-            onRequireApproval?.();
             return await approve(erc20PredicateAddress);
         } catch (err) {
             throw new Error("You need to approve token spending");
@@ -88,7 +77,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
     };
 
     return {
-        allowance,
+        hasAllowance,
         approve,
         getBalance,
         checkAllowance,

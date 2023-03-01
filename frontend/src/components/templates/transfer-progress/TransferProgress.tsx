@@ -23,7 +23,8 @@ import { useMemo, useState } from "react";
 import { QueryRouter } from "src/types/config";
 import isDeposit from "src/helpers/checkTransaction";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
-import parseAmount from "src/helpers/parseAmount";
+import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
+import { formatAmount, tokenDecimalsToResolution } from "src/helpers/number";
 import { useWalletTransactions } from "src/api-query/queries";
 
 type Status = {
@@ -94,7 +95,7 @@ const useTransactionDetails = () => {
     }
 
     const token = tokenQuery.token;
-    const amount = parseAmount(rawAmount, token.decimals).toString();
+    const amount = BigInt(rawAmount);
 
     const data = {
         amount,
@@ -114,7 +115,15 @@ export const TransferProgress: React.FC<Props> = (props) => {
         amount = transactionDetails?.amount,
         clear: clearFlowStore,
     } = useTransactionFlowStore();
+
     const step = useMemo(() => transferStepMap[transferStatus ?? "missing"], [transferStatus]);
+    const decimalAmount = useMemo(() => {
+        if (token === undefined || amount === undefined) {
+            return undefined;
+        }
+
+        return toFraction(tokenDecimalsToResolution(token.decimals))(amount);
+    }, [amount, token]);
 
     const setError = (message: string) => setStatus({ isError: true, message });
     const setInfo = (message: string | undefined) =>
@@ -190,23 +199,26 @@ export const TransferProgress: React.FC<Props> = (props) => {
                             </StyledCircleWrapper>
                         </StyledProcessWrapper>
                         <TransferAmountWrapper>
-                            {(!token || !amount) && !transactionDetailsLoading && (
+                            {(!token || amount === undefined) && !transactionDetailsLoading && (
                                 <Text fontSize="16" fontColor="White" fontWeight="light">
                                     Could not get transaction details
                                 </Text>
                             )}
-                            {(!token || !amount) && transactionDetailsLoading && (
+                            {(!token || amount === undefined) && transactionDetailsLoading && (
                                 <Text fontSize="16" fontColor="White" fontWeight="light">
                                     Fetching transaction details
                                 </Text>
                             )}
-                            {token && amount && (
+                            {token && decimalAmount !== undefined && (
                                 <>
                                     <Text fontSize="16" fontColor="White" fontWeight="light">
                                         Transfer Amount:&nbsp;
                                     </Text>
                                     <Text fontSize="16" fontColor="White" fontWeight="bold">
-                                        {amount} {isWithdraw ? token?.ccd_name : token?.eth_name}
+                                        <>
+                                            {formatAmount(decimalAmount)}{" "}
+                                            {isWithdraw ? token?.ccd_name : token?.eth_name}
+                                        </>
                                     </Text>
                                 </>
                             )}

@@ -11,9 +11,10 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
 import { ccdTransactionUrl, ethTransactionUrl } from "src/helpers/chain-explorer";
 import isDeposit from "src/helpers/checkTransaction";
-import parseAmount from "src/helpers/parseAmount";
+import { tokenDecimalsToResolution } from "src/helpers/number";
 import parseTxHash from "src/helpers/parseTxHash";
 import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
+import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
 import {
     ContentWrapper,
     HistoryTable,
@@ -153,16 +154,14 @@ const History = ({ depositSelected }: Props) => {
                                     if (tokenReponse.status !== "success" || tokenReponse.token === undefined) {
                                         return null; // TODO: handle this properly
                                     }
-                                    {
-                                        /* check if the transaction is a deposit or withdraw, then render based on that */
-                                    }
+
+                                    const parseAmount = toFraction(
+                                        tokenDecimalsToResolution(tokenReponse.token.decimals)
+                                    );
+
                                     if (isDeposit(tx) && depositSelected) {
                                         const processed = tx.Deposit.status.includes("processed");
-
-                                        const parsedAmount = parseAmount(
-                                            tx.Deposit.amount,
-                                            tokenReponse.token.decimals
-                                        );
+                                        const parsedAmount = parseAmount(tx.Deposit.amount);
 
                                         return (
                                             <TableRow key={tx.Deposit.origin_tx_hash} onClick={() => goToProgress(tx)}>
@@ -237,12 +236,7 @@ const History = ({ depositSelected }: Props) => {
                                         );
                                     } else if (!isDeposit(tx) && !depositSelected) {
                                         const processed = tx.Withdraw.status.includes("processed");
-
-                                        const parsedAmount = parseAmount(
-                                            tx.Withdraw.amount,
-                                            tokenReponse.token.decimals
-                                        );
-
+                                        const parsedAmount = parseAmount(tx.Withdraw.amount);
                                         const ethHash = getWithdrawEthHash(tx.Withdraw);
 
                                         return (
