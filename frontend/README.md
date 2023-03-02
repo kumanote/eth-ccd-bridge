@@ -50,6 +50,26 @@ The project depends on a number of configuration options that can be set through
 -   `NEXT_PUBLIC_BRIDGE_MANAGER`: Hex encoded contract schema for Concordium [bridge manager contract](../concordium_contracts/bridge-manager).
 -   `NEXT_PUBLIC_CIS2_BRIDGEABLE`: Hex encoded contract schema for Concordium [cis2-bridgeable contract](../concordium_contracts/cis2-bridgeable).
 
+### Docker
+
+The project can be built with docker by executing the following with the necessary environment variables described above:
+
+```bash
+docker build -t eth-ccd-bridge-app .
+```
+
+The set of environment variables required to build for the eth-goerli/ccd-testnet network pair can be found in `compose.yaml`, which can be built with:
+
+```bash
+docker compose build
+```
+
+Running the docker container is done by executing:
+
+```bash
+docker run -p 3000:3000 eth-ccd-bridge-app
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -29,6 +29,9 @@ const nextConfig = {
 
         return config;
     },
+    experimental: {
+        outputStandalone: true,
+    },
 };
 
 module.exports = withTM(nextConfig);
