@@ -34,6 +34,7 @@ type BaseProps = {
 };
 type WithdrawProps = BaseProps & {
     isWithdraw: true;
+    nextMerkleRoot: { isLoading: boolean; time: string | undefined };
 };
 type DepositProps = BaseProps & {
     isWithdraw?: false;
@@ -133,9 +134,14 @@ export const TransferOverview: React.FC<Props> = (props) => {
                         fontColor="TitleText"
                         fontLetterSpacing="0"
                     >
-                        {isWithdraw
-                            ? "Withdraw should take up to 10 minutes to complete."
-                            : "Deposit should take up to 5 minutes to complete."}
+                        {props.isWithdraw &&
+                            !props.nextMerkleRoot.isLoading &&
+                            !props.nextMerkleRoot.time &&
+                            "Could not get an estimated processing time"}
+                        {props.isWithdraw &&
+                            props.nextMerkleRoot.time &&
+                            `Withdrawal expected to be ready for approval ${props.nextMerkleRoot.time}`}
+                        {!isWithdraw && "Deposit should take up to 5 minutes to complete."}
                     </Text>
                     <div style={{ marginTop: 12 }} />
                     <Text

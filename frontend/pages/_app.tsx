@@ -1,6 +1,7 @@
 import Layout from "@components/organisms/layout/Layout";
 import connectors from "@config/connectors";
 import useMediaQuery from "@hooks/use-media-query";
+import moment from "moment";
 import type { AppProps } from "next/app";
 import { useRouter } from "next/router";
 import { useMemo } from "react";
@@ -12,6 +13,25 @@ import GlobalStyles from "src/theme/global";
 import { QueryRouter } from "src/types/config";
 import Web3Provider from "web3-react";
 import "../styles/globals.css";
+
+moment.locale("en", {
+    relativeTime: {
+        future: "in ~%s",
+        past: "%s ago",
+        s: "1s",
+        ss: "%ss",
+        m: "1m",
+        mm: "%dm",
+        h: "1h",
+        hh: "%dh",
+        d: "1d",
+        dd: "%dd",
+        M: "1M",
+        MM: "%dM",
+        y: "1Y",
+        yy: "%dY",
+    },
+});
 
 const queryClient = new QueryClient();
 

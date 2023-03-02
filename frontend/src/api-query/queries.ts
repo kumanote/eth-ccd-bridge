@@ -31,7 +31,7 @@ export const useWatchWithdraw = (params?: WatchWithdrawParams, options?: WatchWi
         async () => {
             const client = await getClient();
             if (!client) throw new Error("Client not initialized.");
-            const { data } = await client?.watch_withdraw_tx(params);
+            const { data } = await client.watch_withdraw_tx(params);
             return data;
         },
         {
@@ -69,7 +69,7 @@ export const useWatchDeposit = (params?: WatchDepositParams, options?: WatchDepo
         async () => {
             const client = await getClient();
             if (!client) throw new Error("Client not initialized.");
-            const { data } = await client?.watch_deposit_tx(params);
+            const { data } = await client.watch_deposit_tx(params);
             return data;
         },
         {
@@ -106,7 +106,7 @@ export const useWalletTransactions = () => {
             if (!wallet) {
                 return undefined;
             }
-            const { data } = await client?.wallet_txs({ wallet });
+            const { data } = await client.wallet_txs({ wallet });
             return data;
         },
         { refetchInterval: QUERY_UPDATE_INTERVAL }
@@ -137,7 +137,7 @@ export const useTokens = () => {
         async () => {
             const client = await getClient();
             if (!client) throw new Error("Client not initialized.");
-            const { data } = await client?.list_tokens();
+            const { data } = await client.list_tokens();
             return data;
         },
         { refetchOnWindowFocus: false }
@@ -158,7 +158,7 @@ export const useEthMerkleProof = (params: Partial<MerkleProofParams>, enabled = 
             if (params.event_id === undefined || params.tx_hash === undefined)
                 throw new Error("Should not be enabled with partial params");
 
-            const { data } = await client?.eth_merkle_proof(params as MerkleProofParams);
+            const { data } = await client.eth_merkle_proof(params as MerkleProofParams);
             return data;
         },
         {
@@ -170,6 +170,24 @@ export const useEthMerkleProof = (params: Partial<MerkleProofParams>, enabled = 
                 }
                 return MERKLE_UPDATE_INTERVAL;
             },
+        }
+    );
+};
+
+export const useNextMerkleRoot = () => {
+    const { getClient } = useAxiosClient();
+
+    return useQuery(
+        [CacheKeys.EthMerkleProof],
+        async () => {
+            const client = await getClient();
+
+            if (!client) throw new Error("Client not initialized.");
+            const { data } = await client.expected_merkle_root_update();
+            return data;
+        },
+        {
+            refetchInterval: MERKLE_UPDATE_INTERVAL,
         }
     );
 };

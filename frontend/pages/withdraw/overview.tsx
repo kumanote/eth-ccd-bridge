@@ -7,12 +7,16 @@ import { routes } from "src/constants/routes";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useEthWallet from "@hooks/use-eth-wallet";
 import { useRouter } from "next/router";
+import { useNextMerkleRoot } from "src/api-query/queries";
+import moment from "moment";
 
 const WithdrawOverview: NextPage = () => {
     const hasApproval = useRef(false);
     const { ccdContext } = useCCDWallet();
     const { context } = useEthWallet();
     const { prefetch } = useRouter();
+    const { data, isLoading } = useNextMerkleRoot();
+    const nextMerkleTime = data !== undefined ? moment(data * 1000).fromNow() : undefined;
 
     const {
         withdraw: ccdWithdraw,
@@ -91,7 +95,7 @@ const WithdrawOverview: NextPage = () => {
         }
     };
 
-    return <TransferOverview handleSubmit={onSubmit} isWithdraw />;
+    return <TransferOverview handleSubmit={onSubmit} isWithdraw nextMerkleRoot={{ isLoading, time: nextMerkleTime }} />;
 };
 
 export default WithdrawOverview;
