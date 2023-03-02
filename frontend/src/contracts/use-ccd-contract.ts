@@ -11,11 +11,11 @@ import contractNames from "@config/contractNames";
 import { bridgeManager, cis2Bridgeable } from "@config/schemas";
 import leb from "leb128";
 import { Buffer } from "buffer/index";
-import { ethers } from "ethers";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
-import hexToBase64 from "src/helpers/hexToBase64";
+
+const stripHexId = (hexString: string) => hexString.replace("0x", "");
 
 /** Polling interval for CCD transactions in MS */
 const POLLING_INTEVAL = 5000;
@@ -43,7 +43,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         } as ContractAddress;
 
         const receiveName = `${contractNames.cis2Bridgeable}.updateOperator`;
-        const rawSchema = hexToBase64(cis2Bridgeable);
+        const rawSchema = cis2Bridgeable;
         const provider = await detectConcordiumProvider();
         const userInput = [
             {
@@ -113,7 +113,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 maxContractExecutionEnergy: maxContractExecutionEnergy,
             } as UpdateContractPayload,
             {
-                eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
+                eth_address: stripHexId(ethAddress),
                 amount: amount.toString(),
                 token: {
                     index: token.ccd_contract.index,
@@ -260,7 +260,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
         const provider = await detectConcordiumProvider();
         const userInput = {
-            eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
+            eth_address: stripHexId(ethAddress),
             amount: amount.toString(),
             token: {
                 index: token.ccd_contract.index,
