@@ -14,7 +14,7 @@ import { QueryRouter } from "src/types/config";
 import Web3Provider from "web3-react";
 import "../styles/globals.css";
 
-moment.locale("en", {
+moment.updateLocale("en", {
     relativeTime: {
         future: "in ~%s",
         past: "%s ago",

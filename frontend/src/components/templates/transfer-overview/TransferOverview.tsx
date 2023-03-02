@@ -1,117 +1,74 @@
 import Button from "@components/atoms/button/Button";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
-import useCCDWallet from "@hooks/use-ccd-wallet";
-import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
-import { Components } from "src/api-query/__generated__/AxiosClient";
-import { routes } from "src/constants/routes";
-import { noOp } from "src/helpers/basic";
-import { getPrice } from "src/helpers/price-usd";
-import { useTransactionFlowStore } from "src/store/transaction-flow";
+import { FC, ReactElement, ReactNode, useState } from "react";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
 import Text from "../../atoms/text/text";
 import { ButtonsContainer, StyledContainer, StyledProcessWrapper } from "./TransferOverview.style";
 
-type Status = {
+type TransferOverviewLineProps = {
+    isEth?: boolean;
+    title: ReactNode;
+    fee: ReactNode;
+};
+
+export const TransferOverviewLine: FC<TransferOverviewLineProps> = ({ isEth = false, title, fee }) => (
+    <StyledProcessWrapper>
+        <Image
+            src={isEth ? EthereumIcon.src : ConcordiumIcon.src}
+            alt={isEth ? "Ethereum Icon" : "Concordium Icon"}
+            height="20"
+            width="20"
+        />
+        <Text fontFamily="Roboto" fontSize="11" fontWeight="light" fontColor="TitleText" fontLetterSpacing="0">
+            {title}
+        </Text>
+        <Text fontFamily="Roboto" fontSize="11" fontWeight="bold" fontColor="TitleText" fontLetterSpacing="0">
+            {fee}
+        </Text>
+    </StyledProcessWrapper>
+);
+
+type TransferOverviewStatus = {
     message: string;
     isError: boolean;
 };
 
-type BaseProps = {
+export const useTransferOverviewStatusState = () => {
+    const [status, setStatus] = useState<TransferOverviewStatus>();
+    const setError = (message: string) => setStatus({ isError: true, message });
+    const setInfo = (message: string) => setStatus({ isError: false, message });
+
+    return {
+        status,
+        setError,
+        setInfo,
+    };
+};
+
+type Child = false | undefined | ReactElement<TransferOverviewLineProps>;
+
+type Props = {
     /**
      * Callback function for handling submission for specific flow.
      * Expects route of next page to be returned, or undefined if an error happened.
      */
-    handleSubmit(
-        token: Components.Schemas.TokenMapItem,
-        amount: bigint,
-        setError: (message: string) => void,
-        setStatus: (message: string) => void
-    ): Promise<string | undefined>;
-};
-type WithdrawProps = BaseProps & {
-    isWithdraw: true;
-    nextMerkleRoot: { isLoading: boolean; time: string | undefined };
-};
-type DepositProps = BaseProps & {
-    isWithdraw?: false;
-    requestGasFee(): Promise<number | undefined>;
-    requestAllowance(setError: (message: string) => void, setStatus: (message: string) => void): Promise<boolean>;
-    /**
-     * `undefined` is treated as value hasn't been loaded yet
-     */
-    needsAllowance: boolean | undefined;
+    handleSubmit(): Promise<string | undefined>;
+    status?: TransferOverviewStatus;
+    title: string;
+    timeToComplete: string;
+    children: Child | Child[];
 };
 
-type Props = WithdrawProps | DepositProps;
-
-export const TransferOverview: React.FC<Props> = (props) => {
-    const { isWithdraw, handleSubmit } = props;
+export const TransferOverview = ({ handleSubmit, status, title, timeToComplete, children }: Props) => {
     const [pendingSubmission, setPendingSubmission] = useState(false);
-    const [status, setStatus] = useState<Status>();
-    const { back, replace, push } = useRouter();
-    const { amount, token: selectedToken } = useTransactionFlowStore();
-    const { ccdContext } = useCCDWallet();
-    const hasAllowance = !props.isWithdraw && !props.needsAllowance && props.needsAllowance !== undefined;
-
-    /**
-     * Gas fee, only available for deposits (otherwise defaults to 0 and is ignored for withdrawals).
-     */
-    const gasFee = useAsyncMemo(
-        async () => {
-            if (props.isWithdraw || !hasAllowance) {
-                return undefined;
-            }
-
-            if (amount === undefined || selectedToken === undefined) {
-                throw new Error("Invalid page context.");
-            }
-
-            return props.requestGasFee();
-        },
-        (e) => setStatus({ isError: true, message: e.message }),
-        [props.isWithdraw, hasAllowance]
-    );
-
-    const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
-
-    const setError = (message: string) => setStatus({ isError: true, message });
-    const setInfo = (message: string) => setStatus({ isError: false, message });
-
-    useEffect(() => {
-        if (!amount || !selectedToken) {
-            replace(isWithdraw ? routes.withdraw.path : routes.deposit.path);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // Check necessary values are present from transfer page. These will not be available if this is the first page loaded in the browser.
-    if (!amount || !selectedToken) {
-        return null;
-    }
+    const { back, push } = useRouter();
 
     const submit = async () => {
-        if (!ccdContext.account) {
-            throw new Error("Expected page dependencies to be available");
-        }
-
         setPendingSubmission(true);
-
-        let canSubmit = true;
-        if (!hasAllowance && !props.isWithdraw) {
-            canSubmit = await props.requestAllowance(setError, setInfo);
-        }
-
-        let nextRoute: string | undefined;
-        if (!canSubmit) {
-            setError("Allowance request rejected");
-        } else {
-            nextRoute = await handleSubmit(selectedToken, amount, setError, setInfo);
-        }
-
+        const nextRoute = await handleSubmit();
         setPendingSubmission(false);
 
         if (nextRoute) {
@@ -123,9 +80,8 @@ export const TransferOverview: React.FC<Props> = (props) => {
         <PageWrapper>
             <StyledContainer>
                 <Text fontFamily="Roboto" fontSize="24" fontWeight="light" fontColor="TitleText" fontLetterSpacing="0">
-                    {isWithdraw ? "Withdraw Overview" : "Deposit Overview"}
+                    {title}
                 </Text>
-
                 <div>
                     <Text
                         fontFamily="Roboto"
@@ -134,14 +90,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
                         fontColor="TitleText"
                         fontLetterSpacing="0"
                     >
-                        {props.isWithdraw &&
-                            !props.nextMerkleRoot.isLoading &&
-                            !props.nextMerkleRoot.time &&
-                            "Could not get an estimated processing time"}
-                        {props.isWithdraw &&
-                            props.nextMerkleRoot.time &&
-                            `Withdrawal expected to be ready for approval ${props.nextMerkleRoot.time}`}
-                        {!isWithdraw && "Deposit should take up to 5 minutes to complete."}
+                        {timeToComplete}
                     </Text>
                     <div style={{ marginTop: 12 }} />
                     <Text
@@ -155,88 +104,7 @@ export const TransferOverview: React.FC<Props> = (props) => {
                     </Text>
 
                     <div style={{ marginTop: 16 }} />
-                    <StyledProcessWrapper>
-                        <Image
-                            src={isWithdraw ? ConcordiumIcon.src : EthereumIcon.src}
-                            alt={`${isWithdraw ? "Ethereum Icon" : "Concordium Icon"}`}
-                            height="20"
-                            width="20"
-                        />
-                        <Text
-                            fontFamily="Roboto"
-                            fontSize="11"
-                            fontWeight="light"
-                            fontColor="TitleText"
-                            fontLetterSpacing="0"
-                        >
-                            {isWithdraw ? "Withdraw initialized:" : "Deposit"}
-                        </Text>
-                        <Text
-                            fontFamily="Roboto"
-                            fontSize="11"
-                            fontWeight="bold"
-                            fontColor="TitleText"
-                            fontLetterSpacing="0"
-                        >
-                            {isWithdraw && "It will be visible when signing the transaction."}
-                            {!isWithdraw &&
-                                gasFee === undefined &&
-                                `${selectedToken.eth_name} allowance needed to estimate network fee.`}
-                            {!isWithdraw &&
-                                gasFee !== undefined &&
-                                `~${gasFee} ETH (${(gasFee * ethPrice).toFixed(4)} USD)`}
-                        </Text>
-                    </StyledProcessWrapper>
-
-                    {isWithdraw && (
-                        <>
-                            <StyledProcessWrapper>
-                                <Image src={ConcordiumIcon.src} alt="Concordium Icon" height="20" width="20" />
-                                <Text
-                                    fontFamily="Roboto"
-                                    fontSize="11"
-                                    fontWeight="light"
-                                    fontColor="TitleText"
-                                    fontLetterSpacing="0"
-                                >
-                                    Approve withdraw:
-                                </Text>
-                                <Text
-                                    fontFamily="Roboto"
-                                    fontSize="11"
-                                    fontWeight="bold"
-                                    fontColor="TitleText"
-                                    fontLetterSpacing="0"
-                                >
-                                    It will be visible when signing the transaction.
-                                </Text>
-                            </StyledProcessWrapper>
-                            <div style={{ marginTop: 12 }} />
-                            <StyledProcessWrapper>
-                                <Image src={EthereumIcon.src} alt={`ccd icon`} height="20" width="20" />
-                                <Text
-                                    fontFamily="Roboto"
-                                    fontSize="11"
-                                    fontWeight="light"
-                                    fontColor="TitleText"
-                                    fontLetterSpacing="0"
-                                >
-                                    Withdraw complete
-                                </Text>
-                                <Text
-                                    fontFamily="Roboto"
-                                    fontSize="11"
-                                    fontWeight="bold"
-                                    fontColor="TitleText"
-                                    fontLetterSpacing="0"
-                                >
-                                    {!isWithdraw
-                                        ? gasFee && `(${(gasFee * ethPrice).toFixed(4)} USD)`
-                                        : "Gas estimation will be available after completing the CCD transaction."}
-                                </Text>
-                            </StyledProcessWrapper>
-                        </>
-                    )}
+                    {children}
                 </div>
                 <Text fontSize="12" fontWeight="light" fontColor={status?.isError ? "Red" : "Black"} align="center">
                     {status ? status.message : <>&nbsp;</>}
