@@ -6,4 +6,5 @@ export const CacheKeys = {
     CCDBalance: "Cache.CCDBalance",
     TokenBalance: "Cache.TokenBalance",
     EthMerkleProof: "Cache.EthMerkleProof",
+    NextMerkleRoot: "Cache.NextMerkleRoot",
 };
