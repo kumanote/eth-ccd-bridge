@@ -52,13 +52,19 @@ The project depends on a number of configuration options that can be set through
 
 ### Docker
 
-The project can be built and run with docker by executing
+The project can be built with docker by executing the following with the necessary environment variables described above:
 
 ```bash
 docker build -t eth-ccd-bridge-app .
 ```
 
-and
+The set of environment variables required to build for the eth-goerli/ccd-testnet network pair can be found in `compose.yaml`, which can be built with:
+
+```bash
+docker compose build
+```
+
+Running the docker container is done by executing:
 
 ```bash
 docker run -p 3000:3000 eth-ccd-bridge-app
