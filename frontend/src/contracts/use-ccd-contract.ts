@@ -11,11 +11,11 @@ import contractNames from "@config/contractNames";
 import { bridgeManager, cis2Bridgeable } from "@config/schemas";
 import leb from "leb128";
 import { Buffer } from "buffer/index";
-import { ethers } from "ethers";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
-import hexToBase64 from "src/helpers/hexToBase64";
+
+const stripHexId = (hexString: string) => hexString.replace("0x", "");
 
 /** Polling interval for CCD transactions in MS */
 const POLLING_INTEVAL = 5000;
@@ -43,7 +43,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         } as ContractAddress;
 
         const receiveName = `${contractNames.cis2Bridgeable}.updateOperator`;
-        const rawSchema = hexToBase64(cis2Bridgeable);
+        const rawSchema = cis2Bridgeable;
         const provider = await detectConcordiumProvider();
         const userInput = [
             {
@@ -100,7 +100,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
-        const rawSchema = hexToBase64(bridgeManager);
+        const rawSchema = bridgeManager;
         const provider = await detectConcordiumProvider();
 
         const txHash = await provider.sendTransaction(
@@ -113,7 +113,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 maxContractExecutionEnergy: maxContractExecutionEnergy,
             } as UpdateContractPayload,
             {
-                eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
+                eth_address: stripHexId(ethAddress),
                 amount: amount.toString(),
                 token: {
                     index: token.ccd_contract.index,
@@ -167,7 +167,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                     token_id: "",
                 },
             ],
-            Buffer.from(hexToBase64(cis2Bridgeable), "base64")
+            Buffer.from(cis2Bridgeable, "base64")
         );
 
         const provider = await detectConcordiumProvider();
@@ -216,7 +216,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         // calculateEnergyCost
         // https://github.dev/Concordium/concordium-browser-wallet/blob/main/packages/browser-wallet/src/popup/pages/SendTransaction/SendTransaction.tsx#L83
 
-        const moduleFileBuffer = Buffer.from(cis2Bridgeable, "hex");
+        const moduleFileBuffer = Buffer.from(cis2Bridgeable, "base64");
 
         const params = serializeUpdateContractParameters(
             contractNames.cis2Bridgeable,
@@ -260,7 +260,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
         const provider = await detectConcordiumProvider();
         const userInput = {
-            eth_address: Array.from(ethers.utils.arrayify(ethAddress)),
+            eth_address: stripHexId(ethAddress),
             amount: amount.toString(),
             token: {
                 index: token.ccd_contract.index,
@@ -269,7 +269,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             token_id: "0000000000000000",
         };
 
-        const moduleFileBuffer = Buffer.from(hexToBase64(bridgeManager), "base64");
+        const moduleFileBuffer = Buffer.from(bridgeManager, "base64");
         const params = serializeUpdateContractParameters(
             contractNames.bridgeManager,
             "withdraw",
@@ -314,7 +314,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             index: BigInt(token.ccd_contract.index),
             subindex: BigInt(token.ccd_contract.subindex),
         };
-        const moduleFileBuffer = Buffer.from(hexToBase64(cis2Bridgeable), "base64");
+        const moduleFileBuffer = Buffer.from(cis2Bridgeable, "base64");
         const userInput = [
             {
                 update: {
