@@ -100,7 +100,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         }
 
         const receiveName = `${contractNames.bridgeManager}.withdraw`;
-        const rawSchema = hexToBase64(bridgeManager);
+        const rawSchema = bridgeManager;
         const provider = await detectConcordiumProvider();
 
         const txHash = await provider.sendTransaction(
@@ -167,7 +167,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                     token_id: "",
                 },
             ],
-            Buffer.from(hexToBase64(cis2Bridgeable), "base64")
+            Buffer.from(cis2Bridgeable, "base64")
         );
 
         const provider = await detectConcordiumProvider();
@@ -216,7 +216,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         // calculateEnergyCost
         // https://github.dev/Concordium/concordium-browser-wallet/blob/main/packages/browser-wallet/src/popup/pages/SendTransaction/SendTransaction.tsx#L83
 
-        const moduleFileBuffer = Buffer.from(cis2Bridgeable, "hex");
+        const moduleFileBuffer = Buffer.from(cis2Bridgeable, "base64");
 
         const params = serializeUpdateContractParameters(
             contractNames.cis2Bridgeable,
@@ -269,7 +269,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             token_id: "0000000000000000",
         };
 
-        const moduleFileBuffer = Buffer.from(hexToBase64(bridgeManager), "base64");
+        const moduleFileBuffer = Buffer.from(bridgeManager, "base64");
         const params = serializeUpdateContractParameters(
             contractNames.bridgeManager,
             "withdraw",
@@ -314,7 +314,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             index: BigInt(token.ccd_contract.index),
             subindex: BigInt(token.ccd_contract.subindex),
         };
-        const moduleFileBuffer = Buffer.from(hexToBase64(cis2Bridgeable), "base64");
+        const moduleFileBuffer = Buffer.from(cis2Bridgeable, "base64");
         const userInput = [
             {
                 update: {
