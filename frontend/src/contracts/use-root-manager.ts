@@ -146,7 +146,7 @@ const useRootManagerContract = () => {
         }
 
         const estimatedGasPrice = gasPrice.mul(gasLimit);
-        return Number(ethers.utils.formatEther(estimatedGasPrice)).toFixed(7);
+        return ethers.utils.formatEther(estimatedGasPrice);
     };
 
     return {

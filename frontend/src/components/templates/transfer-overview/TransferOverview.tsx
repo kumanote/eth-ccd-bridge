@@ -2,7 +2,7 @@ import Button from "@components/atoms/button/Button";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { FC, ReactElement, ReactNode, useState } from "react";
+import { FC, PropsWithChildren, ReactNode, useState } from "react";
 import ConcordiumIcon from "../../../../public/icons/concordium-icon.svg";
 import EthereumIcon from "../../../../public/icons/ethereum-icon.svg";
 import Text from "../../atoms/text/text";
@@ -12,10 +12,16 @@ type TransferOverviewLineProps = {
     isEth?: boolean;
     title: ReactNode;
     fee: ReactNode;
+    completed?: boolean;
 };
 
-export const TransferOverviewLine: FC<TransferOverviewLineProps> = ({ isEth = false, title, fee }) => (
-    <StyledProcessWrapper>
+export const TransferOverviewLine: FC<TransferOverviewLineProps> = ({
+    isEth = false,
+    title,
+    fee,
+    completed = false,
+}) => (
+    <StyledProcessWrapper strikeThrough={completed}>
         <Image
             src={isEth ? EthereumIcon.src : ConcordiumIcon.src}
             alt={isEth ? "Ethereum Icon" : "Concordium Icon"}
@@ -48,8 +54,6 @@ export const useTransferOverviewStatusState = () => {
     };
 };
 
-type Child = false | undefined | ReactElement<TransferOverviewLineProps>;
-
 type Props = {
     /**
      * Callback function for handling submission for specific flow.
@@ -59,10 +63,15 @@ type Props = {
     status?: TransferOverviewStatus;
     title: string;
     timeToComplete: string;
-    children: Child | Child[];
 };
 
-export const TransferOverview = ({ handleSubmit, status, title, timeToComplete, children }: Props) => {
+export const TransferOverview: FC<PropsWithChildren<Props>> = ({
+    handleSubmit,
+    status,
+    title,
+    timeToComplete,
+    children,
+}) => {
     const [pendingSubmission, setPendingSubmission] = useState(false);
     const { back, push } = useRouter();
 

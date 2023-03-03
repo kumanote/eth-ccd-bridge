@@ -5,10 +5,23 @@ import useEthWallet from "../hooks/use-eth-wallet";
 import MOCK_ABI from "./abis/MOCK_ABI.json";
 
 const ERC20_ALLOWANCE = "1000000000000";
+const MANAGER_GAS_OVERHEAD = 73750;
 
 const useGenerateContract = (address: string, enabled: boolean) => {
     const { context } = useEthWallet();
     const amountToApprove = toWei(ERC20_ALLOWANCE);
+    const signer = context.library?.getSigner();
+
+    const getFormattedGasPrice = async (gas: BigNumber) => {
+        const gasPrice: BigNumber | undefined = await signer.getGasPrice();
+
+        if (!gasPrice) {
+            throw new Error("Error getting gas price");
+        }
+
+        const estimatedGasPrice = gasPrice.mul(gas);
+        return ethers.utils.formatEther(estimatedGasPrice);
+    };
 
     const getBalance = async (): Promise<bigint> => {
         if (!enabled || !address || !context.library) throw new Error("Expected context not available");
@@ -31,7 +44,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
             throw new Error("Expected necessary parameters to be available");
         }
 
-        const signer = context.library?.getSigner();
+        const signer = context.library.getSigner();
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
 
         const response: BigNumber = await generatedContract.allowance(
@@ -45,9 +58,39 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         return response._hex !== "0x00";
     };
 
+    const estimateApprove = async (erc20PredicateAddress: string) => {
+        if (!enabled || !erc20PredicateAddress || !address || !signer) return;
+
+        const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
+        const estimatedGas = await generatedContract.estimateGas.approve(
+            // Spender
+            erc20PredicateAddress,
+            // Amount
+            amountToApprove
+        );
+
+        return getFormattedGasPrice(estimatedGas);
+    };
+
+    const estimateTransfer = async (amount: bigint, vault: string) => {
+        if (!enabled || !address || !signer) return;
+
+        const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
+        const depositData = ethers.utils.defaultAbiCoder.encode(["uint256"], [amount.toString()]);
+        const estimatedGas = await generatedContract.estimateGas.transfer(
+            // Spender
+            vault,
+            // Amount
+            depositData
+        );
+        const withManagerOverhead = estimatedGas.add(MANAGER_GAS_OVERHEAD);
+
+        return getFormattedGasPrice(withManagerOverhead);
+    };
+
     const approve = async (erc20PredicateAddress: string) => {
         if (!enabled || !erc20PredicateAddress || !address || !context.library) return;
-        const signer = context.library?.getSigner();
+        const signer = context.library.getSigner();
 
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
 
@@ -79,6 +122,8 @@ const useGenerateContract = (address: string, enabled: boolean) => {
     return {
         hasAllowance,
         approve,
+        estimateApprove,
+        estimateTransfer,
         getBalance,
         checkAllowance,
     };

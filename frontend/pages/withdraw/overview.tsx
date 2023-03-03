@@ -121,6 +121,8 @@ const WithdrawOverview: NextPage = () => {
         }
     };
 
+    console.log(needsAllowance);
+
     return (
         <TransferOverview
             title="Withdrawal overview"
@@ -129,12 +131,11 @@ const WithdrawOverview: NextPage = () => {
             status={status}
         >
             {/* TODO show some indication that allowance is loading, and disable continue button*/}
-            {needsAllowance && (
-                <TransferOverviewLine
-                    title="Approve allowance:"
-                    fee="Fee will be visible when signing the transaction."
-                />
-            )}
+            <TransferOverviewLine
+                title="Approve allowance:"
+                fee="Fee will be visible when signing the transaction."
+                completed={needsAllowance === false}
+            />
             <TransferOverviewLine
                 title="Withdraw initialized:"
                 fee="Fee will be visible when signing the transaction."

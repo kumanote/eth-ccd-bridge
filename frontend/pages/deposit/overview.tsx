@@ -10,10 +10,110 @@ import { routes } from "src/constants/routes";
 import useGenerateContract from "src/contracts/use-generate-contract";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { FC, useEffect, useState } from "react";
 import { useAsyncMemo } from "@hooks/utils";
 import { noOp } from "src/helpers/basic";
 import { getPrice } from "src/helpers/price-usd";
+import { Components } from "src/api-query/__generated__/AxiosClient";
+
+const LINE_DETAILS_FALLBACK = "...";
+
+const renderGasEstimate = (fee: number, ethPrice: number): string =>
+    `~${fee.toFixed(4)} ETH (${(fee * ethPrice).toFixed(4)} USD)`;
+
+type ApproveAllowanceLineProps = {
+    token: Components.Schemas.TokenMapItem;
+    needsAllowance: boolean | undefined;
+    ethPrice: number;
+    erc20Address: string | undefined;
+};
+
+const ApproveAllowanceLine: FC<ApproveAllowanceLineProps> = ({ token, needsAllowance, ethPrice, erc20Address }) => {
+    const [error, setError] = useState<string>();
+    const { estimateApprove } = useGenerateContract(token.eth_address as string, true);
+    /**
+     * Gets the gas fee required to make the deposit.
+     * Throws `Error` if user rejected in the ethereum wallet
+     */
+    const gasFee = useAsyncMemo(
+        async (): Promise<number | undefined> => {
+            if (!erc20Address) {
+                return undefined;
+            }
+
+            try {
+                const gas = await estimateApprove(erc20Address);
+                return parseFloat(gas as string);
+            } catch (error) {
+                // TODO: log actual error
+                setError("Could not estimate cost");
+            }
+        },
+        noOp,
+        [estimateApprove, erc20Address]
+    );
+
+    return (
+        <TransferOverviewLine
+            isEth
+            title={`Approve ${token.eth_name} allowance`}
+            completed={needsAllowance === false}
+            fee={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
+        />
+    );
+};
+
+type DepositLineProps = {
+    amount: bigint;
+    token: Components.Schemas.TokenMapItem;
+    hasAllowance: boolean;
+    ethPrice: number;
+    tokenVaultAddress: string | undefined;
+};
+
+const DepositLine: FC<DepositLineProps> = ({ amount, token, hasAllowance, ethPrice, tokenVaultAddress }) => {
+    const [error, setError] = useState<string>();
+    const { estimateGas } = useRootManagerContract();
+    const { estimateTransfer } = useGenerateContract(token.eth_address as string, true);
+    /**
+     * Gets the gas fee required to make the deposit.
+     * Throws `Error` if user rejected in the ethereum wallet
+     */
+    const gasFee = useAsyncMemo(
+        async (): Promise<number | undefined> => {
+            if (!amount || !token) {
+                return undefined;
+            }
+
+            try {
+                let gas: string | undefined;
+                if (!hasAllowance && tokenVaultAddress !== undefined) {
+                    gas = await estimateTransfer(amount, tokenVaultAddress);
+                    // await estimateGas(amount, token, "deposit");
+                } else {
+                    if (tokenVaultAddress) {
+                        await estimateTransfer(amount, tokenVaultAddress);
+                    }
+                    gas = await estimateGas(amount, token, "deposit");
+                }
+                return parseFloat(gas as string);
+            } catch (error) {
+                // TODO: log actual error
+                setError("Could not estimate cost");
+            }
+        },
+        noOp,
+        [amount, token, hasAllowance, estimateGas]
+    );
+
+    return (
+        <TransferOverviewLine
+            isEth
+            title={`Deposit ${token.eth_name}`}
+            fee={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
+        />
+    );
+};
 
 const DepositOverview: NextPage = () => {
     const { amount, token } = useTransactionFlowStore();
@@ -21,28 +121,25 @@ const DepositOverview: NextPage = () => {
         token?.eth_address as string, // address or empty string because the address is undefined on first renders
         !!token && !!amount // plus it's disabled on the first render anyway
     );
-    const { typeToVault, depositFor, depositEtherFor, estimateGas } = useRootManagerContract();
-    const [needsAllowance, setNeedsAllowance] = useState<boolean | undefined>();
+    const { typeToVault, depositFor, depositEtherFor } = useRootManagerContract();
+    const [needsAllowance, setNeedsAllowance] = useState<boolean | undefined>(
+        token?.eth_address !== addresses.eth ? undefined : false
+    );
     const allowanceLoading = needsAllowance === undefined;
     const { prefetch } = useRouter();
     const { status, setInfo, setError } = useTransferOverviewStatusState();
     const { replace } = useRouter();
     const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
-    const erc20PredicateAddress = useAsyncMemo(
-        async () => {
-            return typeToVault();
-        },
-        noOp,
-        [token]
-    );
+    const isErc20 = token?.eth_address !== addresses.eth;
+    const erc20PredicateAddress = useAsyncMemo(async () => (isErc20 ? typeToVault() : undefined), noOp, [token]);
 
     useEffect(() => {
-        if (token?.eth_address === addresses.eth) {
+        if (!isErc20) {
             setNeedsAllowance(false);
         } else if (erc20PredicateAddress) {
             hasAllowance(erc20PredicateAddress).then((allowance) => setNeedsAllowance(!allowance));
         }
-    }, [hasAllowance, erc20PredicateAddress, needsAllowance, token]);
+    }, [hasAllowance, erc20PredicateAddress, isErc20]);
 
     useEffect(() => {
         if (!amount || !token) {
@@ -71,32 +168,6 @@ const DepositOverview: NextPage = () => {
             return false;
         }
     };
-
-    /**
-     * Gets the gas fee required to make the deposit.
-     * Throws `Error` if user rejected in the ethereum wallet
-     */
-    const gasFee = useAsyncMemo(
-        async (): Promise<number | undefined> => {
-            if (!amount || !token) {
-                return undefined;
-            }
-
-            if (needsAllowance || allowanceLoading) {
-                return undefined;
-            }
-
-            try {
-                const gas = await estimateGas(amount, token, "deposit");
-                return parseFloat(gas as string);
-            } catch (error) {
-                // TODO: log actual error
-                setError("Could not estimate cost");
-            }
-        },
-        noOp,
-        [amount, token, needsAllowance, estimateGas]
-    );
 
     // Check necessary values are present from transfer page. These will not be available if this is the first page loaded in the browser.
     if (!amount || !token) {
@@ -143,26 +214,20 @@ const DepositOverview: NextPage = () => {
             timeToComplete="Deposit should take up to 5 minutes to complete."
             status={status}
         >
-            {/* TODO show some indication that allowance is loading, and disable continue button*/}
-            {needsAllowance && (
-                <TransferOverviewLine
-                    isEth
-                    title="Approve allowance"
-                    fee={
-                        gasFee === undefined
-                            ? `${token.eth_name} allowance needed to estimate network fee.`
-                            : gasFee !== undefined && `~${gasFee} ETH (${(gasFee * ethPrice).toFixed(4)} USD)`
-                    }
+            {isErc20 && (
+                <ApproveAllowanceLine
+                    token={token}
+                    erc20Address={erc20PredicateAddress}
+                    ethPrice={ethPrice}
+                    needsAllowance={needsAllowance}
                 />
             )}
-            <TransferOverviewLine
-                isEth
-                title="Deposit"
-                fee={
-                    gasFee === undefined
-                        ? `${token.eth_name} allowance needed to estimate network fee.`
-                        : gasFee !== undefined && `~${gasFee} ETH (${(gasFee * ethPrice).toFixed(4)} USD)`
-                }
+            <DepositLine
+                amount={amount}
+                token={token}
+                hasAllowance={!needsAllowance && !allowanceLoading}
+                tokenVaultAddress={erc20PredicateAddress}
+                ethPrice={ethPrice}
             />
         </TransferOverview>
     );
