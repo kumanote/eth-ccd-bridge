@@ -1350,6 +1350,8 @@ mod tests {
     const ADDRESS_1: Address = Address::Account(ACCOUNT_1);
     const ACCOUNT_2: AccountAddress = AccountAddress([2u8; 32]);
     const ADDRESS_2: Address = Address::Account(ACCOUNT_2);
+    const HASH: [u8; 32] = [57_u8; 32];
+    const HASH2: [u8; 32] = [33_u8; 32];
 
     const TOKEN_METADATA_URL: &str = "https://example.com/metadata";
 
@@ -1665,7 +1667,7 @@ mod tests {
         // and parameter.
         let init_params = SetMetadataUrlParams {
             url:  TOKEN_METADATA_URL.to_string(),
-            hash: Some([1_u8; 32]),
+            hash: Some(HASH),
         };
         let parameter_bytes = to_bytes(&init_params);
         ctx.set_parameter(&parameter_bytes);
@@ -1693,9 +1695,9 @@ mod tests {
         );
 
         claim_eq!(
-            hex::encode(state.metadata_url.hash.unwrap()),
-            "01".repeat(32),
-            "Token metadata url is not matching"
+            state.metadata_url.hash.unwrap(),
+            HASH,
+            "Token metadata hash is not matching"
         );
 
         // Setup the context
@@ -1705,7 +1707,7 @@ mod tests {
         let new_metadata_url = "https://example.com/new/metadata/params";
         let change_params = SetMetadataUrlParams {
             url:  new_metadata_url.to_string(),
-            hash: Some([57_u8; 32]),
+            hash: Some(HASH2),
         };
         let parameter_bytes = to_bytes(&change_params);
         ctx.set_parameter(&parameter_bytes);
@@ -1740,8 +1742,8 @@ mod tests {
         );
 
         claim_eq!(
-            hex::encode(metadata_hash.unwrap()),
-            "39".repeat(32),
+            metadata_hash.unwrap(),
+            HASH2,
             "Token metadata hash is not matching"
         );
 
@@ -1751,7 +1753,7 @@ mod tests {
                     token_id:     TOKEN_ID,
                     metadata_url: MetadataUrl {
                         url:  new_metadata_url.to_string(),
-                        hash: Some([57_u8; 32]),
+                        hash: Some(HASH2),
                     },
                 })
             )),
