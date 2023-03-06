@@ -11,14 +11,14 @@ import { ButtonsContainer, StyledContainer, StyledProcessWrapper } from "./Trans
 type TransferOverviewLineProps = {
     isEth?: boolean;
     title: ReactNode;
-    fee: ReactNode;
+    details: ReactNode;
     completed?: boolean;
 };
 
 export const TransferOverviewLine: FC<TransferOverviewLineProps> = ({
     isEth = false,
     title,
-    fee,
+    details,
     completed = false,
 }) => (
     <StyledProcessWrapper strikeThrough={completed}>
@@ -32,7 +32,7 @@ export const TransferOverviewLine: FC<TransferOverviewLineProps> = ({
             {title}
         </Text>
         <Text fontFamily="Roboto" fontSize="11" fontWeight="bold" fontColor="TitleText" fontLetterSpacing="0">
-            {fee}
+            {details}
         </Text>
     </StyledProcessWrapper>
 );

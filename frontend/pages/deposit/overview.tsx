@@ -58,7 +58,7 @@ const ApproveAllowanceLine: FC<ApproveAllowanceLineProps> = ({ token, needsAllow
             isEth
             title={`Approve ${token.eth_name} allowance`}
             completed={needsAllowance === false}
-            fee={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
+            details={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
         />
     );
 };
@@ -110,7 +110,7 @@ const DepositLine: FC<DepositLineProps> = ({ amount, token, hasAllowance, ethPri
         <TransferOverviewLine
             isEth
             title={`Deposit ${token.eth_name}`}
-            fee={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
+            details={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
         />
     );
 };
@@ -215,12 +215,15 @@ const DepositOverview: NextPage = () => {
             status={status}
         >
             {isErc20 && (
-                <ApproveAllowanceLine
-                    token={token}
-                    erc20Address={erc20PredicateAddress}
-                    ethPrice={ethPrice}
-                    needsAllowance={needsAllowance}
-                />
+                <>
+                    <ApproveAllowanceLine
+                        token={token}
+                        erc20Address={erc20PredicateAddress}
+                        ethPrice={ethPrice}
+                        needsAllowance={needsAllowance}
+                    />
+                    <br />
+                </>
             )}
             <DepositLine
                 amount={amount}

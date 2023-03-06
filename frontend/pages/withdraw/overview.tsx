@@ -3,7 +3,7 @@ import TransferOverview, {
     TransferOverviewLine,
     useTransferOverviewStatusState,
 } from "@components/templates/transfer-overview";
-import { useEffect, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
 import useCCDWallet from "@hooks/use-ccd-wallet";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import { routes } from "src/constants/routes";
@@ -12,6 +12,56 @@ import { useRouter } from "next/router";
 import { useNextMerkleRoot } from "src/api-query/queries";
 import moment from "moment";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
+import { Components } from "src/api-query/__generated__/AxiosClient";
+import { noOp } from "src/helpers/basic";
+import { useAsyncMemo } from "@hooks/utils";
+import { getPrice } from "src/helpers/price-usd";
+import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
+import { getEnergyToMicroCcdRate } from "src/helpers/ccd-node";
+
+const LINE_DETAILS_FALLBACK = "...";
+const microCcdToCcd = toFraction(1000000n);
+
+const renderFeeEstimate = (microCcdFee: bigint, ccdPrice: number): string => {
+    const ccdFee = Number(microCcdToCcd(microCcdFee));
+    return `~${ccdFee.toFixed(4)} CCD (${(ccdFee * ccdPrice).toFixed(4)} USD)`;
+};
+
+type ApprovaAllowanceLineProps = {
+    hasAllowance: boolean;
+    token: Components.Schemas.TokenMapItem;
+    ccdPrice: number;
+    microCcdPerEnergy: bigint | undefined;
+};
+
+const ApprovaAllowanceLine: FC<ApprovaAllowanceLineProps> = ({ hasAllowance, token, ccdPrice, microCcdPerEnergy }) => {
+    const { ccdContext } = useCCDWallet();
+    const { estimateApprove } = useCCDContract(ccdContext.account, !!ccdContext.account);
+    const [error, setError] = useState<string>();
+    const microCcdFee = useAsyncMemo(
+        async () => {
+            if (microCcdPerEnergy === undefined) {
+                return undefined;
+            }
+
+            const energy = await estimateApprove(token);
+            if (energy === undefined) {
+                return undefined;
+            }
+
+            return microCcdPerEnergy * energy.exact;
+        },
+        () => setError("Could not get fee estimate"),
+        [token, microCcdPerEnergy]
+    );
+
+    const details = useMemo(
+        () => (microCcdFee !== undefined ? renderFeeEstimate(microCcdFee, ccdPrice) : error || LINE_DETAILS_FALLBACK),
+        [microCcdFee, ccdPrice, error]
+    );
+
+    return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
+};
 
 const WithdrawOverview: NextPage = () => {
     const { ccdContext } = useCCDWallet();
@@ -21,6 +71,8 @@ const WithdrawOverview: NextPage = () => {
     const { amount, token } = useTransactionFlowStore();
     const { status, setInfo, setError } = useTransferOverviewStatusState();
     const [needsAllowance, setNeedsAllowance] = useState<boolean | undefined>();
+    const ccdPrice = useAsyncMemo(async () => getPrice("CCD"), noOp, []) ?? 0;
+    const microCcdPerEnergy = useAsyncMemo(getEnergyToMicroCcdRate, noOp, []);
 
     const {
         withdraw: ccdWithdraw,
@@ -71,7 +123,7 @@ const WithdrawOverview: NextPage = () => {
             const approvalFee = await estimateApprove(token);
 
             setInfo("Awaiting allowance approval in Concordium wallet");
-            const hash = await ccdApprove(token, approvalFee);
+            const hash = await ccdApprove(token, approvalFee?.conservative);
 
             setInfo("Waiting for transaction to finalize");
             const hasApproval = await transactionFinalization(hash);
@@ -102,7 +154,7 @@ const WithdrawOverview: NextPage = () => {
             const withdrawFee = await estimateWithdraw(amount, token, context.account || "");
 
             setInfo("Awaiting signature of withdrawal in Concordium wallet");
-            hash = await ccdWithdraw(amount, token, context?.account || "", withdrawFee);
+            hash = await ccdWithdraw(amount, token, context?.account || "", withdrawFee?.conservative);
             prefetch(routes.withdraw.tx(hash));
         } catch {
             setError("Transaction was rejected.");
@@ -121,8 +173,6 @@ const WithdrawOverview: NextPage = () => {
         }
     };
 
-    console.log(needsAllowance);
-
     return (
         <TransferOverview
             title="Withdrawal overview"
@@ -130,20 +180,22 @@ const WithdrawOverview: NextPage = () => {
             timeToComplete={timeToComplete}
             status={status}
         >
-            {/* TODO show some indication that allowance is loading, and disable continue button*/}
-            <TransferOverviewLine
-                title="Approve allowance:"
-                fee="Fee will be visible when signing the transaction."
-                completed={needsAllowance === false}
+            <ApprovaAllowanceLine
+                hasAllowance={needsAllowance === false}
+                token={token}
+                ccdPrice={ccdPrice}
+                microCcdPerEnergy={microCcdPerEnergy}
             />
+            <br />
             <TransferOverviewLine
                 title="Withdraw initialized:"
-                fee="Fee will be visible when signing the transaction."
+                details="Fee will be visible when signing the transaction."
             />
+            <br />
             <TransferOverviewLine
                 isEth
                 title="Approve withdraw:"
-                fee="Fee will be visible when signing the transaction."
+                details="Fee will be visible when signing the transaction."
             />
             <div style={{ marginTop: 12 }} />
         </TransferOverview>

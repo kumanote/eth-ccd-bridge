@@ -34,7 +34,16 @@ declare global {
              * Block hash of genesis block of the network.
              * Is used to check that the user has its browser wallet connected to the correct network.
              */
-            NEXT_PUBLIC_NETWORK_GENESIS_BLOCK_HASH: string; // TODO: Remove this and hardcode instead.
+            NEXT_PUBLIC_NETWORK_GENESIS_BLOCK_HASH: string;
+            /**
+             * URL of concordium node to use, e.g. http://127.0.0.1
+             */
+            NEXT_PUBLIC_CCD_NODE_URL: string;
+            /**
+             * Port of gRPC v2 interface of Concordium node, e.g. 20000
+             */
+            NEXT_PUBLIC_CCD_NODE_PORT: string;
+
 
             // Concordium contract addresses
             /**

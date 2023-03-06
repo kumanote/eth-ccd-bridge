@@ -15,6 +15,15 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 
+type EstimateResponse = {
+    /** exact amount of energy used for contract invocation. */
+    exact: bigint;
+    /** conservative amount of energy used for contract invocation. Good for passing from estimate invocation to actual invocation. */
+    conservative: bigint;
+};
+
+const getConservativeEstimate = (estimate: bigint) => (estimate * 150n) / 100n;
+
 const stripHexId = (hexString: string) => hexString.replace("0x", "");
 
 /** Polling interval for CCD transactions in MS */
@@ -248,7 +257,11 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         return res.lastFinalizedBlock;
     };
 
-    const estimateWithdraw = async (amount: bigint, token?: Components.Schemas.TokenMapItem, ethAddress?: string) => {
+    const estimateWithdraw = async (
+        amount: bigint,
+        token?: Components.Schemas.TokenMapItem,
+        ethAddress?: string
+    ): Promise<EstimateResponse | undefined> => {
         if (!enabled || !ccdAccount) return;
 
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract.subindex === undefined) {
@@ -299,10 +312,10 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             return undefined;
         }
 
-        return (res.usedEnergy * 150n) / 100n; // Overestimate by 50%
+        return { exact: res.usedEnergy, conservative: getConservativeEstimate(res.usedEnergy) };
     };
 
-    const estimateApprove = async (token?: Components.Schemas.TokenMapItem): Promise<bigint | undefined> => {
+    const estimateApprove = async (token?: Components.Schemas.TokenMapItem): Promise<EstimateResponse | undefined> => {
         if (!enabled || !ccdAccount) return;
 
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
@@ -351,7 +364,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             return undefined;
         }
 
-        return (res.usedEnergy * 150n) / 100n; // Overestimate by 50%
+        return { exact: res.usedEnergy, conservative: getConservativeEstimate(res.usedEnergy) };
     };
 
     return {
