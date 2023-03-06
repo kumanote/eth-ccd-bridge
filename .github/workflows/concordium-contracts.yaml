@@ -89,3 +89,27 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           cargo test --manifest-path concordium_contracts/bridge-manager/Cargo.toml
           cargo test --manifest-path concordium_contracts/cis2-bridgeable/Cargo.toml
+
+  compile-no-std:
+    name: compile:no-std
+    runs-on: ubuntu-latest
+    needs: "lint_clippy"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Install nightly toolchain with check available
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Run cargo build with no-std
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          cargo +nightly concordium build -e --manifest-path concordium_contracts/bridge-manager/Cargo.toml -- --no-default-features --features wee_alloc
+          cargo +nightly concordium build -e --manifest-path concordium_contracts/cis2-bridgeable/Cargo.toml -- --no-default-features --features wee_alloc
