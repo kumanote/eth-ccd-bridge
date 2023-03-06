@@ -89,3 +89,37 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           cargo test --manifest-path concordium_contracts/bridge-manager/Cargo.toml
           cargo test --manifest-path concordium_contracts/cis2-bridgeable/Cargo.toml
+
+  compile-no-std:
+    name: compile:no-std
+    runs-on: ubuntu-latest
+    needs: "lint_clippy"
+    strategy:
+      matrix:
+        target:
+          - wasm32-unknown-unknown
+
+        crates:
+          - concordium_contracts/bridge-manager/Cargo.toml
+          - concordium_contracts/cis2-bridgeable/Cargo.toml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Install nightly toolchain with check available
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Run cargo check with no-std
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path ${{ matrix.crates }} --target=${{ matrix.target }} --no-default-features --features wee_alloc
+
