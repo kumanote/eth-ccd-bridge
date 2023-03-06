@@ -320,12 +320,12 @@ async function setupRootManager(): Promise<void> {
   }
 
   if (ethVaultAddress !== ethVault.address) {
-    console.log(`Wrong ETH Vault address ${ethVault.address} setting to ${ethVault.address}`)
+    console.log(`Wrong ETH Vault address ${ethVaultAddress} setting to ${ethVault.address}`)
     const tx = await rootManager.registerVault(ethTokenType, ethVault.address)
     await waitTx(tx)
   }
   if (erc20VaultAddress !== erc20Vault.address) {
-    console.log(`Wrong ERC20 Vault address ${erc20Vault.address} setting to ${erc20Vault.address}`)
+    console.log(`Wrong ERC20 Vault address ${erc20VaultAddress} setting to ${erc20Vault.address}`)
     const tx = await rootManager.registerVault(erc20TokenType, erc20Vault.address)
     await waitTx(tx)
   }
@@ -334,7 +334,7 @@ async function setupEthVault(): Promise<void> {
   const role = await ethVault.MANAGER_ROLE()
   const hasRole = await ethVault.hasRole(role, rootManager.address)
   if (!hasRole) {
-    console.log(`Granting manager role  from ${ethVault.address} to  ${rootManager.address}`)
+    console.log(`Granting manager role in ${ethVault.address} to ${rootManager.address}`)
     const tx = await ethVault.grantRole(role, rootManager.address)
     await waitTx(tx)
   }
@@ -343,7 +343,7 @@ async function setupErc20Vault(): Promise<void> {
   const role = await erc20Vault.MANAGER_ROLE()
   const hasRole = await erc20Vault.hasRole(role, rootManager.address)
   if (!hasRole) {
-    console.log(`Granting manager role  from ${erc20Vault.address} to  ${rootManager.address}`)
+    console.log(`Granting manager role in ${erc20Vault.address} to ${rootManager.address}`)
     const tx = await erc20Vault.grantRole(role, rootManager.address)
     await waitTx(tx)
   }
@@ -353,7 +353,7 @@ async function setupStateSender(): Promise<void> {
   const role = await stateSender.EMITTER_ROLE()
   const hasRole = await stateSender.hasRole(role, rootManager.address)
   if (!hasRole) {
-    console.log(`Granting emitter role  from ${stateSender.address} to  ${rootManager.address}`)
+    console.log(`Granting emitter role in ${stateSender.address} to ${rootManager.address}`)
     const tx = await stateSender.grantRole(role, rootManager.address)
     await waitTx(tx)
   }
