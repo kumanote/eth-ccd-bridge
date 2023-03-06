@@ -63,6 +63,51 @@ const ApprovaAllowanceLine: FC<ApprovaAllowanceLineProps> = ({ hasAllowance, tok
     return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
 };
 
+type WithdrawLineProps = {
+    hasAllowance: boolean;
+    token: Components.Schemas.TokenMapItem;
+    amount: bigint;
+    ethAccount: string;
+    ccdPrice: number;
+    microCcdPerEnergy: bigint | undefined;
+};
+
+const WithdrawLine: FC<WithdrawLineProps> = ({
+    hasAllowance,
+    token,
+    amount,
+    ethAccount,
+    ccdPrice,
+    microCcdPerEnergy,
+}) => {
+    const { ccdContext } = useCCDWallet();
+    const { estimateWithdraw } = useCCDContract(ccdContext.account, !!ccdContext.account);
+    const [error, setError] = useState<string>();
+    const microCcdFee = useAsyncMemo(
+        async () => {
+            if (microCcdPerEnergy === undefined) {
+                return undefined;
+            }
+
+            const energy = await estimateWithdraw(amount, token, ethAccount);
+            if (energy === undefined) {
+                return undefined;
+            }
+
+            return microCcdPerEnergy * energy.exact;
+        },
+        () => setError("Could not get fee estimate"),
+        [token, microCcdPerEnergy]
+    );
+
+    const details = useMemo(
+        () => (microCcdFee !== undefined ? renderFeeEstimate(microCcdFee, ccdPrice) : error || LINE_DETAILS_FALLBACK),
+        [microCcdFee, ccdPrice, error]
+    );
+
+    return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
+};
+
 const WithdrawOverview: NextPage = () => {
     const { ccdContext } = useCCDWallet();
     const { context } = useEthWallet();
@@ -106,7 +151,7 @@ const WithdrawOverview: NextPage = () => {
     }, [token]);
 
     useEffect(() => {
-        if (!amount || !token) {
+        if (!amount || !token || !context.account) {
             replace(routes.withdraw.path);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,7 +159,7 @@ const WithdrawOverview: NextPage = () => {
 
     //
     // Check necessary values are present from transfer page. These will not be available if this is the first page loaded in the browser.
-    if (!amount || !token) {
+    if (!amount || !token || !context.account) {
         return null;
     }
 
@@ -187,9 +232,13 @@ const WithdrawOverview: NextPage = () => {
                 microCcdPerEnergy={microCcdPerEnergy}
             />
             <br />
-            <TransferOverviewLine
-                title="Withdraw initialized:"
-                details="Fee will be visible when signing the transaction."
+            <WithdrawLine
+                hasAllowance={needsAllowance === false}
+                token={token}
+                ccdPrice={ccdPrice}
+                microCcdPerEnergy={microCcdPerEnergy}
+                ethAccount={context.account}
+                amount={amount}
             />
             <br />
             <TransferOverviewLine
