@@ -63,6 +63,9 @@ const ApprovaAllowanceLine: FC<ApprovaAllowanceLineProps> = ({ hasAllowance, tok
     return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
 };
 
+/** Cost of withdraw of 1 token unit. This is only used until an allowance has been approved */
+const CIS2_BRIDGEABLE_WITHDRAW_ENERGY_FALLBACK = 4905n;
+
 type WithdrawLineProps = {
     hasAllowance: boolean;
     token: Components.Schemas.TokenMapItem;
@@ -73,12 +76,12 @@ type WithdrawLineProps = {
 };
 
 const WithdrawLine: FC<WithdrawLineProps> = ({
-    hasAllowance,
     token,
     amount,
     ethAccount,
     ccdPrice,
     microCcdPerEnergy,
+    hasAllowance,
 }) => {
     const { ccdContext } = useCCDWallet();
     const { estimateWithdraw } = useCCDContract(ccdContext.account, !!ccdContext.account);
@@ -89,15 +92,18 @@ const WithdrawLine: FC<WithdrawLineProps> = ({
                 return undefined;
             }
 
-            const energy = await estimateWithdraw(amount, token, ethAccount);
-            if (energy === undefined) {
-                return undefined;
+            let energy: bigint;
+            try {
+                const estimate = await estimateWithdraw(amount, token, ethAccount);
+                energy = estimate?.exact ?? CIS2_BRIDGEABLE_WITHDRAW_ENERGY_FALLBACK;
+            } catch {
+                energy = CIS2_BRIDGEABLE_WITHDRAW_ENERGY_FALLBACK;
             }
 
-            return microCcdPerEnergy * energy.exact;
+            return microCcdPerEnergy * energy;
         },
         () => setError("Could not get fee estimate"),
-        [token, microCcdPerEnergy]
+        [token, microCcdPerEnergy, hasAllowance]
     );
 
     const details = useMemo(
@@ -105,7 +111,7 @@ const WithdrawLine: FC<WithdrawLineProps> = ({
         [microCcdFee, ccdPrice, error]
     );
 
-    return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
+    return <TransferOverviewLine title="Approve allowance:" details={details} />;
 };
 
 const WithdrawOverview: NextPage = () => {
