@@ -7,7 +7,9 @@ config({
   path: '.env'
 })
 const sleep = async (milliseconds: number): Promise<void> => {
-  return await new Promise(resolve => setTimeout(resolve, milliseconds))
+  if (network.name !== 'hardhat') {
+    return await new Promise(resolve => setTimeout(resolve, milliseconds))
+  }
 }
 async function waitTx(tx: any): Promise<void> {
   let transactionReceipt = null
