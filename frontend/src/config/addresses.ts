@@ -10,9 +10,12 @@ const addresses = {
     root: process.env.NEXT_PUBLIC_ROOT_MANAGER_ADDRESS || "",
 
     /**
-     * Bridge Manager Index
+     * Bridge Manager Address
      */
-    bridgeManagerIndex: process.env.NEXT_PUBLIC_BRIDGE_MANAGER_INDEX,
+    bridgeManager: {
+        index: process.env.NEXT_PUBLIC_BRIDGE_MANAGER_INDEX,
+        subindex: process.env.NEXT_PUBLIC_BRIDGE_MANAGER_SUBINDEX ?? "0",
+    },
 };
 
 export default addresses;

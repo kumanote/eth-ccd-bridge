@@ -47,9 +47,14 @@ declare global {
 
             // Concordium contract addresses
             /**
-             * Bridge manager contract index. For now, the accompanying subindex is assumed to be 0.
+             * Bridge manager contract index.
              */
-            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: string; // TODO: Don't assume the subindex is 0, as sometime it might not be...
+            NEXT_PUBLIC_BRIDGE_MANAGER_INDEX: string;
+            /**
+             * Bridge manager contract subindex.
+             */
+            NEXT_PUBLIC_BRIDGE_MANAGER_SUBINDEX: string;
+
 
             /**
              * URL of the bridge API.
@@ -69,6 +74,31 @@ declare global {
              * Hex encoded schema of the cis2-bridgeable contract.
              */
             NEXT_PUBLIC_CIS2_BRIDGEABLE: string;
+
+            /**
+             * Approximate difference in the cost (in eth gas units) of invoking `root-manager.deposit` and `erc20-token.transfer`.
+             *
+             * This is needed as we cannot estimate the gas required for `root-manager.deposit` when 
+             * the root manager does not have an allowance of the specific ERC2 token.
+             */
+            NEXT_PUBLIC_ROOT_MANAGER_DEPOSIT_OVERHEAD_GAS: string;
+            /**
+             * Approximate cost (in eth gas units) of invoking `root-manager.withdraw` for an ERC20 token.
+             * This is needed as we cannot estimate the gas required for `root-manager.withdraw` prior to having the necessary parameters available.
+             */
+            NEXT_PUBLIC_ROOT_MANAGER_WITHDRAW_ERC20_GAS: string;
+            /**
+             * Approximate cost (in eth gas units) of invoking `root-manager.withdraw` for an ETH token.
+             * This is needed as we cannot estimate the gas required for `root-manager.withdraw` prior to having the necessary parameters available.
+             */
+            NEXT_PUBLIC_ROOT_MANAGER_WITHDRAW_ETH_GAS: string;
+            /**
+             * Approximate energy needed to invoke `cis2-bridgeable.withdraw`.
+             *
+             * This is needed as we cannot estimate the gas required for `bridge-manager.withdraw` when 
+             * the bridge manager is not currently an operator of the account for the selected token.
+             */
+            NEXT_PUBLIC_BRIDGE_MANAGER_WITHDRAW_ENERGY: string;
         }
     }
 }

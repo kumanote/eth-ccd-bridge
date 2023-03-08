@@ -5,6 +5,7 @@ import bs58check from "bs58check";
 import addresses from "@config/addresses";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useCCDWallet from "@hooks/use-ccd-wallet";
+import transactionCosts from "@config/transaction-cost";
 
 const useRootManagerContract = () => {
     const { context } = useEthWallet();
@@ -149,6 +150,26 @@ const useRootManagerContract = () => {
         return ethers.utils.formatEther(estimatedGasPrice);
     };
 
+    const getDefaultWithdrawEstimate = async (token: Components.Schemas.TokenMapItem) => {
+        if (!context.library) return;
+        const provider = context.library.getSigner();
+
+        const gasLimit =
+            token.eth_address === addresses.eth
+                ? transactionCosts.eth.rootManagerWithdrawEthGas
+                : transactionCosts.eth.rootManagerWithdrawErc20Gas;
+
+        const gasPrice: BigNumber | undefined = await provider?.getGasPrice();
+        if (!gasPrice) {
+            throw new Error("Error getting gas price");
+        }
+
+        console.log(gasLimit, gasPrice);
+
+        const estimatedGasPrice = gasPrice.mul(gasLimit);
+        return ethers.utils.formatEther(estimatedGasPrice);
+    };
+
     return {
         ccdUser,
         typeToVault,
@@ -156,6 +177,7 @@ const useRootManagerContract = () => {
         depositEtherFor,
         withdraw,
         estimateGas,
+        getDefaultWithdrawEstimate,
     };
 };
 

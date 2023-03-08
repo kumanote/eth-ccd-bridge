@@ -31,8 +31,8 @@ const POLLING_INTEVAL = 5000;
 
 const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
     const bridgeManagerContract = {
-        index: BigInt(addresses.bridgeManagerIndex),
-        subindex: BigInt(0),
+        index: BigInt(addresses.bridgeManager.index),
+        subindex: BigInt(addresses.bridgeManager.subindex),
     } as ContractAddress;
 
     const approve = async (token: Components.Schemas.TokenMapItem, maxContractExecutionEnergy?: bigint) => {
@@ -62,8 +62,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 operator: {
                     Contract: [
                         {
-                            index: +addresses.bridgeManagerIndex,
-                            subindex: 0,
+                            index: +addresses.bridgeManager.index,
+                            subindex: +addresses.bridgeManager.subindex,
                         },
                     ],
                 },
@@ -214,8 +214,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 address: {
                     Contract: [
                         {
-                            index: +addresses.bridgeManagerIndex,
-                            subindex: 0,
+                            index: +addresses.bridgeManager.index,
+                            subindex: +addresses.bridgeManager.subindex,
                         },
                     ],
                 },

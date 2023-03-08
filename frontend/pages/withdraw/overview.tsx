@@ -13,19 +13,18 @@ import { useNextMerkleRoot } from "src/api-query/queries";
 import moment from "moment";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { noOp } from "src/helpers/basic";
+import { ensureValue, noOp } from "src/helpers/basic";
 import { useAsyncMemo } from "@hooks/utils";
 import { getPrice } from "src/helpers/price-usd";
-import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
 import { getEnergyToMicroCcdRate } from "src/helpers/ccd-node";
+import transactionCosts from "@config/transaction-cost";
+import useRootManagerContract from "src/contracts/use-root-manager";
+import { renderEnergyFeeEstimate, renderGasFeeEstimate } from "src/helpers/fee";
+import Text from "src/components/atoms/text/text";
 
 const LINE_DETAILS_FALLBACK = "...";
-const microCcdToCcd = toFraction(1000000n);
 
-const renderFeeEstimate = (microCcdFee: bigint, ccdPrice: number): string => {
-    const ccdFee = Number(microCcdToCcd(microCcdFee));
-    return `~${ccdFee.toFixed(4)} CCD (${(ccdFee * ccdPrice).toFixed(4)} USD)`;
-};
+const withdrawEnergyDefault = BigInt(transactionCosts.ccd.bridgeManagerWithdrawEnergy);
 
 type ApprovaAllowanceLineProps = {
     hasAllowance: boolean;
@@ -56,15 +55,13 @@ const ApprovaAllowanceLine: FC<ApprovaAllowanceLineProps> = ({ hasAllowance, tok
     );
 
     const details = useMemo(
-        () => (microCcdFee !== undefined ? renderFeeEstimate(microCcdFee, ccdPrice) : error || LINE_DETAILS_FALLBACK),
+        () =>
+            microCcdFee !== undefined ? renderEnergyFeeEstimate(microCcdFee, ccdPrice) : error || LINE_DETAILS_FALLBACK,
         [microCcdFee, ccdPrice, error]
     );
 
     return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
 };
-
-/** Cost of withdraw of 1 token unit. This is only used until an allowance has been approved */
-const CIS2_BRIDGEABLE_WITHDRAW_ENERGY_FALLBACK = 4905n;
 
 type WithdrawLineProps = {
     hasAllowance: boolean;
@@ -95,9 +92,9 @@ const WithdrawLine: FC<WithdrawLineProps> = ({
             let energy: bigint;
             try {
                 const estimate = await estimateWithdraw(amount, token, ethAccount);
-                energy = estimate?.exact ?? CIS2_BRIDGEABLE_WITHDRAW_ENERGY_FALLBACK;
+                energy = estimate?.exact ?? withdrawEnergyDefault;
             } catch {
-                energy = CIS2_BRIDGEABLE_WITHDRAW_ENERGY_FALLBACK;
+                energy = withdrawEnergyDefault;
             }
 
             return microCcdPerEnergy * energy;
@@ -107,11 +104,38 @@ const WithdrawLine: FC<WithdrawLineProps> = ({
     );
 
     const details = useMemo(
-        () => (microCcdFee !== undefined ? renderFeeEstimate(microCcdFee, ccdPrice) : error || LINE_DETAILS_FALLBACK),
+        () =>
+            microCcdFee !== undefined ? renderEnergyFeeEstimate(microCcdFee, ccdPrice) : error || LINE_DETAILS_FALLBACK,
         [microCcdFee, ccdPrice, error]
     );
 
     return <TransferOverviewLine title="Approve allowance:" details={details} />;
+};
+
+type ApproveWithdrawLineProps = {
+    token: Components.Schemas.TokenMapItem;
+};
+
+const ApproveWithdrawLine: FC<ApproveWithdrawLineProps> = ({ token }) => {
+    const [error, setError] = useState<string>();
+    const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
+    const { getDefaultWithdrawEstimate } = useRootManagerContract();
+    const fee = useAsyncMemo(
+        async () => {
+            const g = await getDefaultWithdrawEstimate(token);
+            const gas = ensureValue(g, "Could not estimate gas");
+            return parseFloat(gas);
+        },
+        () => setError("Could not estimate gas"),
+        [token]
+    );
+
+    const details = useMemo(
+        () => (fee !== undefined ? `${renderGasFeeEstimate(fee, ethPrice)}*` : error || LINE_DETAILS_FALLBACK),
+        [fee, ethPrice, error]
+    );
+
+    return <TransferOverviewLine isEth title="Approve withdraw:" details={details} />;
 };
 
 const WithdrawOverview: NextPage = () => {
@@ -247,11 +271,11 @@ const WithdrawOverview: NextPage = () => {
                 amount={amount}
             />
             <br />
-            <TransferOverviewLine
-                isEth
-                title="Approve withdraw:"
-                details="Fee will be visible when signing the transaction."
-            />
+            <ApproveWithdrawLine token={token} />
+            <Text fontFamily="Roboto" fontSize="9" fontWeight="light" fontColor="DarkGrey" fontLetterSpacing="0">
+                *Price is based on transaction history and can vary depending on network activity at the time of the
+                transaction
+            </Text>
             <div style={{ marginTop: 12 }} />
         </TransferOverview>
     );

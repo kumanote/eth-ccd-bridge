@@ -1,11 +1,11 @@
 import addresses from "@config/addresses";
+import transactionCosts from "@config/transaction-cost";
 import { BigNumber, ContractTransaction, ethers } from "ethers";
 import { toWei } from "../helpers/number";
 import useEthWallet from "../hooks/use-eth-wallet";
 import MOCK_ABI from "./abis/MOCK_ABI.json";
 
 const ERC20_ALLOWANCE = "1000000000000";
-const MANAGER_GAS_OVERHEAD = 73750;
 
 const useGenerateContract = (address: string, enabled: boolean) => {
     const { context } = useEthWallet();
@@ -72,7 +72,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         return getFormattedGasPrice(estimatedGas);
     };
 
-    const estimateTransfer = async (amount: bigint, vault: string) => {
+    const estimateTransferWithDepositOverhead = async (amount: bigint, vault: string) => {
         if (!enabled || !address || !signer) return;
 
         const generatedContract = new ethers.Contract(address, MOCK_ABI, signer);
@@ -83,7 +83,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
             // Amount
             depositData
         );
-        const withManagerOverhead = estimatedGas.add(MANAGER_GAS_OVERHEAD);
+        const withManagerOverhead = estimatedGas.add(transactionCosts.eth.rootManagerDepositOverheadGas);
 
         return getFormattedGasPrice(withManagerOverhead);
     };
@@ -123,7 +123,7 @@ const useGenerateContract = (address: string, enabled: boolean) => {
         hasAllowance,
         approve,
         estimateApprove,
-        estimateTransfer,
+        estimateTransferWithDepositOverhead,
         getBalance,
         checkAllowance,
     };

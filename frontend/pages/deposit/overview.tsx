@@ -15,11 +15,9 @@ import { useAsyncMemo } from "@hooks/utils";
 import { noOp } from "src/helpers/basic";
 import { getPrice } from "src/helpers/price-usd";
 import { Components } from "src/api-query/__generated__/AxiosClient";
+import { renderGasFeeEstimate } from "src/helpers/fee";
 
 const LINE_DETAILS_FALLBACK = "...";
-
-const renderGasEstimate = (fee: number, ethPrice: number): string =>
-    `~${fee.toFixed(4)} ETH (${(fee * ethPrice).toFixed(4)} USD)`;
 
 type ApproveAllowanceLineProps = {
     token: Components.Schemas.TokenMapItem;
@@ -58,7 +56,7 @@ const ApproveAllowanceLine: FC<ApproveAllowanceLineProps> = ({ token, needsAllow
             isEth
             title={`Approve ${token.eth_name} allowance`}
             completed={needsAllowance === false}
-            details={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
+            details={(gasFee !== undefined && renderGasFeeEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
         />
     );
 };
@@ -74,7 +72,7 @@ type DepositLineProps = {
 const DepositLine: FC<DepositLineProps> = ({ amount, token, hasAllowance, ethPrice, tokenVaultAddress }) => {
     const [error, setError] = useState<string>();
     const { estimateGas } = useRootManagerContract();
-    const { estimateTransfer } = useGenerateContract(token.eth_address as string, true);
+    const { estimateTransferWithDepositOverhead } = useGenerateContract(token.eth_address as string, true);
     /**
      * Gets the gas fee required to make the deposit.
      * Throws `Error` if user rejected in the ethereum wallet
@@ -88,12 +86,8 @@ const DepositLine: FC<DepositLineProps> = ({ amount, token, hasAllowance, ethPri
             try {
                 let gas: string | undefined;
                 if (!hasAllowance && tokenVaultAddress !== undefined) {
-                    gas = await estimateTransfer(amount, tokenVaultAddress);
-                    // await estimateGas(amount, token, "deposit");
+                    gas = await estimateTransferWithDepositOverhead(amount, tokenVaultAddress);
                 } else {
-                    if (tokenVaultAddress) {
-                        await estimateTransfer(amount, tokenVaultAddress);
-                    }
                     gas = await estimateGas(amount, token, "deposit");
                 }
                 return parseFloat(gas as string);
@@ -110,7 +104,7 @@ const DepositLine: FC<DepositLineProps> = ({ amount, token, hasAllowance, ethPri
         <TransferOverviewLine
             isEth
             title={`Deposit ${token.eth_name}`}
-            details={(gasFee !== undefined && renderGasEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
+            details={(gasFee !== undefined && renderGasFeeEstimate(gasFee, ethPrice)) || error || LINE_DETAILS_FALLBACK}
         />
     );
 };
