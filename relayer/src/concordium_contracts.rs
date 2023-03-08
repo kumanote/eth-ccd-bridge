@@ -12,7 +12,9 @@ use concordium_rust_sdk::{
     types::{
         hashes::TransactionHash,
         queries::BlockInfo,
-        smart_contracts::{ContractContext, InvokeContractResult, OwnedReceiveName, Parameter},
+        smart_contracts::{
+            ContractContext, InvokeContractResult, OwnedParameter, OwnedReceiveName,
+        },
         transactions::{self, BlockItem, EncodedPayload, UpdateContractPayload},
         AbsoluteBlockHeight, Address, BlockItemSummary, ContractAddress, Energy, Nonce,
         RejectReason, WalletAccount,
@@ -139,7 +141,7 @@ impl BridgeManager {
             receive_name: OwnedReceiveName::new_unchecked(
                 "bridge-manager.receiveStateUpdate".into(),
             ),
-            message:      Parameter::new_unchecked(contracts_common::to_bytes(update)),
+            message:      OwnedParameter::new_unchecked(contracts_common::to_bytes(update)),
         }
     }
 
@@ -154,7 +156,7 @@ impl BridgeManager {
             contract:  self.client.contract,
             amount:    Amount::from_micro_ccd(0),
             method:    OwnedReceiveName::new_unchecked("bridge-manager.checkOperationUsed".into()),
-            parameter: Parameter::new_unchecked(id.to_le_bytes().into()),
+            parameter: OwnedParameter::new_unchecked(id.to_le_bytes().into()),
             energy:    10_000.into(),
         };
         let result = self.client.client.invoke_instance(bi, &ctx).await?;
