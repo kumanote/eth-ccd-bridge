@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 
-const withTM = require("next-transpile-modules")(["@concordium/browser-wallet-api-helpers", "wallet-common-helpers"]); // pass the modules you would like to see transpiled
+const withTM = require("next-transpile-modules")(["@concordium/browser-wallet-api-helpers"]); // pass the modules you would like to see transpiled
 
 const nextConfig = {
     reactStrictMode: true,

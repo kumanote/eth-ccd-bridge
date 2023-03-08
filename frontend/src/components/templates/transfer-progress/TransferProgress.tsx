@@ -23,9 +23,9 @@ import { useMemo, useState } from "react";
 import { QueryRouter } from "src/types/config";
 import isDeposit from "src/helpers/checkTransaction";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
-import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
-import { formatAmount, tokenDecimalsToResolution } from "src/helpers/number";
+import { formatAmount } from "src/helpers/number";
 import { useWalletTransactions } from "src/api-query/queries";
+import { ethers } from "ethers";
 
 type Status = {
     message: string;
@@ -122,7 +122,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
             return undefined;
         }
 
-        return toFraction(tokenDecimalsToResolution(token.decimals))(amount);
+        return ethers.utils.formatUnits(amount, token.decimals);
     }, [amount, token]);
 
     const setError = (message: string) => setStatus({ isError: true, message });

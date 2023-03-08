@@ -164,8 +164,6 @@ const useRootManagerContract = () => {
             throw new Error("Error getting gas price");
         }
 
-        console.log(gasLimit, gasPrice);
-
         const estimatedGasPrice = gasPrice.mul(gasLimit);
         return ethers.utils.formatEther(estimatedGasPrice);
     };

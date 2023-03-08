@@ -1,8 +1,8 @@
-import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
+import { BigNumberish, ethers } from "ethers";
 
-const MICRO_CCD_PER_CCD = 1000000n;
+const CCD_DECIMALS = 6;
 
-const microCcdToCcd = toFraction(MICRO_CCD_PER_CCD);
+const microCcdToCcd = (number: BigNumberish) => ethers.utils.formatUnits(number, CCD_DECIMALS);
 
 export const renderGasFeeEstimate = (fee: number, ethPrice: number): string =>
     `~${fee.toFixed(4)} ETH (${(fee * ethPrice).toFixed(4)} USD)`;

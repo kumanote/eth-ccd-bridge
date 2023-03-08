@@ -11,10 +11,8 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
 import { ccdTransactionUrl, ethTransactionUrl } from "src/helpers/chain-explorer";
 import isDeposit from "src/helpers/checkTransaction";
-import { tokenDecimalsToResolution } from "src/helpers/number";
 import parseTxHash from "src/helpers/parseTxHash";
 import { useApprovedWithdrawalsStore } from "src/store/approved-withdraws";
-import { toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
 import {
     ContentWrapper,
     HistoryTable,
@@ -28,6 +26,7 @@ import {
     TableWrapper,
     TabsWrapper,
 } from "./History.style";
+import { ethers } from "ethers";
 
 const linkClick: MouseEventHandler = (e) => {
     e.stopPropagation();
@@ -134,13 +133,12 @@ const History = ({ depositSelected }: Props) => {
                                         return null; // TODO: handle this properly
                                     }
 
-                                    const parseAmount = toFraction(
-                                        tokenDecimalsToResolution(tokenReponse.token.decimals)
-                                    );
-
                                     if (isDeposit(tx) && depositSelected) {
                                         const processed = tx.Deposit.status.includes("processed");
-                                        const parsedAmount = parseAmount(tx.Deposit.amount);
+                                        const formattedAmount = ethers.utils.formatUnits(
+                                            tx.Deposit.amount,
+                                            tokenReponse.token.decimals
+                                        );
 
                                         return (
                                             <TableRow key={tx.Deposit.origin_tx_hash} onClick={() => goToProgress(tx)}>
@@ -156,7 +154,7 @@ const History = ({ depositSelected }: Props) => {
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {`${parsedAmount} ${tokenReponse.token.eth_name}`}
+                                                        {`${formattedAmount} ${tokenReponse.token.eth_name}`}
                                                     </Text>
                                                 </TableData>
                                                 {!isMobile && (
@@ -215,7 +213,10 @@ const History = ({ depositSelected }: Props) => {
                                         );
                                     } else if (!isDeposit(tx) && !depositSelected) {
                                         const processed = tx.Withdraw.status.includes("processed");
-                                        const parsedAmount = parseAmount(tx.Withdraw.amount);
+                                        const formattedAmount = ethers.utils.formatUnits(
+                                            tx.Withdraw.amount,
+                                            tokenReponse.token.decimals
+                                        );
                                         const ethHash = getWithdrawEthHash(tx.Withdraw);
 
                                         return (
@@ -232,7 +233,7 @@ const History = ({ depositSelected }: Props) => {
                                                 </TableData>
                                                 <TableData>
                                                     <Text fontSize="10" fontWeight="light">
-                                                        {`${parsedAmount} ${tokenReponse.token.ccd_name}`}
+                                                        {`${formattedAmount} ${tokenReponse.token.ccd_name}`}
                                                     </Text>
                                                 </TableData>
                                                 {!isMobile && (

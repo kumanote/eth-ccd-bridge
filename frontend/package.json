@@ -32,7 +32,6 @@
         "react-dom": "18.1.0",
         "react-query": "^3.39.1",
         "styled-components": "^5.3.5",
-        "wallet-common-helpers": "https://github.com/Concordium/concordium-wallet-common-helpers.git#20d39879b1ec28e9f4a13e35b35326f92d7f0f62",
         "web3": "^1.7.3",
         "web3-react": "^5.0.5",
         "zustand": "^4.0.0-rc.1"
