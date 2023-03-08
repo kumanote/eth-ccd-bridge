@@ -109,7 +109,7 @@ export const TransferOverview: FC<PropsWithChildren<Props>> = ({
                         fontColor="TitleText"
                         fontLetterSpacing="0"
                     >
-                        Estimation of required fees:
+                        Transactions required:
                     </Text>
 
                     <div style={{ marginTop: 16 }} />

@@ -60,7 +60,9 @@ const ApprovaAllowanceLine: FC<ApprovaAllowanceLineProps> = ({ hasAllowance, tok
         [microCcdFee, ccdPrice, error]
     );
 
-    return <TransferOverviewLine title="Approve allowance:" details={details} completed={hasAllowance} />;
+    return (
+        <TransferOverviewLine title={`Add operator for ${token.ccd_name}`} details={details} completed={hasAllowance} />
+    );
 };
 
 type WithdrawLineProps = {
@@ -109,7 +111,7 @@ const WithdrawLine: FC<WithdrawLineProps> = ({
         [microCcdFee, ccdPrice, error]
     );
 
-    return <TransferOverviewLine title="Approve allowance:" details={details} />;
+    return <TransferOverviewLine title={`Withdraw ${token.ccd_name}`} details={details} />;
 };
 
 type ApproveWithdrawLineProps = {
@@ -135,7 +137,7 @@ const ApproveWithdrawLine: FC<ApproveWithdrawLineProps> = ({ token }) => {
         [fee, ethPrice, error]
     );
 
-    return <TransferOverviewLine isEth title="Approve withdraw:" details={details} />;
+    return <TransferOverviewLine isEth title={`Approve withdraw ${token.eth_name}`} details={details} />;
 };
 
 const WithdrawOverview: NextPage = () => {
@@ -273,8 +275,8 @@ const WithdrawOverview: NextPage = () => {
             <br />
             <ApproveWithdrawLine token={token} />
             <Text fontFamily="Roboto" fontSize="9" fontWeight="light" fontColor="DarkGrey" fontLetterSpacing="0">
-                *Price is based on transaction history and can vary depending on network activity at the time of the
-                transaction
+                *Price is based on history of transactions of similar types and can vary depending on network activity
+                at the time of the transaction
             </Text>
             <div style={{ marginTop: 12 }} />
         </TransferOverview>
