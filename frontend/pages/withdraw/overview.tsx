@@ -144,7 +144,7 @@ const WithdrawOverview: NextPage = () => {
     const { ccdContext } = useCCDWallet();
     const { context } = useEthWallet();
     const { prefetch, replace } = useRouter();
-    const { data, isLoading } = useNextMerkleRoot();
+    const { data: nextMerkleRoot, isLoading } = useNextMerkleRoot();
     const { amount, token } = useTransactionFlowStore();
     const { status, setInfo, setError } = useTransferOverviewStatusState();
     const [needsAllowance, setNeedsAllowance] = useState<boolean | undefined>();
@@ -161,16 +161,16 @@ const WithdrawOverview: NextPage = () => {
     } = useCCDContract(ccdContext.account, !!ccdContext.account);
 
     const timeToComplete = useMemo(() => {
-        if (!isLoading && !data) {
+        if (!isLoading && !nextMerkleRoot) {
             return "Could not get an estimated processing time";
         }
-        if (data !== undefined) {
-            const nextMerkleRootRelativeTime = moment(data * 1000).fromNow();
+        if (nextMerkleRoot !== undefined) {
+            const nextMerkleRootRelativeTime = moment(nextMerkleRoot * 1000).fromNow();
             return `Withdrawal expected to be ready for approval ${nextMerkleRootRelativeTime}`;
         }
 
         return "Getting estimated withdrawal processing time";
-    }, [data, isLoading]);
+    }, [nextMerkleRoot, isLoading]);
 
     useEffect(() => {
         if (token !== undefined) {
