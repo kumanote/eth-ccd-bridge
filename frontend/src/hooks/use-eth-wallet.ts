@@ -1,8 +1,9 @@
+import network from "@config/network";
 import { ethers } from "ethers";
 import { useEffect } from "react";
 import { useWeb3Context } from "web3-react";
 
-const CHAIN_ID = Number(process.env.NEXT_PUBLIC_ETHEREUM_PROVIDER_NETWORK);
+const CHAIN_ID = Number(network.eth.id);
 
 // local storage wording:
 // Cornucopia_${chainName}_state

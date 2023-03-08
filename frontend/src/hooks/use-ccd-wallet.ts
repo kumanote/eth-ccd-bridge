@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
+import network from "@config/network";
 
 // local storage wording:
 // Cornucopia_${chainName}_state
@@ -26,7 +27,7 @@ const useCCDWallet = () => {
                     .then((provider) =>
                         provider
                             .getJsonRpcClient()
-                            .getCryptographicParameters(process.env.NEXT_PUBLIC_NETWORK_GENESIS_BLOCK_HASH.toString())
+                            .getCryptographicParameters(network.ccd.genesisHash)
                             .then((result) => {
                                 if (result === undefined || result?.value === null) {
                                     deleteCCDWallet();
@@ -51,46 +52,6 @@ const useCCDWallet = () => {
         deleteCCDWallet();
         delete localStorage["CCP_CCD_connected"];
     };
-
-    // useEffect(() => {
-    //     // Listen for relevant events from the wallet.
-    //     detectCcdProvider()
-    //         .then((provider) => {
-    //             provider.on('chainChanged', (genesisBlock) => {
-    //                 // Check if the user is connected to testnet by checking if the genesisBlock is the testnet one.
-    //                 // Throw a warning and disconnect if wrong chain. We only want to
-    //                 // allow users to interact with our testnet smart contracts.
-    //                 if (genesisBlock !== process.env.NEXT_PUBLIC_TESTNET_GENESIS_BLOCK_HASH) {
-    //                     window.alert('Check if your Concordium browser wallet is connected to testnet!');
-    //                     disconnectCCD();
-    //                 }
-    //             });
-
-    //             provider.on('accountChanged', (accAddress) => { setCCDWallet(accAddress); });
-    //             provider.on('accountDisconnected', disconnectCCD);
-    //         })
-    //         .catch(() => disconnectCCD());
-
-    //     return () => {
-    //         detectCcdProvider().then(provider => provider.removeAllListeners())
-    //     }
-    // }, []);
-
-    // useEffect(() => {
-    //     if (localStorage["CCP_CCD_connecting"] === true) return;
-
-    //     if (localStorage["CCP_CCD_connected"]) {
-    //         try {
-    //             localStorage["CCP_CCD_connecting"] = true;
-    //             connectCCD().then(() => {
-    //                 delete localStorage["CCP_CCD_connecting"];
-    //             });
-    //         } catch (error) {
-    //             delete localStorage["CCP_CCD_connected"];
-    //             delete localStorage["CCP_CCD_connecting"];
-    //         }
-    //     }
-    // }, [ccdContext]);
 
     return {
         ccdContext,

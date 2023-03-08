@@ -8,6 +8,10 @@ const root = ensureValue(
     process.env.NEXT_PUBLIC_ROOT_MANAGER_ADDRESS,
     "Expected NEXT_PUBLIC_ROOT_MANAGER_ADDRESS to be provided as an environment variable"
 );
+const erc20Vault = ensureValue(
+    process.env.NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS,
+    "Expected NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS to be provided as an environment variable"
+);
 
 const bridgeManagerIndex = ensureValue(
     process.env.NEXT_PUBLIC_BRIDGE_MANAGER_INDEX,
@@ -19,12 +23,14 @@ const addresses = {
      * ETH Address (Ethereum)
      */
     eth,
-
     /**
      * Root Manager Address (Ethereum)
      */
     root,
-
+    /**
+     * ERC20 vault ID, used to get the address of the ERC20 vault (Ethereum)
+     */
+    erc20Vault,
     /**
      * Bridge Manager Address (Concordium)
      */

@@ -158,7 +158,14 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 throw new Error("Token expected to be available");
             }
 
-            return ethers.utils.formatUnits(amount, token.decimals);
+            const formatted = ethers.utils.formatUnits(amount, token.decimals);
+            const [whole, fraction] = formatted.split(".");
+
+            if (fraction === "0") {
+                return whole;
+            }
+
+            return formatted;
         },
         [token]
     );
@@ -266,6 +273,8 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         setAmount(tokenAmount);
         push({ pathname: nextRoute });
     }, [isValidAmount, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
+
+    console.log(inputAmount);
 
     return (
         <PageWrapper>

@@ -1,4 +1,5 @@
 import { createConcordiumClient, Ratio } from "@concordium/web-sdk";
+import ccdNode from "@config/ccd-node";
 
 function collapseRatio({ numerator, denominator }: Ratio): bigint {
     const quotient = numerator / denominator;
@@ -9,10 +10,7 @@ function collapseRatio({ numerator, denominator }: Ratio): bigint {
 }
 
 export const getEnergyToMicroCcdRate = async (): Promise<bigint> => {
-    const client = createConcordiumClient(
-        process.env.NEXT_PUBLIC_CCD_NODE_URL,
-        Number(process.env.NEXT_PUBLIC_CCD_NODE_PORT)
-    );
+    const client = createConcordiumClient(ccdNode.url, Number(ccdNode.port));
     const { euroPerEnergy, microGTUPerEuro } = await client.getBlockChainParameters();
 
     const denominator = euroPerEnergy.denominator * microGTUPerEuro.denominator;
