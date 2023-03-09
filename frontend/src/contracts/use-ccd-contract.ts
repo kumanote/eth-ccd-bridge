@@ -14,6 +14,7 @@ import { Buffer } from "buffer/index";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
+import { collapseRatio } from "src/helpers/ccd-node";
 
 type EstimateResponse = {
     /** exact amount of energy used for contract invocation. */
@@ -22,8 +23,10 @@ type EstimateResponse = {
     conservative: bigint;
 };
 
-const getConservativeEstimate = (estimate: bigint) => (estimate * 150n) / 100n;
+/** Adds 10% to estimate given to function. */
+const getConservativeEstimate = (estimate: bigint) => collapseRatio({ numerator: estimate * 110n, denominator: 100n });
 
+/** Strips the hex string identifier from the hex string, returning just the hex value. */
 const stripHexId = (hexString: string) => hexString.replace("0x", "");
 
 /** Polling interval for CCD transactions in MS */
