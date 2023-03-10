@@ -6,8 +6,8 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["std"]
-std = ["concordium-std/std", "concordium-cis2/std", "wee_alloc"]
+default = ["std", "wee_alloc"]
+std = ["concordium-std/std", "concordium-cis2/std"]
 wee_alloc = ["concordium-std/wee_alloc"]
 
 [dependencies]
