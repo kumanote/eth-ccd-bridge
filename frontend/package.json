@@ -12,8 +12,8 @@
     },
     "dependencies": {
         "@concordium/browser-wallet-api-helpers": "^2.0.0",
-        "@concordium/node-sdk": "^6.1.0",
-        "@concordium/web-sdk": "^3.1.0",
+        "@concordium/node-sdk": "^6.2.0",
+        "@concordium/web-sdk": "^3.3.1",
         "@svgr/webpack": "^6.2.1",
         "@thi.ng/leb128": "^3.0.0",
         "@types/bs58check": "^2.1.0",
@@ -32,7 +32,6 @@
         "react-dom": "18.1.0",
         "react-query": "^3.39.1",
         "styled-components": "^5.3.5",
-        "wallet-common-helpers": "https://github.com/Concordium/concordium-wallet-common-helpers.git#20d39879b1ec28e9f4a13e35b35326f92d7f0f62",
         "web3": "^1.7.3",
         "web3-react": "^5.0.5",
         "zustand": "^4.0.0-rc.1"

@@ -5,6 +5,7 @@ import bs58check from "bs58check";
 import addresses from "@config/addresses";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import useCCDWallet from "@hooks/use-ccd-wallet";
+import transactionCosts from "@config/transaction-cost";
 
 const useRootManagerContract = () => {
     const { context } = useEthWallet();
@@ -21,12 +22,8 @@ const useRootManagerContract = () => {
         if (!context.library || !enabled) return "";
 
         const signer = context.library.getSigner();
-
         const rootContract = new ethers.Contract(addresses.root, ROOTMANAGER_ABI, signer);
-
-        const typeToVault = await rootContract.typeToVault(
-            process.env.NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS //address to generate the predicate address
-        );
+        const typeToVault = await rootContract.typeToVault(addresses.erc20Vault);
 
         return typeToVault;
     };
@@ -101,7 +98,6 @@ const useRootManagerContract = () => {
         if (type === "deposit") {
             const stringAmount = amount.toString();
             if (selectedToken.eth_address === addresses.eth) {
-                console.log("depositEtherFor estimate", ccdUser);
                 gasLimit = await rootContract.estimateGas.depositEtherFor(context.account, ccdUser, {
                     value: stringAmount,
                 });
@@ -145,8 +141,26 @@ const useRootManagerContract = () => {
             throw new Error("Error getting gas price");
         }
 
-        const estimatedGasPrice = gasPrice.mul(gasLimit);
-        return Number(ethers.utils.formatEther(estimatedGasPrice)).toFixed(7);
+        const estimate = gasPrice.mul(gasLimit);
+        return ethers.utils.formatEther(estimate);
+    };
+
+    const getDefaultWithdrawEstimate = async (token: Components.Schemas.TokenMapItem) => {
+        if (!context.library) return;
+        const provider = context.library.getSigner();
+
+        const gasLimit =
+            token.eth_address === addresses.eth
+                ? transactionCosts.eth.rootManagerWithdrawEthGas
+                : transactionCosts.eth.rootManagerWithdrawErc20Gas;
+
+        const gasPrice: BigNumber | undefined = await provider?.getGasPrice();
+        if (!gasPrice) {
+            throw new Error("Error getting gas price");
+        }
+
+        const withdrawEstimate = gasPrice.mul(gasLimit);
+        return ethers.utils.formatEther(withdrawEstimate);
     };
 
     return {
@@ -156,6 +170,7 @@ const useRootManagerContract = () => {
         depositEtherFor,
         withdraw,
         estimateGas,
+        getDefaultWithdrawEstimate,
     };
 };
 

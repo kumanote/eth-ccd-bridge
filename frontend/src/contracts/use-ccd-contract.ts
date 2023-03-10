@@ -14,7 +14,19 @@ import { Buffer } from "buffer/index";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
+import { collapseRatio } from "src/helpers/ccd-node";
 
+type EstimateResponse = {
+    /** exact amount of energy used for contract invocation. */
+    exact: bigint;
+    /** conservative amount of energy used for contract invocation. Good for passing from estimate invocation to actual invocation. */
+    conservative: bigint;
+};
+
+/** Adds 10% to estimate given to function. */
+const getConservativeEstimate = (estimate: bigint) => collapseRatio({ numerator: estimate * 110n, denominator: 100n });
+
+/** Strips the hex string identifier from the hex string, returning just the hex value. */
 const stripHexId = (hexString: string) => hexString.replace("0x", "");
 
 /** Polling interval for CCD transactions in MS */
@@ -22,8 +34,8 @@ const POLLING_INTEVAL = 5000;
 
 const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
     const bridgeManagerContract = {
-        index: BigInt(addresses.bridgeManagerIndex),
-        subindex: BigInt(0),
+        index: BigInt(addresses.bridgeManager.index),
+        subindex: BigInt(addresses.bridgeManager.subindex),
     } as ContractAddress;
 
     const approve = async (token: Components.Schemas.TokenMapItem, maxContractExecutionEnergy?: bigint) => {
@@ -53,8 +65,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 operator: {
                     Contract: [
                         {
-                            index: +addresses.bridgeManagerIndex,
-                            subindex: 0,
+                            index: +addresses.bridgeManager.index,
+                            subindex: +addresses.bridgeManager.subindex,
                         },
                     ],
                 },
@@ -205,8 +217,8 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
                 address: {
                     Contract: [
                         {
-                            index: +addresses.bridgeManagerIndex,
-                            subindex: 0,
+                            index: +addresses.bridgeManager.index,
+                            subindex: +addresses.bridgeManager.subindex,
                         },
                     ],
                 },
@@ -248,7 +260,11 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         return res.lastFinalizedBlock;
     };
 
-    const estimateWithdraw = async (amount: bigint, token?: Components.Schemas.TokenMapItem, ethAddress?: string) => {
+    const estimateWithdraw = async (
+        amount: bigint,
+        token?: Components.Schemas.TokenMapItem,
+        ethAddress?: string
+    ): Promise<EstimateResponse | undefined> => {
         if (!enabled || !ccdAccount) return;
 
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract.subindex === undefined) {
@@ -299,10 +315,10 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             return undefined;
         }
 
-        return (res.usedEnergy * 150n) / 100n; // Overestimate by 50%
+        return { exact: res.usedEnergy, conservative: getConservativeEstimate(res.usedEnergy) };
     };
 
-    const estimateApprove = async (token?: Components.Schemas.TokenMapItem): Promise<bigint | undefined> => {
+    const estimateApprove = async (token?: Components.Schemas.TokenMapItem): Promise<EstimateResponse | undefined> => {
         if (!enabled || !ccdAccount) return;
 
         if (token?.ccd_contract?.index === undefined || token?.ccd_contract?.subindex === undefined) {
@@ -351,7 +367,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
             return undefined;
         }
 
-        return (res.usedEnergy * 150n) / 100n; // Overestimate by 50%
+        return { exact: res.usedEnergy, conservative: getConservativeEstimate(res.usedEnergy) };
     };
 
     return {

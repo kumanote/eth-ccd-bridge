@@ -10,7 +10,6 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTokens } from "src/api-query/queries";
-import { toResolution, toFraction } from "wallet-common-helpers/lib/utils/numberStringHelpers";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";
@@ -44,7 +43,8 @@ import {
     StyledWalletDisplay,
     SwapLink,
 } from "./Transfer.style";
-import { formatAmount, tokenDecimalsToResolution } from "src/helpers/number";
+import { formatAmount } from "src/helpers/number";
+import { ethers } from "ethers";
 
 interface ChainType {
     id: number;
@@ -148,7 +148,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 throw new Error("Token expected to be available");
             }
 
-            return toResolution(tokenDecimalsToResolution(token.decimals))(decimalAmount);
+            return ethers.utils.parseUnits(decimalAmount, token.decimals).toBigInt();
         },
         [token]
     );
@@ -158,7 +158,14 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 throw new Error("Token expected to be available");
             }
 
-            return toFraction(tokenDecimalsToResolution(token.decimals))(amount);
+            const formatted = ethers.utils.formatUnits(amount, token.decimals);
+            const [whole, fraction] = formatted.split(".");
+
+            if (fraction === "0") {
+                return whole;
+            }
+
+            return formatted;
         },
         [token]
     );

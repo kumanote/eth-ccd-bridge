@@ -3,15 +3,17 @@ import { GetState, SetState } from "zustand";
 import { AxiosClient as Client } from "../../api-query/__generated__/AxiosClient";
 import { AxiosClientActions, AxiosClientStore } from "../../types/store/axios-client";
 import openApiDefinition from "../../api-query/__generated__/openapi.json";
+import urls from "@config/urls";
 
 const axiosClientActions = (set: SetState<AxiosClientStore>, get: GetState<AxiosClientStore>): AxiosClientActions => ({
     getClient: async () => {
         let client = get().client;
         if (!client) {
             const api = new OpenAPIClientAxios({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 definition: openApiDefinition as any,
                 axiosConfigDefaults: {
-                    baseURL: process.env.NEXT_PUBLIC_API_URL,
+                    baseURL: urls.bridgeApi,
                 },
             });
             client = await api.init<Client>();
