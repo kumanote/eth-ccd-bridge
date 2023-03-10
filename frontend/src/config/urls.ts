@@ -1,14 +1,14 @@
-import { ensureValue } from "src/helpers/basic";
+import { ensureDefined } from "src/helpers/basic";
 
-const ccdExplorer = ensureValue(
+const ccdExplorer = ensureDefined(
     process.env.NEXT_PUBLIC_CCDSCAN_URL,
     "Expected NEXT_PUBLIC_CCDSCAN_URL to be provided as an environment variable"
 );
-const ethExplorer = ensureValue(
+const ethExplorer = ensureDefined(
     process.env.NEXT_PUBLIC_ETHEREUM_EXPLORER_URL,
     "Expected NEXT_PUBLIC_ETHEREUM_EXPLORER_URL to be provided as an environment variable"
 );
-const bridgeApi = ensureValue(
+const bridgeApi = ensureDefined(
     process.env.NEXT_PUBLIC_API_URL,
     "Expected NEXT_PUBLIC_ROOT_MANAGER_ADDRESS to be provided as an environment variable"
 );

@@ -1,19 +1,19 @@
-import { ensureValue } from "src/helpers/basic";
+import { ensureDefined } from "src/helpers/basic";
 
-const eth = ensureValue(
+const eth = ensureDefined(
     process.env.NEXT_PUBLIC_ETH_TOKEN_ADDRESS,
     "Expected NEXT_PUBLIC_ETH_TOKEN_ADDRESS to be provided as an environment variable"
 );
-const root = ensureValue(
+const root = ensureDefined(
     process.env.NEXT_PUBLIC_ROOT_MANAGER_ADDRESS,
     "Expected NEXT_PUBLIC_ROOT_MANAGER_ADDRESS to be provided as an environment variable"
 );
-const erc20Vault = ensureValue(
+const erc20Vault = ensureDefined(
     process.env.NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS,
     "Expected NEXT_PUBLIC_GENERATE_ERC20_PREDICATE_ADDRESS to be provided as an environment variable"
 );
 
-const bridgeManagerIndex = ensureValue(
+const bridgeManagerIndex = ensureDefined(
     process.env.NEXT_PUBLIC_BRIDGE_MANAGER_INDEX,
     "Expected NEXT_PUBLIC_BRIDGE_MANAGER_INDEX to be provided as an environment variable"
 );

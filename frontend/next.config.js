@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const withTM = require("next-transpile-modules")(["@concordium/browser-wallet-api-helpers"]); // pass the modules you would like to see transpiled
 
 const nextConfig = {
@@ -28,6 +29,9 @@ const nextConfig = {
         }
 
         return config;
+    },
+    eslint: {
+        dirs: ["."],
     },
     experimental: {
         outputStandalone: true,

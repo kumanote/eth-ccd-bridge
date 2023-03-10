@@ -35,7 +35,7 @@ const useEthWallet = () => {
     };
 
     const changeChain = async (chainId: string) => {
-        await (window as any)?.ethereum?.request({
+        await window?.ethereum?.request?.({
             method: "wallet_switchEthereumChain",
             params: [{ chainId: chainId }], // chainId must be in hexadecimal numbers
         });

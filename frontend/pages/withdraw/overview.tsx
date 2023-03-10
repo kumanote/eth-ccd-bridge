@@ -13,7 +13,7 @@ import { useNextMerkleRoot } from "src/api-query/queries";
 import moment from "moment";
 import { useTransactionFlowStore } from "src/store/transaction-flow";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { ensureValue, noOp } from "src/helpers/basic";
+import { ensureDefined, noOp } from "src/helpers/basic";
 import { useAsyncMemo } from "@hooks/utils";
 import { getPrice } from "src/helpers/price-usd";
 import { getEnergyToMicroCcdRate } from "src/helpers/ccd-node";
@@ -125,7 +125,7 @@ const ApproveWithdrawLine: FC<ApproveWithdrawLineProps> = ({ token }) => {
     const fee = useAsyncMemo(
         async () => {
             const g = await getDefaultWithdrawEstimate(token);
-            const gas = ensureValue(g, "Could not estimate gas");
+            const gas = ensureDefined(g, "Could not estimate gas");
             return parseFloat(gas);
         },
         () => setError("Could not estimate gas"),

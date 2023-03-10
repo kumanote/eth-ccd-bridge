@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { noOp } from "src/helpers/basic";
 
 export const useAsyncMemo = <ReturnType>(
     getResult: () => Promise<ReturnType>,
-    handleError: (e: any) => void = () => {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handleError: (e: any) => void = noOp,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     deps?: any[]
 ): ReturnType | undefined => {
     const [result, setResult] = useState<ReturnType>();
