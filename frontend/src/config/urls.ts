@@ -10,7 +10,7 @@ const ethExplorer = ensureDefined(
 );
 const bridgeApi = ensureDefined(
     process.env.NEXT_PUBLIC_API_URL,
-    "Expected NEXT_PUBLIC_ROOT_MANAGER_ADDRESS to be provided as an environment variable"
+    "Expected NEXT_PUBLIC_API_URL to be provided as an environment variable"
 );
 
 const urls = {

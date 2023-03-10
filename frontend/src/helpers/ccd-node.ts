@@ -14,7 +14,7 @@ export function collapseRatio({ numerator, denominator }: Ratio): bigint {
 }
 
 /**
- * Gets energy to microCCD rate from the concordium node throught the grpc v2 interface configured through environment variables
+ * Gets energy to microCCD rate from the concordium node through the grpc v2 interface configured through environment variables
  */
 export const getEnergyToMicroCcdRate = async (): Promise<bigint> => {
     const client = createConcordiumClient(ccdNode.url, Number(ccdNode.port));

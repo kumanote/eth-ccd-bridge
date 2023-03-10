@@ -274,8 +274,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         push({ pathname: nextRoute });
     }, [isValidAmount, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
 
-    console.log(inputAmount);
-
     return (
         <PageWrapper>
             <StyledContainer>

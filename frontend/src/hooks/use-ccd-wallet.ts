@@ -12,51 +12,35 @@ const useCCDWallet = () => {
     const deleteCCDWallet = useCCDWalletStore((state) => state.deleteCCDWallet);
 
     const connectCCD = useCallback(async () => {
-        detectConcordiumProvider()
-            .then((provider) => provider.connect())
-            .then((accAddress) => {
-                if (accAddress) {
-                    setCCDWallet(accAddress);
-                }
-            })
-            .then(() => {
-                detectConcordiumProvider()
-                    // Check if the user is connected to testnet by checking if the testnet genesisBlock exists.
-                    // Throw a warning and disconnect if not. We only want to
-                    // allow users to interact with our testnet smart contracts.
-                    .then((provider) =>
-                        provider
-                            .getJsonRpcClient()
-                            .getCryptographicParameters(network.ccd.genesisHash)
-                            .then((result) => {
-                                if (result === undefined || result?.value === null) {
-                                    deleteCCDWallet();
-                                    console.error(
-                                        "Your JsonRpcClient in the Concordium browser wallet cannot connect. Check if your Concordium browser wallet is connected to testnet!"
-                                    );
-                                }
-                            })
-                    );
-            })
-            .catch(() => {
-                console.error(
-                    "Your JsonRpcClient in the Concordium browser wallet cannot connect. Check if your Concordium browser wallet is connected to testnet!"
-                );
-                deleteCCDWallet();
-            });
+        const provider = await detectConcordiumProvider();
 
-        localStorage["CCP_CCD_connected"] = true;
+        try {
+            const account = await provider.connect();
+            if (account) {
+                setCCDWallet(account);
+            }
+        } catch {
+            deleteCCDWallet();
+        }
+
+        const client = provider.getJsonRpcClient();
+
+        try {
+            const result = await client.getCryptographicParameters(network.ccd.genesisHash);
+
+            if (result === undefined || result?.value === null) {
+                throw new Error("Genesis block not found");
+            }
+        } catch {
+            // Wrong network.. We should issue a network request change, but it's currently not possible in the wallet API.
+            deleteCCDWallet();
+        }
     }, [deleteCCDWallet, setCCDWallet]);
-
-    const disconnectCCD = async () => {
-        deleteCCDWallet();
-        delete localStorage["CCP_CCD_connected"];
-    };
 
     return {
         ccdContext,
         connectCCD,
-        disconnectCCD,
+        disconnectCCD: deleteCCDWallet,
     };
 };
 

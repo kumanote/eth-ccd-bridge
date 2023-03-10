@@ -98,7 +98,6 @@ const useRootManagerContract = () => {
         if (type === "deposit") {
             const stringAmount = amount.toString();
             if (selectedToken.eth_address === addresses.eth) {
-                console.log("depositEtherFor estimate", ccdUser);
                 gasLimit = await rootContract.estimateGas.depositEtherFor(context.account, ccdUser, {
                     value: stringAmount,
                 });
@@ -142,8 +141,8 @@ const useRootManagerContract = () => {
             throw new Error("Error getting gas price");
         }
 
-        const estimatedGasPrice = gasPrice.mul(gasLimit);
-        return ethers.utils.formatEther(estimatedGasPrice);
+        const estimate = gasPrice.mul(gasLimit);
+        return ethers.utils.formatEther(estimate);
     };
 
     const getDefaultWithdrawEstimate = async (token: Components.Schemas.TokenMapItem) => {
@@ -160,8 +159,8 @@ const useRootManagerContract = () => {
             throw new Error("Error getting gas price");
         }
 
-        const estimatedGasPrice = gasPrice.mul(gasLimit);
-        return ethers.utils.formatEther(estimatedGasPrice);
+        const withdrawEstimate = gasPrice.mul(gasLimit);
+        return ethers.utils.formatEther(withdrawEstimate);
     };
 
     return {

@@ -26,14 +26,19 @@ const LINE_DETAILS_FALLBACK = "...";
 
 const withdrawEnergyDefault = BigInt(transactionCosts.ccd.bridgeManagerWithdrawEnergy);
 
-type ApprovaAllowanceLineProps = {
+type ApprovalAllowanceLineProps = {
     hasAllowance: boolean;
     token: Components.Schemas.TokenMapItem;
     ccdPrice: number;
     microCcdPerEnergy: bigint | undefined;
 };
 
-const ApprovaAllowanceLine: FC<ApprovaAllowanceLineProps> = ({ hasAllowance, token, ccdPrice, microCcdPerEnergy }) => {
+const ApprovalAllowanceLine: FC<ApprovalAllowanceLineProps> = ({
+    hasAllowance,
+    token,
+    ccdPrice,
+    microCcdPerEnergy,
+}) => {
     const { ccdContext } = useCCDWallet();
     const { estimateApprove } = useCCDContract(ccdContext.account, !!ccdContext.account);
     const [error, setError] = useState<string>();
@@ -257,7 +262,7 @@ const WithdrawOverview: NextPage = () => {
             timeToComplete={timeToComplete}
             status={status}
         >
-            <ApprovaAllowanceLine
+            <ApprovalAllowanceLine
                 hasAllowance={needsAllowance === false}
                 token={token}
                 ccdPrice={ccdPrice}
