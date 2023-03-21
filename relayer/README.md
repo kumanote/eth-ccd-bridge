@@ -328,7 +328,7 @@ keep track of transactions, and to get Merkle proofs.
 
 The following configuration options are available
 
-- Maximum loggin level, options are `off`, `error`, `warn`, `info`, `debug`, `trace`.
+- Maximum logging level, options are `off`, `error`, `warn`, `info`, `debug`, `trace`.
 
       --log-level <LOG_LEVEL>
           Maximum log level. [env: ETHCCD_API_LOG_LEVEL=] [default: info]
@@ -368,5 +368,92 @@ The following configuration options are available
       --assets-dir <ASSETS_DIR>
           Serve files from the supplied directory under /assets. [env: ETHCCD_API_SERVE_ASSETS=]
 
-## Serving static files
+# Notes for operation of the relayer
 
+The relayer is built to be able to recover from most outages, such as the node
+being disconnected, the Ethereum API being temporarily unavailable, and the
+database being temporarily unavailable. However there are some scenarios which
+could make it stop relaying deposits and withdrawals.
+
+## Use of the Concordium account
+
+The relayer assumes that it has the sole ownership of the account it uses to
+send Concordium transactions. Incoming transfers to the account are fine, but no
+other entity should be sending transactions from it. If it does the relayer will
+fail. If such operations are needed then the following steps should be followed
+- stop the relayer
+- the necessary transactions should be sent and **waited until they are
+  finalized**
+- the relayer is restarted
+
+## Incorrect configuration of the Concordium account.
+
+If the configuration of the relayer is incorrect, in particular if the maximum
+allowed energy is insufficient for sending state updates to Concordium chain
+then the transactions will fail and will not be retried. There is currently no
+automatic recovery from such a situation. See the section below on
+coarse-grained recovery.
+
+## Price fluctuations on the Ethereum chain
+
+The relayer is configured with `MAX_GAS_PRICE` which states the maximum gas
+price allowed for the Ethereum transaction (setting the Merkle root). The
+relayer will try to get the current price from the configured API when it needs
+to send the transaction. If the transaction is not committed in time (configured
+via `ESCALATION_INTERVAL`) then the relayer will increase the gas price by 5%
+and send it again. This process continues until either the transaction is
+successful, or the maximum gas price is hit. At that point the relayer will wait
+and just check on the existing transactions it has sent. This can potentially
+lead to infinite waiting if the gas price does not drop. One possible recovery
+in such a situation is to restart the relayer with increased maximum gas price.
+Another option is to wait until the price drops and restart the relayer.
+
+## Coarse grained recovery
+
+The state of the relayer is stored in a Postgres database. This includes
+checkpoints, sent transactions, their status, and events emitted from the
+contracts. The database is used by the api server to support the frontend.
+
+The relayer is designed so that it is **safe** to delete the entire database
+restart the server. However it is not free. Some transactions might be sent to
+the chains that will not have an effect (e.g., a set merkle root transaction
+that only approves withdrawals that have already been approved). The cost should
+be minimal however.
+
+Note that during this recovery the api server will have stale information, and
+so the frontend will not be fully operational.
+
+In light of this the recommended setup for operation is to do a daily database
+backup. If there are irrecoverable issues then a backup from the last day, or
+previous if detection of issues took longer than a day, should be restored and
+the service restarted. Catching up for one day is going to take a few minutes
+only.
+
+## Security assumptions
+
+The following are critical for security of the relayer
+
+- the connection to the Concordium node. The relayer by nature has to trust the
+  data that is coming from the node. So the node itself is trusted, and the link
+  between the node and the relayer as well. Consequently, if the relayer is
+  served incorrect data it will act on it. The relayer supports TLS when
+  connecting to the node if the two are connected via public internet. This
+  features should be used.
+- the data from the Ethereum API provider is trusted. No secret data is
+  transmitted on this connection, however the relayer acts on the information it
+  receives on this connection. This means it can be compromised if this
+  connection is compromised. For this reason the relayer only supports HTTPS.
+- the keys for approving withdrawals for the Ethereum chain. Compromise of these
+  keys allows for draining of the bridge, i.e., taking ownership of all the
+  tokens locked on the Ethereum side of the bridge.
+- the keys for the account on Concordium that is allowed to issue deposits. If
+  keys of this account are compromised then the bridge can be drained, but also
+  arbitrary amounts of bridged tokens can be minted.
+
+
+In particular the Postgres database is not critical for security in the sense
+that manipulating the database cannot be used to drain the bridge. However
+manipulating the database can affect the relayer, by making it skip events, and
+it can affect the api server by making it serve incorrect transaction histories,
+incorrect Merkle proofs, etc. This will lead to failed transactions on the
+respective chains.

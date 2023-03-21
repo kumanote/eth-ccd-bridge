@@ -338,15 +338,11 @@ enum WalletTx {
             (status = 500, description = "Internal server error.", body = inline(String), content_type = "application/json"),
         )
     )]
+#[tracing::instrument(level = "debug", skip(db))]
 async fn wallet_transactions(
     axum::extract::Path(wallet): axum::extract::Path<ethers::types::Address>,
     axum::extract::State(db): axum::extract::State<Database>,
 ) -> Result<axum::Json<Vec<WalletTx>>, Error> {
-    let span = tracing::debug_span!(
-        "wallet_transactions",
-        time = chrono::Utc::now().timestamp_millis()
-    );
-    let _enter = span.enter();
     let client = db.pool.get().await?;
     let (statement, param) = &db.prepared_statements.get_withdrawals_for_address;
     let statement = client
@@ -454,15 +450,11 @@ struct EthMerkleProofResponse {
         (status = 500, description = "Internal server error.", body = inline(String), content_type = "application/json"),
     )
 )]
+#[tracing::instrument(level = "debug", skip(db))]
 async fn get_merkle_proof(
     axum::extract::Path((tx_hash, event_id)): axum::extract::Path<(TransactionHash, u64)>,
     axum::extract::State(db): axum::extract::State<Database>,
 ) -> Result<axum::Json<EthMerkleProofResponse>, Error> {
-    let span = tracing::debug_span!(
-        "get_merkle_proof",
-        time = chrono::Utc::now().timestamp_millis()
-    );
-    let _enter = span.enter();
     let client = db.pool.get().await?;
     let (statement, params) = &db.prepared_statements.get_event;
     let statement = client.prepare_typed_cached(statement, &params[..]).await?;
@@ -555,6 +547,7 @@ pub async fn expected_merkle_root_update(
     )]
 /// Queried by Ethereum transaction hash, respond with the status of the
 /// corresponding transaction on Concordium that handles the deposit.
+#[tracing::instrument(level = "debug", skip(db))]
 pub async fn watch_deposit(
     path: Result<axum::extract::Path<ethers::types::H256>, axum::extract::rejection::PathRejection>,
     axum::extract::State(db): axum::extract::State<Database>,
@@ -565,11 +558,6 @@ pub async fn watch_deposit(
             return Err(Error::InvalidRequest(e.to_string()));
         }
     };
-    let span = tracing::debug_span!(
-        "watch_deposit",
-        time = chrono::Utc::now().timestamp_millis()
-    );
-    let _enter = span.enter();
     let client = db.pool.get().await?;
     let (statement, params) = &db.prepared_statements.concordium_tx_status;
     let statement = client
@@ -625,6 +613,7 @@ struct WatchWithdrawalResponse {
             (status = 500, description = "Internal server error.", body = inline(String), content_type = "application/json")
         )
     )]
+#[tracing::instrument(level = "debug", skip(db))]
 async fn watch_withdraw(
     path: Result<axum::extract::Path<TransactionHash>, axum::extract::rejection::PathRejection>,
     axum::extract::State(db): axum::extract::State<Database>,
@@ -635,11 +624,6 @@ async fn watch_withdraw(
             return Err(Error::InvalidRequest(e.to_string()));
         }
     };
-    let span = tracing::debug_span!(
-        "watch_withdraw",
-        time = chrono::Utc::now().timestamp_millis()
-    );
-    let _enter = span.enter();
     let client = db.pool.get().await?;
     let (statement, params) = &db.prepared_statements.withdrawal_status;
     let statement = client
@@ -706,6 +690,7 @@ fn contract_address() -> utoipa::openapi::Object {
             (status = 500, description = "Internal server error.", body = inline(String), content_type = "application/json")
         )
     )]
+#[tracing::instrument(level = "debug", skip(db))]
 async fn list_tokens(
     axum::extract::State(db): axum::extract::State<Database>,
 ) -> Result<axum::Json<Vec<TokenMapItem>>, Error> {
