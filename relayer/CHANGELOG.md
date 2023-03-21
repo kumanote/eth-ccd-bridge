@@ -1,3 +1,8 @@
+## Unreleased changes
+
+## 1.0.2
+
+- Fix logging in the api server. The logging has correct contexts for requests now.
 
 ## 1.0.1
 
