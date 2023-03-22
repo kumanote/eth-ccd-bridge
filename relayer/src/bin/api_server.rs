@@ -694,8 +694,6 @@ fn contract_address() -> utoipa::openapi::Object {
 async fn list_tokens(
     axum::extract::State(db): axum::extract::State<Database>,
 ) -> Result<axum::Json<Vec<TokenMapItem>>, Error> {
-    let span = tracing::debug_span!("list_tokens", time = chrono::Utc::now().timestamp_millis());
-    let _enter = span.enter();
     let client = db.pool.get().await?;
     let statement = &db.prepared_statements.list_tokens;
     let statement = client.prepare_typed_cached(statement, &[]).await?;
