@@ -4,6 +4,7 @@ import ConcordiumLogo from "../../../../public/icons/Concordium_Logo.svg";
 import CornucopiaLogo from "../../../../public/images/Cornucopia-black@3x.png";
 import Image from "next/image";
 import Text from "@components/atoms/text/text";
+import packageJson from "package.json";
 
 interface Props {
     logo: "ccp" | "ccd";
@@ -21,7 +22,7 @@ const Logo: React.FC<Props> = ({ logo, isTablet }) => {
                     fontColor="Black"
                     fontLetterSpacing="0"
                 >
-                    Powered by
+                    v{packageJson.version} | Powered by
                 </Text>
             )}
             <Image
