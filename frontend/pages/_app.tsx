@@ -39,13 +39,7 @@ moment.updateLocale("en", {
 
 const queryClient = new QueryClient();
 
-function MyApp({ Component, pageProps }: AppProps) {
-    const isTablet = useMediaQuery("(max-width: 1050px)"); // res at which cornucopia logo might touch the modal
-    const isMobile = useMediaQuery("(max-width: 540px)"); // res at which the design looks a little weird
-    const {
-        asPath,
-        query: { tx },
-    } = useRouter() as QueryRouter<{ tx?: string }>;
+function UseCcdInit() {
     const { init } = useCCDWallet();
     const { setCCDNetworkMatch, setCCDWallet, deleteCCDWallet } = useCCDWalletStore();
 
@@ -68,6 +62,17 @@ function MyApp({ Component, pageProps }: AppProps) {
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+}
+
+function MyApp({ Component, pageProps }: AppProps) {
+    const isTablet = useMediaQuery("(max-width: 1050px)"); // res at which cornucopia logo might touch the modal
+    const isMobile = useMediaQuery("(max-width: 540px)"); // res at which the design looks a little weird
+    const {
+        asPath,
+        query: { tx },
+    } = useRouter() as QueryRouter<{ tx?: string }>;
+
+    UseCcdInit();
 
     /**
      * Shows whether user is on withdraw progress page, in which case we should NOT watch for pending withdrawals

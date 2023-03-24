@@ -1,6 +1,6 @@
 import network from "@config/network";
 import { ethers } from "ethers";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useWeb3Context } from "web3-react";
 
 const CHAIN_ID = Number(network.eth.id);
@@ -15,14 +15,18 @@ const useEthWallet = () => {
         if (!context.active) {
             context.unsetConnector();
         }
-        context.setConnector("MetaMask");
+        if (context.networkId !== CHAIN_ID) {
+            await changeChain(`0x${CHAIN_ID.toString(16)}`);
+        }
+
+        await context.setConnector("MetaMask");
         localStorage["CCP_ETH_connected"] = true;
     };
 
-    const disconnect = async () => {
+    const disconnect = useCallback(async () => {
         context.unsetConnector();
         delete localStorage["CCP_ETH_connected"];
-    };
+    }, [context]);
 
     const getNativeBalance = async () => {
         if (!context.account) throw new Error("You must be signed in with wallet");
@@ -41,23 +45,11 @@ const useEthWallet = () => {
         });
     };
 
-    // ASK CHAIN CHANGE IF CHAIN IS WRONG
     useEffect(() => {
         if (context.networkId !== CHAIN_ID) {
-            changeChain(`0x${CHAIN_ID.toString(16)}`);
+            disconnect();
         }
-    }, [context.networkId]);
-
-    // CONNECTING TO ACCOUNT
-    useEffect(() => {
-        if (!context.active && !context.error) {
-            // loading
-        } else if (context.error) {
-            //error
-        } else {
-            // success
-        }
-    }, [context]);
+    }, [context.networkId, disconnect]);
 
     return {
         context,
