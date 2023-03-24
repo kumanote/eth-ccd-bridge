@@ -2,6 +2,7 @@ import Layout from "@components/organisms/layout/Layout";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import connectors from "@config/connectors";
 import network from "@config/network";
+import useCCDWallet from "@hooks/use-ccd-wallet";
 import useMediaQuery from "@hooks/use-media-query";
 import moment from "moment";
 import type { AppProps } from "next/app";
@@ -45,26 +46,26 @@ function MyApp({ Component, pageProps }: AppProps) {
         asPath,
         query: { tx },
     } = useRouter() as QueryRouter<{ tx?: string }>;
-    const { setCCDWallet, deleteCCDWallet } = useCCDWalletStore();
+    const { init } = useCCDWallet();
+    const { setCCDNetworkMatch, setCCDWallet, deleteCCDWallet } = useCCDWalletStore();
 
     useEffect(() => {
-        detectConcordiumProvider()
-            .then((p) => {
-                p.on("accountChanged", setCCDWallet);
-                p.on("accountDisconnected", deleteCCDWallet);
-                p.on("chainChanged", (c) => {
-                    if (c !== network.ccd.genesisHash) {
-                        deleteCCDWallet();
-                    }
-                });
-
-                return p.getMostRecentlySelectedAccount();
-            })
-            .then((a) => {
-                if (a !== undefined) {
-                    setCCDWallet(a);
+        detectConcordiumProvider().then((p) => {
+            p.on("accountChanged", setCCDWallet);
+            p.on("accountDisconnected", () => deleteCCDWallet());
+            p.on("chainChanged", (c) => {
+                // There is a bug in the browser wallet not properly triggering this
+                // if no account in the wallet is connected to the dapp for the network selected.
+                // As such, this is unreliable for now.
+                if (c === network.ccd.genesisHash) {
+                    setCCDNetworkMatch();
+                } else {
+                    deleteCCDWallet(true);
                 }
             });
+
+            return init();
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

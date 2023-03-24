@@ -51,7 +51,6 @@ interface ChainType {
     name: string;
     icon: string;
     account?: string | null;
-    disconnect: (() => void) | null;
     connect: (() => void) | null;
 }
 
@@ -121,8 +120,8 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         isReady,
         prefetch,
     } = useRouter() as QueryRouter<TransferRouteQuery>;
-    const { context, connect, disconnect } = useEthWallet();
-    const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
+    const { context, connect } = useEthWallet();
+    const { ccdContext, connectCCD } = useCCDWallet();
     const { push } = useRouter();
     const { isTablet } = useContext(appContext);
     const { token, amount = 0n, setToken, setAmount, clear: clearTransactionFlow } = useTransactionFlowStore();
@@ -207,7 +206,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             account: context.account,
             icon: EthereumIcon.src,
             connect,
-            disconnect,
         },
         {
             id: 2,
@@ -215,7 +213,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             icon: ConcordiumIcon.src,
             account: ccdContext.account,
             connect: connectCCD,
-            disconnect: disconnectCCD,
         },
     ];
 
