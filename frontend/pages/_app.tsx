@@ -40,19 +40,22 @@ moment.updateLocale("en", {
 const queryClient = new QueryClient();
 
 function UseCcdInit() {
-    const { init } = useCCDWallet();
+    const { init, refreshMostRecentlySelectedAccount } = useCCDWallet();
     const { setCCDNetworkMatch, setCCDWallet, deleteCCDWallet } = useCCDWalletStore();
 
     useEffect(() => {
         detectConcordiumProvider().then((p) => {
             p.on("accountChanged", setCCDWallet);
-            p.on("accountDisconnected", () => deleteCCDWallet());
+            p.on("accountDisconnected", () => {
+                deleteCCDWallet();
+            });
             p.on("chainChanged", (c) => {
                 // There is a bug in the browser wallet not properly triggering this
                 // if no account in the wallet is connected to the dapp for the network selected.
                 // As such, this is unreliable for now.
                 if (c === network.ccd.genesisHash) {
                     setCCDNetworkMatch();
+                    refreshMostRecentlySelectedAccount();
                 } else {
                     deleteCCDWallet(true);
                 }
@@ -78,7 +81,6 @@ function MyApp({ Component, pageProps }: AppProps) {
      * Shows whether user is on withdraw progress page, in which case we should NOT watch for pending withdrawals
      */
     const isWithdrawProgressRoute = useMemo(() => tx !== undefined && asPath === routes.withdraw.tx(tx), [asPath, tx]);
-
     const appContextValue: AppContext = useMemo(() => ({ isTablet, isMobile }), [isTablet, isMobile]);
 
     return (

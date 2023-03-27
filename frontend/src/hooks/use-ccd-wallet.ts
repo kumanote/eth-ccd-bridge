@@ -18,6 +18,7 @@ const useCCDWallet = () => {
         const provider = await detectConcordiumProvider();
         const client = provider.getJsonRpcClient();
 
+        // TODO: wallet API for browser wallet v1.0 will have an entry point `getSelectedChain`, which does this.
         try {
             const result = await client.getCryptographicParameters(network.ccd.genesisHash);
 
@@ -31,20 +32,25 @@ const useCCDWallet = () => {
         }
     }, []);
 
-    const init = useCallback(async () => {
+    const refreshMostRecentlySelectedAccount = useCallback(async () => {
         const provider = await detectConcordiumProvider();
         const account = await provider.getMostRecentlySelectedAccount();
-        const networkMatch = await matchesExpectedNetwork();
 
         if (account) {
             setCCDWallet(account);
         }
+    }, [setCCDWallet]);
+
+    const init = useCallback(async () => {
+        refreshMostRecentlySelectedAccount();
+
+        const networkMatch = await matchesExpectedNetwork();
         if (networkMatch) {
             setCCDNetworkMatch();
         } else {
             deleteCCDWallet(true);
         }
-    }, [matchesExpectedNetwork, deleteCCDWallet, setCCDNetworkMatch, setCCDWallet]);
+    }, [refreshMostRecentlySelectedAccount, matchesExpectedNetwork, setCCDNetworkMatch, deleteCCDWallet]);
 
     const connectCCD = useCallback(async () => {
         const provider = await detectConcordiumProvider();
@@ -77,6 +83,7 @@ const useCCDWallet = () => {
         connectCCD,
         init,
         disconnectCCD: deleteCCDWallet,
+        refreshMostRecentlySelectedAccount,
     };
 };
 
