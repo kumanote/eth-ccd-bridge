@@ -21,6 +21,8 @@ const useEthWallet = () => {
         if (context.networkId !== CHAIN_ID) {
             await changeChain(`0x${CHAIN_ID.toString(16)}`);
         }
+
+        context.unsetConnector();
         if (!context.active) {
             await context.setConnector("MetaMask");
         }
