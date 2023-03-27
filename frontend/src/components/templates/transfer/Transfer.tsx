@@ -45,6 +45,8 @@ import {
 } from "./Transfer.style";
 import { formatAmount } from "src/helpers/number";
 import { ethers } from "ethers";
+import network from "@config/network";
+import { CCD_MAINNET_GENESIS, CCD_TESTNET_GENESIS } from "src/constants/network";
 
 interface ChainType {
     id: number;
@@ -199,6 +201,20 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         return toTokenDecimalAmount(tokenBalance);
     }, [tokenBalance, token, toTokenDecimalAmount]);
 
+    const connectCcdHandleNetwork = () => {
+        if (ccdContext.networkMatch) {
+            connectCCD();
+        } else {
+            if (network.ccd.genesisHash === CCD_MAINNET_GENESIS) {
+                window.alert('Please connect to the "Concordium Mainnet" network in your Concordium wallet');
+            } else if (network.ccd.genesisHash === CCD_TESTNET_GENESIS) {
+                window.alert('Please connect to the "Concordium Testnet" network in your Concordium wallet');
+            } else {
+                window.alert("Please connect to the correct network in your Concordium wallet");
+            }
+        }
+    };
+
     const chains: ChainType[] = [
         {
             id: 1,
@@ -212,7 +228,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             name: "Concordium",
             icon: ConcordiumIcon.src,
             account: ccdContext.account,
-            connect: connectCCD,
+            connect: connectCcdHandleNetwork,
         },
     ];
 

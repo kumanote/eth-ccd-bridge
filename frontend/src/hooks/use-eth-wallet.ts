@@ -17,21 +17,14 @@ const useEthWallet = () => {
     const context = useWeb3Context();
     const provider = useAsyncMemo(detectEthereumProvider, noOp, []);
 
-    const connect = useCallback(
-        async (initial = false) => {
-            if (context.networkId !== CHAIN_ID) {
-                if (initial) {
-                    return;
-                }
-                await changeChain(`0x${CHAIN_ID.toString(16)}`);
-            }
-
-            if (!context.active) {
-                await context.setConnector("MetaMask");
-            }
-        },
-        [context]
-    );
+    const connect = useCallback(async () => {
+        if (context.networkId !== CHAIN_ID) {
+            await changeChain(`0x${CHAIN_ID.toString(16)}`);
+        }
+        if (!context.active) {
+            await context.setConnector("MetaMask");
+        }
+    }, [context]);
 
     const disconnect = useCallback(async () => {
         context.unsetConnector();
@@ -66,7 +59,6 @@ const useEthWallet = () => {
     }, [context]);
 
     useEffect(() => {
-        console.log(provider);
         if (provider !== undefined) {
             init();
         }

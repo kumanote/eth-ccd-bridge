@@ -5,14 +5,14 @@ const useCCDWalletStore = create<CCDWalletStore>((set, get) => ({
     account: undefined,
     isActive: false,
     networkMatch: true,
-    setCCDWallet: (address: string) => {
+    setWallet: (address: string) => {
         set({ account: address, isActive: true });
         localStorage["CCP_CCD_connected"] = true;
     },
-    setCCDNetworkMatch: () => {
+    setNetworkMatch: () => {
         set({ networkMatch: true });
     },
-    deleteCCDWallet: (incorrectNetwork?: boolean) => {
+    deleteWallet: (incorrectNetwork?: boolean) => {
         set({
             account: undefined,
             isActive: false,

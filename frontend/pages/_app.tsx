@@ -39,29 +39,28 @@ moment.updateLocale("en", {
 
 const queryClient = new QueryClient();
 
-function UseCcdInit() {
-    const { init, refreshMostRecentlySelectedAccount } = useCCDWallet();
-    const { setCCDNetworkMatch, setCCDWallet, deleteCCDWallet } = useCCDWalletStore();
+function UseConcordiumEvents() {
+    const { refreshMostRecentlySelectedAccount } = useCCDWallet();
+    const { setNetworkMatch, setWallet, deleteWallet } = useCCDWalletStore();
 
+    // Sets up event handlers once, globally.
     useEffect(() => {
         detectConcordiumProvider().then((p) => {
-            p.on("accountChanged", setCCDWallet);
+            p.on("accountChanged", setWallet);
             p.on("accountDisconnected", () => {
-                deleteCCDWallet();
+                deleteWallet();
             });
             p.on("chainChanged", (c) => {
                 // There is a bug in the browser wallet not properly triggering this
                 // if no account in the wallet is connected to the dapp for the network selected.
                 // As such, this is unreliable for now.
                 if (c === network.ccd.genesisHash) {
-                    setCCDNetworkMatch();
+                    setNetworkMatch();
                     refreshMostRecentlySelectedAccount();
                 } else {
-                    deleteCCDWallet(true);
+                    deleteWallet(true);
                 }
             });
-
-            return init();
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -75,7 +74,7 @@ function MyApp({ Component, pageProps }: AppProps) {
         query: { tx },
     } = useRouter() as QueryRouter<{ tx?: string }>;
 
-    UseCcdInit();
+    UseConcordiumEvents();
 
     /**
      * Shows whether user is on withdraw progress page, in which case we should NOT watch for pending withdrawals

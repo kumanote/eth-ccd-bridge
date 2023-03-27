@@ -5,9 +5,9 @@ interface CCDWalletState {
 }
 
 interface CCDWalletActions {
-    setCCDWallet: (ccdWallet: string) => void;
-    setCCDNetworkMatch: () => void;
-    deleteCCDWallet: (incorrectNetwork?: boolean) => void;
+    setWallet: (ccdWallet: string) => void;
+    setNetworkMatch: () => void;
+    deleteWallet: (incorrectNetwork?: boolean) => void;
 }
 
 export type CCDWalletStore = CCDWalletState & CCDWalletActions;

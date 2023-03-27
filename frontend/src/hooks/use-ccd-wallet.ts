@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
 import network from "@config/network";
@@ -12,7 +12,7 @@ const useCCDWallet = () => {
         networkMatch: state.networkMatch,
         isActive: state.isActive,
     }));
-    const { setCCDNetworkMatch, deleteCCDWallet, setCCDWallet } = useCCDWalletStore();
+    const { deleteWallet, setWallet, setNetworkMatch } = useCCDWalletStore();
 
     const matchesExpectedNetwork = useCallback(async () => {
         const provider = await detectConcordiumProvider();
@@ -37,20 +37,30 @@ const useCCDWallet = () => {
         const account = await provider.getMostRecentlySelectedAccount();
 
         if (account) {
-            setCCDWallet(account);
+            setWallet(account);
         }
-    }, [setCCDWallet]);
+    }, [setWallet]);
 
     const init = useCallback(async () => {
+        if (ccdContext.isActive) {
+            return;
+        }
+
         refreshMostRecentlySelectedAccount();
 
         const networkMatch = await matchesExpectedNetwork();
         if (networkMatch) {
-            setCCDNetworkMatch();
+            setNetworkMatch();
         } else {
-            deleteCCDWallet(true);
+            deleteWallet();
         }
-    }, [refreshMostRecentlySelectedAccount, matchesExpectedNetwork, setCCDNetworkMatch, deleteCCDWallet]);
+    }, [
+        ccdContext.isActive,
+        refreshMostRecentlySelectedAccount,
+        matchesExpectedNetwork,
+        setNetworkMatch,
+        deleteWallet,
+    ]);
 
     const connectCCD = useCallback(async () => {
         const provider = await detectConcordiumProvider();
@@ -58,10 +68,10 @@ const useCCDWallet = () => {
         try {
             const account = await provider.connect();
             if (account) {
-                setCCDWallet(account);
+                setWallet(account);
             }
         } catch {
-            deleteCCDWallet();
+            deleteWallet();
         }
 
         const client = provider.getJsonRpcClient();
@@ -74,15 +84,18 @@ const useCCDWallet = () => {
             }
         } catch {
             // Wrong network.. We should issue a network request change, but it's currently not possible in the wallet API.
-            deleteCCDWallet(true);
+            deleteWallet(true);
         }
-    }, [deleteCCDWallet, setCCDWallet]);
+    }, [deleteWallet, setWallet]);
+
+    useEffect(() => {
+        detectConcordiumProvider().then(init);
+    }, [init]);
 
     return {
         ccdContext,
         connectCCD,
-        init,
-        disconnectCCD: deleteCCDWallet,
+        disconnectCCD: deleteWallet,
         refreshMostRecentlySelectedAccount,
     };
 };
