@@ -16,9 +16,18 @@ const useCCDWallet = () => {
 
     const matchesExpectedNetwork = useCallback(async () => {
         const provider = await detectConcordiumProvider();
-        const client = provider.getJsonRpcClient();
+
+        // TODO: remove any cast when concordium browser wallet version 1 has been released.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((provider as any).getSelectedChain !== undefined) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (provider as any).getSelectedChain() === network.ccd.genesisHash;
+        }
 
         // TODO: wallet API for browser wallet v1.0 will have an entry point `getSelectedChain`, which does this.
+        // When this version of the browser wallet is released, the remainder of this function can be safely removed.
+        const client = provider.getJsonRpcClient();
+
         try {
             const result = await client.getCryptographicParameters(network.ccd.genesisHash);
 
@@ -52,7 +61,7 @@ const useCCDWallet = () => {
         if (networkMatch) {
             setNetworkMatch();
         } else {
-            deleteWallet();
+            deleteWallet(true);
         }
     }, [
         ccdContext.isActive,
@@ -72,19 +81,6 @@ const useCCDWallet = () => {
             }
         } catch {
             deleteWallet();
-        }
-
-        const client = provider.getJsonRpcClient();
-
-        try {
-            const result = await client.getCryptographicParameters(network.ccd.genesisHash);
-
-            if (result === undefined || result?.value === null) {
-                throw new Error("Genesis block not found");
-            }
-        } catch {
-            // Wrong network.. We should issue a network request change, but it's currently not possible in the wallet API.
-            deleteWallet(true);
         }
     }, [deleteWallet, setWallet]);
 
