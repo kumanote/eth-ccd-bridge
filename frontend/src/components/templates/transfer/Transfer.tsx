@@ -43,7 +43,6 @@ import {
     StyledWalletDisplay,
     SwapLink,
 } from "./Transfer.style";
-import { formatAmount } from "src/helpers/number";
 import { ethers } from "ethers";
 
 interface ChainType {
@@ -120,6 +119,8 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         query: { reset = false },
         isReady,
         prefetch,
+        replace,
+        pathname,
     } = useRouter() as QueryRouter<TransferRouteQuery>;
     const { context, connect, disconnect } = useEthWallet();
     const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
@@ -247,6 +248,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     useEffect(() => {
         if (reset && isReady) {
             clearTransactionFlow();
+            replace(pathname);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reset, isReady]);
@@ -308,7 +310,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                         <Dropdown onClick={dropdownHandler}>
                             <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
                         </Dropdown>
-                        <Button variant="max" onClick={() => setInputAmount(tokenBalance?.toString() ?? "")}>
+                        <Button variant="max" onClick={() => setInputAmount(decimalTokenBalance ?? "")}>
                             <Text fontSize="10" fontWeight="light">
                                 Max
                             </Text>
@@ -351,7 +353,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                         />
                         {isLoggedIn && token && decimalTokenBalance && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
-                                Balance:&nbsp;{formatAmount(decimalTokenBalance)}
+                                Balance:&nbsp;{decimalTokenBalance}
                             </Text>
                         )}
                     </MaxGapRow>

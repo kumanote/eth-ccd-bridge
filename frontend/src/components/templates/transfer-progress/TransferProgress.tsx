@@ -23,7 +23,6 @@ import { useMemo, useState } from "react";
 import { QueryRouter } from "src/types/config";
 import isDeposit from "src/helpers/checkTransaction";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
-import { formatAmount } from "src/helpers/number";
 import { useWalletTransactions } from "src/api-query/queries";
 import { ethers } from "ethers";
 
@@ -216,8 +215,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
                                     </Text>
                                     <Text fontSize="16" fontColor="White" fontWeight="bold">
                                         <>
-                                            {formatAmount(decimalAmount)}{" "}
-                                            {isWithdraw ? token?.ccd_name : token?.eth_name}
+                                            {decimalAmount} {isWithdraw ? token?.ccd_name : token?.eth_name}
                                         </>
                                     </Text>
                                 </>
