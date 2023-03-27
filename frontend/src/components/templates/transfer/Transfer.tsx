@@ -199,6 +199,13 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
 
         return toTokenDecimalAmount(tokenBalance);
     }, [tokenBalance, token, toTokenDecimalAmount]);
+    const minTransferValue = useMemo(() => {
+        if (token?.decimals === undefined) {
+            return undefined;
+        }
+
+        return 1 / 10 ** token.decimals;
+    }, [token?.decimals]);
 
     const chains: ChainType[] = [
         {
@@ -337,6 +344,9 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             value={inputAmount}
                             onChange={(e) => setInputAmount(e.target.value)}
                             type="number"
+                            min={minTransferValue}
+                            max={decimalTokenBalance}
+                            step={minTransferValue}
                             valid={isValidAmount || !submitted}
                         />
                         {isLoggedIn && token && decimalTokenBalance && (
