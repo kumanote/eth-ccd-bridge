@@ -352,15 +352,13 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                     </div>
                 </Button>
             </StyledContainer>
-            {context?.account && (
-                <Link href={routes.history()} passHref legacyBehavior>
-                    <LinkWrapper>
-                        <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
-                            Transaction History
-                        </Text>
-                    </LinkWrapper>
-                </Link>
-            )}
+            <Link href={routes.history()} passHref legacyBehavior>
+                <LinkWrapper hidden={!context.account}>
+                    <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
+                        Transaction History
+                    </Text>
+                </LinkWrapper>
+            </Link>
         </PageWrapper>
     );
 };
