@@ -134,7 +134,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
 
             await props.onRequestApproval(setError, setInfo);
         } else {
-            push({ pathname: routes.deposit.path, query: { reset: true } });
+            push({ pathname: isWithdraw ? routes.withdraw.path : routes.deposit.path, query: { reset: true } });
             clearFlowStore();
         }
     };
