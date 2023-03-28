@@ -21,6 +21,7 @@ import transactionCosts from "@config/transaction-cost";
 import useRootManagerContract from "src/contracts/use-root-manager";
 import { renderEnergyFeeEstimate, renderGasFeeEstimate } from "src/helpers/fee";
 import Text from "src/components/atoms/text/text";
+import { useSubmittedWithdrawalsStore } from "src/store/submitted-transactions";
 
 const LINE_DETAILS_FALLBACK = "...";
 
@@ -155,6 +156,7 @@ const WithdrawOverview: NextPage = () => {
     const [needsAllowance, setNeedsAllowance] = useState<boolean | undefined>();
     const ccdPrice = useAsyncMemo(async () => getPrice("CCD"), noOp, []) ?? 0;
     const microCcdPerEnergy = useAsyncMemo(getEnergyToMicroCcdRate, noOp, []);
+    const { add: addSubmitted } = useSubmittedWithdrawalsStore();
 
     const {
         withdraw: ccdWithdraw,
@@ -248,6 +250,7 @@ const WithdrawOverview: NextPage = () => {
         try {
             setInfo("Waiting for transaction to finalize");
             await transactionFinalization(hash); // Wait for transaction finalization, as we do in the deposit flow.
+            addSubmitted(hash, amount, token);
 
             return routes.withdraw.tx(hash);
         } catch {

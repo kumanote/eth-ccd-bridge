@@ -44,6 +44,7 @@ import {
     SwapLink,
 } from "./Transfer.style";
 import { ethers } from "ethers";
+import { toFractionalAmount } from "src/helpers/number";
 
 interface ChainType {
     id: number;
@@ -159,14 +160,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 throw new Error("Token expected to be available");
             }
 
-            const formatted = ethers.utils.formatUnits(amount, token.decimals);
-            const [whole, fraction] = formatted.split(".");
-
-            if (fraction === "0") {
-                return whole;
-            }
-
-            return formatted;
+            return toFractionalAmount(amount, token.decimals);
         },
         [token]
     );

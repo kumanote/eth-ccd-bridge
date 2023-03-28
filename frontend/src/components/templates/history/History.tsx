@@ -25,26 +25,52 @@ import {
     TableWrapper,
     TabsWrapper,
 } from "./History.style";
-import { ethers } from "ethers";
 import { appContext } from "src/root/app-context";
+import { toFractionalAmount } from "src/helpers/number";
+import {
+    SubmittedTransaction,
+    useSubmittedDepositsStore,
+    useSubmittedWithdrawalsStore,
+} from "src/store/submitted-transactions";
 
 const linkClick: MouseEventHandler = (e) => {
     e.stopPropagation();
 };
 
+enum ProcessingStatus {
+    Submitted = "Submitted",
+    Pending = "Pending",
+    Processed = "Processed",
+}
+
+const isSubmittedTransaction = (
+    tx: Components.Schemas.WalletWithdrawTx | Components.Schemas.WalletDepositTx | SubmittedTransaction
+): tx is SubmittedTransaction => (tx as SubmittedTransaction).hash !== undefined;
+
 type DepositRowProps = {
-    tx: Components.Schemas.WalletDepositTx;
+    tx: Components.Schemas.WalletDepositTx | SubmittedTransaction;
     token: Components.Schemas.TokenMapItem;
     onRowClick(): void;
 };
 
 const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
     const { isMobile } = useContext(appContext);
-    const processed = tx.status.includes("processed");
-    const formattedAmount = ethers.utils.formatUnits(tx.amount, token.decimals);
+
+    const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
+    const { status, ethHash, ccdHash } = isSubmittedTransaction(tx)
+        ? {
+              status: ProcessingStatus.Submitted,
+              ccdHash: undefined,
+              ethHash: tx.hash,
+          }
+        : {
+              status: tx.status.includes("processed") ? ProcessingStatus.Processed : ProcessingStatus.Pending,
+              ccdHash: tx.tx_hash,
+              ethHash: tx.origin_tx_hash,
+          };
 
     return (
-        <TableRow key={tx.origin_tx_hash} onClick={onRowClick}>
+        <TableRow key={ethHash} onClick={onRowClick}>
             <TableData>
                 <Text fontSize="10" fontWeight="light">
                     Ethereum
@@ -64,14 +90,14 @@ const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
                 <>
                     <TableData>
                         <Text fontSize="10" fontWeight="light">
-                            {tx.origin_tx_hash ? (
+                            {ethHash ? (
                                 <a
-                                    href={ethTransactionUrl(tx.origin_tx_hash)}
+                                    href={ethTransactionUrl(ethHash)}
                                     target="_blank"
                                     rel="noreferrer"
                                     onClick={linkClick}
                                 >
-                                    {parseTxHash(tx.origin_tx_hash)}
+                                    {parseTxHash(ethHash)}
                                 </a>
                             ) : (
                                 "Processing..."
@@ -80,14 +106,14 @@ const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
                     </TableData>
                     <TableData>
                         <Text fontSize="10" fontWeight="light">
-                            {tx.tx_hash ? (
+                            {ccdHash ? (
                                 <a
-                                    href={ccdTransactionUrl(tx.tx_hash)}
+                                    href={ccdTransactionUrl(ccdHash)}
                                     target="_blank"
                                     rel="noreferrer"
                                     onClick={linkClick}
                                 >
-                                    {parseTxHash(tx.tx_hash)}
+                                    {parseTxHash(ccdHash)}
                                 </a>
                             ) : (
                                 "Processing..."
@@ -102,8 +128,12 @@ const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
                 </Text>
             </TableData>
             <TableData>
-                <Text fontSize="10" fontWeight="light" fontColor={processed ? "Green" : "Yellow"}>
-                    {processed ? "Processed" : "Pending"}
+                <Text
+                    fontSize="10"
+                    fontWeight="light"
+                    fontColor={status === ProcessingStatus.Processed ? "Green" : "Yellow"}
+                >
+                    {status}
                 </Text>
             </TableData>
         </TableRow>
@@ -111,7 +141,7 @@ const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
 };
 
 type WithdrawRowProps = {
-    tx: Components.Schemas.WalletWithdrawTx;
+    tx: Components.Schemas.WalletWithdrawTx | SubmittedTransaction;
     token: Components.Schemas.TokenMapItem;
     onRowClick(): void;
 };
@@ -120,12 +150,21 @@ const WithdrawRow: FC<WithdrawRowProps> = ({ tx, token, onRowClick }) => {
     const { isMobile } = useContext(appContext);
     const { transactions: approvedWithdrawals } = useApprovedWithdrawalsStore();
 
-    const processed = tx.status.includes("processed");
-    const formattedAmount = ethers.utils.formatUnits(tx.amount, token.decimals);
-    const ethHash = tx.tx_hash ?? approvedWithdrawals[tx.origin_tx_hash ?? ""];
+    const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
+    const { status, ethHash, ccdHash } = isSubmittedTransaction(tx)
+        ? {
+              status: ProcessingStatus.Submitted,
+              ethHash: undefined,
+              ccdHash: tx.hash,
+          }
+        : {
+              status: tx.status.includes("processed") ? ProcessingStatus.Processed : ProcessingStatus.Pending,
+              ethHash: tx.tx_hash ?? approvedWithdrawals[tx.origin_tx_hash ?? ""],
+              ccdHash: tx.origin_tx_hash,
+          };
 
     return (
-        <TableRow key={tx.origin_tx_hash} onClick={onRowClick}>
+        <TableRow key={ccdHash} onClick={onRowClick}>
             <TableData>
                 <Text fontSize="10" fontWeight="light">
                     Concordium
@@ -145,14 +184,14 @@ const WithdrawRow: FC<WithdrawRowProps> = ({ tx, token, onRowClick }) => {
                 <>
                     <TableData>
                         <Text fontSize="10" fontWeight="light">
-                            {tx.origin_tx_hash ? (
+                            {ccdHash ? (
                                 <a
-                                    href={ccdTransactionUrl(tx.origin_tx_hash)}
+                                    href={ccdTransactionUrl(ccdHash)}
                                     target="_blank"
                                     rel="noreferrer"
                                     onClick={linkClick}
                                 >
-                                    {parseTxHash(tx.origin_tx_hash)}
+                                    {parseTxHash(ccdHash)}
                                 </a>
                             ) : (
                                 "Processing..."
@@ -183,8 +222,12 @@ const WithdrawRow: FC<WithdrawRowProps> = ({ tx, token, onRowClick }) => {
                 </Text>
             </TableData>
             <TableData>
-                <Text fontSize="10" fontWeight="light" fontColor={processed ? "Green" : "Yellow"}>
-                    {processed ? "Processed" : "Pending"}
+                <Text
+                    fontSize="10"
+                    fontWeight="light"
+                    fontColor={status === ProcessingStatus.Processed ? "Green" : "Yellow"}
+                >
+                    {status}
                 </Text>
             </TableData>
         </TableRow>
@@ -204,19 +247,8 @@ const History = ({ depositSelected }: Props) => {
 
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const getTransactionToken = useGetTransactionToken();
-
-    const goToProgress = (transaction: Components.Schemas.WalletTx) => {
-        const txHash = isDeposit(transaction)
-            ? transaction.Deposit.origin_tx_hash
-            : transaction.Withdraw.origin_tx_hash;
-
-        if (!txHash) {
-            return;
-        }
-
-        const route = isDeposit(transaction) ? routes.deposit.tx(txHash) : routes.withdraw.tx(txHash);
-        push(route);
-    };
+    const { transactions: submittedDeposits } = useSubmittedDepositsStore();
+    const { transactions: submittedWithdrawals } = useSubmittedWithdrawalsStore();
 
     useEffect(() => {
         if (isMobile) {
@@ -245,6 +277,13 @@ const History = ({ depositSelected }: Props) => {
             </ContentWrapper>
         );
     }
+
+    const submittedTransactions = (depositSelected ? submittedDeposits : submittedWithdrawals).filter(
+        (st) =>
+            !history
+                .map((ht) => (isDeposit(ht) ? ht.Deposit.origin_tx_hash : ht.Withdraw.origin_tx_hash))
+                .some((hash) => hash === st.hash)
+    );
 
     return (
         <ContentWrapper>
@@ -281,6 +320,23 @@ const History = ({ depositSelected }: Props) => {
                                 </TableRow>
                             </thead>
                             <tbody>
+                                {submittedTransactions.map((st) =>
+                                    depositSelected ? (
+                                        <DepositRow
+                                            key={st.hash}
+                                            tx={st}
+                                            token={st.token}
+                                            onRowClick={() => push(routes.deposit.tx(st.hash))}
+                                        />
+                                    ) : (
+                                        <WithdrawRow
+                                            key={st.hash}
+                                            tx={st}
+                                            token={st.token}
+                                            onRowClick={() => push(routes.withdraw.tx(st.hash))}
+                                        />
+                                    )
+                                )}
                                 {history
                                     .slice()
                                     .sort((a, b) => {
@@ -302,7 +358,9 @@ const History = ({ depositSelected }: Props) => {
                                                     key={tx.Deposit.origin_tx_hash}
                                                     tx={tx.Deposit}
                                                     token={tokenResponse.token}
-                                                    onRowClick={() => goToProgress(tx)}
+                                                    onRowClick={() =>
+                                                        push(routes.deposit.tx(tx.Deposit.origin_tx_hash ?? ""))
+                                                    }
                                                 />
                                             );
                                         } else if (!isDeposit(tx) && !depositSelected) {
@@ -311,7 +369,9 @@ const History = ({ depositSelected }: Props) => {
                                                     key={tx.Withdraw.origin_tx_hash}
                                                     tx={tx.Withdraw}
                                                     token={tokenResponse.token}
-                                                    onRowClick={() => goToProgress(tx)}
+                                                    onRowClick={() =>
+                                                        push(routes.withdraw.tx(tx.Withdraw.origin_tx_hash ?? ""))
+                                                    }
                                                 />
                                             );
                                         }
