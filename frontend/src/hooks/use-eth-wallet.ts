@@ -22,9 +22,12 @@ const useEthWallet = () => {
             await changeChain(`0x${CHAIN_ID.toString(16)}`);
         }
 
-        context.unsetConnector();
         if (!context.active) {
-            await context.setConnector("MetaMask");
+            try {
+                await context.setConnector("MetaMask", { suppressAndThrowErrors: true });
+            } catch (e) {
+                context.unsetConnector();
+            }
         }
     }, [context]);
 
