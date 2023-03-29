@@ -11,8 +11,6 @@ const CHAIN_ID = Number(network.eth.id);
 // local storage wording:
 // Cornucopia_${chainName}_state
 
-// Ideally, this would include some initialization code to request information from MetaMask if a connection has already previously been approved by the user,
-// however in reality what happens is, that
 const useEthWallet = () => {
     const context = useWeb3Context();
     const provider = useAsyncMemo(detectEthereumProvider, noOp, []);
