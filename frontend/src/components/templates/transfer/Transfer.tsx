@@ -227,7 +227,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         },
     ];
 
-    const isValidAmount = useMemo(() => {
+    const inputValidation = useMemo(() => {
         if (token === undefined || tokenBalance === undefined) {
             return true;
         }
@@ -236,14 +236,15 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             const nAmount = toTokenIntegerAmount(inputAmount) ?? 0n;
 
             if (nAmount <= 0n) {
-                return false;
+                return "Value has to be above 0";
             }
 
-            return nAmount <= tokenBalance;
+            return nAmount <= tokenBalance || "Insufficient funds on account";
         } catch {
-            return false;
+            return "Invalid amount";
         }
     }, [inputAmount, tokenBalance, token, toTokenIntegerAmount]);
+    const showValidationError = inputValidation !== true && submitted;
 
     useEffect(() => {
         if (reset && isReady) {
@@ -269,7 +270,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const submitHandler = useCallback(() => {
         setSubmitted(true);
 
-        if (!isValidAmount || token === undefined) {
+        if (inputValidation !== true || token === undefined) {
             // Abort.
             return;
         }
@@ -281,7 +282,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
 
         setAmount(tokenAmount);
         push({ pathname: nextRoute });
-    }, [isValidAmount, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
+    }, [inputValidation, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
 
     return (
         <PageWrapper>
@@ -349,7 +350,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             min={minTransferValue}
                             max={decimalTokenBalance}
                             step={minTransferValue}
-                            valid={isValidAmount || !submitted}
+                            valid={!showValidationError}
                         />
                         {isLoggedIn && token && decimalTokenBalance && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
@@ -357,6 +358,11 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             </Text>
                         )}
                     </MaxGapRow>
+                    {showValidationError && (
+                        <Text fontSize="11" fontColor="Red" style={{ position: "absolute", bottom: "-20px" }}>
+                            {inputValidation}
+                        </Text>
+                    )}
                 </SecondRow>
                 <Button variant="primary" disabled={transferButtonDisabled} onClick={submitHandler}>
                     <div style={{ position: "relative" }}>
