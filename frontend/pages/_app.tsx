@@ -41,7 +41,7 @@ const queryClient = new QueryClient();
 
 function UseConcordiumEvents() {
     const { refreshMostRecentlySelectedAccount } = useCCDWallet();
-    const { setNetworkMatch, setWallet, deleteWallet } = useCCDWalletStore();
+    const { setWallet, deleteWallet } = useCCDWalletStore();
 
     // Sets up event handlers once, globally.
     useEffect(() => {
@@ -55,10 +55,9 @@ function UseConcordiumEvents() {
                 // if no account in the wallet is connected to the dapp for the network selected.
                 // As such, this is unreliable for now.
                 if (c === network.ccd.genesisHash) {
-                    setNetworkMatch();
                     refreshMostRecentlySelectedAccount();
                 } else {
-                    deleteWallet(true);
+                    deleteWallet();
                 }
             });
         });

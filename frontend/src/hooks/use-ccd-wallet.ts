@@ -3,42 +3,53 @@ import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers
 import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
 import network from "@config/network";
 
+/**
+ * Returns undefined if API not available
+ */
+const isNetworkMatchNew = async () => {
+    const provider = await detectConcordiumProvider();
+
+    // TODO: remove any cast when concordium browser wallet version 1 has been released.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((provider as any).getSelectedChain === undefined) {
+        return undefined;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const selectedChain = await (provider as any).getSelectedChain();
+    console.log(selectedChain);
+    return selectedChain === network.ccd.genesisHash;
+};
+
+const isNetworkMatchOld = async () => {
+    const provider = await detectConcordiumProvider();
+    const client = provider.getJsonRpcClient();
+
+    try {
+        const result = await client.getCryptographicParameters(network.ccd.genesisHash);
+
+        if (result === undefined || result?.value === null) {
+            throw new Error("Genesis block not found");
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
+};
+
 // local storage wording:
 // Cornucopia_${chainName}_state
 
 const useCCDWallet = () => {
     const ccdContext = useCCDWalletStore((state) => ({
         account: state.account,
-        networkMatch: state.networkMatch,
         isActive: state.isActive,
     }));
-    const { deleteWallet, setWallet, setNetworkMatch } = useCCDWalletStore();
+    const { deleteWallet, setWallet } = useCCDWalletStore();
 
     const matchesExpectedNetwork = useCallback(async () => {
-        const provider = await detectConcordiumProvider();
-
-        // TODO: remove any cast when concordium browser wallet version 1 has been released.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((provider as any).getSelectedChain !== undefined) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return (provider as any).getSelectedChain() === network.ccd.genesisHash;
-        }
-
-        // TODO: wallet API for browser wallet v1.0 will have an entry point `getSelectedChain`, which does this.
-        // When this version of the browser wallet is released, the remainder of this function can be safely removed.
-        const client = provider.getJsonRpcClient();
-
-        try {
-            const result = await client.getCryptographicParameters(network.ccd.genesisHash);
-
-            if (result === undefined || result?.value === null) {
-                throw new Error("Genesis block not found");
-            }
-
-            return true;
-        } catch {
-            return false;
-        }
+        return (await isNetworkMatchNew()) ?? (await isNetworkMatchOld());
     }, []);
 
     const refreshMostRecentlySelectedAccount = useCallback(async () => {
@@ -55,32 +66,42 @@ const useCCDWallet = () => {
             return;
         }
 
-        refreshMostRecentlySelectedAccount();
-
         const networkMatch = await matchesExpectedNetwork();
         if (networkMatch) {
-            setNetworkMatch();
+            refreshMostRecentlySelectedAccount();
         } else {
-            deleteWallet(true);
+            deleteWallet();
         }
-    }, [
-        ccdContext.isActive,
-        refreshMostRecentlySelectedAccount,
-        matchesExpectedNetwork,
-        setNetworkMatch,
-        deleteWallet,
-    ]);
+    }, [ccdContext.isActive, refreshMostRecentlySelectedAccount, matchesExpectedNetwork, deleteWallet]);
 
+    /**
+     * Throws if API not available
+     */
     const connectCCD = useCallback(async () => {
         const provider = await detectConcordiumProvider();
 
+        const networkMatch = await isNetworkMatchNew();
+        if (networkMatch === false) {
+            // New API found, wrong network in wallet
+            throw new Error("Wrong network in concordium wallet");
+        }
+
+        let account: string | undefined;
         try {
-            const account = await provider.connect();
-            if (account) {
-                setWallet(account);
-            }
+            account = await provider.connect();
         } catch {
+            // Connection request rejected in wallet
             deleteWallet();
+            return;
+        }
+
+        // New API not found, use fallback network match
+        if (networkMatch === undefined && !(await isNetworkMatchOld())) {
+            throw new Error("Genesis block for expected network not found");
+        }
+
+        if (account) {
+            setWallet(account);
         }
     }, [deleteWallet, setWallet]);
 
@@ -90,6 +111,9 @@ const useCCDWallet = () => {
 
     return {
         ccdContext,
+        /**
+         * Throws if API not available
+         */
         connectCCD,
         disconnectCCD: deleteWallet,
         refreshMostRecentlySelectedAccount,

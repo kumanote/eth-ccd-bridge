@@ -209,10 +209,10 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         return 1 / 10 ** token.decimals;
     }, [token?.decimals]);
 
-    const connectCcdHandleNetwork = () => {
-        if (ccdContext.networkMatch) {
-            connectCCD();
-        } else {
+    const connectCcdHandleNetwork = async () => {
+        try {
+            await connectCCD();
+        } catch {
             if (network.ccd.genesisHash === CCD_MAINNET_GENESIS) {
                 window.alert('Please connect to the "Concordium Mainnet" network in your Concordium wallet');
             } else if (network.ccd.genesisHash === CCD_TESTNET_GENESIS) {

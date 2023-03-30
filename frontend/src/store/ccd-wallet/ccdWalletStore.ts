@@ -1,22 +1,17 @@
 import { CCDWalletStore } from "src/types/store/ccd-wallet";
 import create from "zustand";
 
-const useCCDWalletStore = create<CCDWalletStore>((set, get) => ({
+const useCCDWalletStore = create<CCDWalletStore>((set) => ({
     account: undefined,
     isActive: false,
-    networkMatch: true,
     setWallet: (address: string) => {
         set({ account: address, isActive: true });
         localStorage["CCP_CCD_connected"] = true;
     },
-    setNetworkMatch: () => {
-        set({ networkMatch: true });
-    },
-    deleteWallet: (incorrectNetwork?: boolean) => {
+    deleteWallet: () => {
         set({
             account: undefined,
             isActive: false,
-            networkMatch: incorrectNetwork !== undefined ? !incorrectNetwork : get().networkMatch,
         });
         delete localStorage["CCP_CCD_connected"];
     },
