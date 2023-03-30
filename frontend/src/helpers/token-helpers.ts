@@ -83,7 +83,7 @@ export function getMetadataParameter(ids: string[]): Buffer {
  * Fetches token metadata from the given url
  */
 export async function getTokenMetadata({ url, hash: checksumHash }: MetadataUrl): Promise<TokenMetadata> {
-    const resp = await fetch(url, { headers: new Headers({ "Access-Control-Allow-Origin": "*" }), mode: "cors" });
+    const resp = await fetch(url);
     if (!resp.ok) {
         throw new Error(`Something went wrong, status: ${resp.status}`);
     }

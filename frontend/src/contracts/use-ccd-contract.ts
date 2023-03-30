@@ -382,7 +382,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
         const returnValue = await client.invokeContract({
             contract: { index, subindex },
-            method: `${cis2Bridgeable}.tokenMetadata`,
+            method: `${contractNames.cis2Bridgeable}.tokenMetadata`,
             parameter: getMetadataParameter([""]),
         });
 
@@ -401,6 +401,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
 
             return metadata;
         } catch (e) {
+            console.error(e);
             throw new Error(`Failed to get metadata urls on index: ${index}`);
         }
     };

@@ -118,12 +118,23 @@ type SelectTokenProps = {
 const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, isDeposit, selectedTokenBalance }) => {
     const [open, setOpen] = useState(false);
     const toggle = () => setOpen((o) => !o);
-    const fallbackIconUrl = isDeposit ? EthereumIcon.src : ConcordiumIcon.src;
+    const fallbackIconUrl: string = isDeposit ? EthereumIcon.src : ConcordiumIcon.src;
+    const selectedIconUrl = selected
+        ? tokens?.find(({ token }) => token.eth_address === selected?.eth_address)?.iconUrl ?? fallbackIconUrl
+        : undefined;
 
     return (
         <MaxGapRow>
-            <Text fontWeight="light" onClick={toggle}>
-                {selected ? (isDeposit ? selected?.eth_name : selected?.ccd_name) : "Select Token"}
+            {selected && selectedIconUrl && (
+                <Image
+                    src={selectedIconUrl}
+                    alt={`${isDeposit ? selected.eth_name : selected.ccd_name} icon`}
+                    height="23.13"
+                    width="23.13"
+                />
+            )}
+            <Text fontWeight="light" onClick={toggle} style={{ marginLeft: selectedIconUrl ? 7 : undefined }}>
+                {selected ? (isDeposit ? selected.eth_name : selected.ccd_name) : "Select Token"}
             </Text>
             <Dropdown onClick={toggle}>
                 <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
