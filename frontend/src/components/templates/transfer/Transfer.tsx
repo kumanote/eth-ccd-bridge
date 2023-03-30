@@ -123,6 +123,11 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
         ? tokens?.find(({ token }) => token.eth_address === selected?.eth_address)?.iconUrl ?? fallbackIconUrl
         : undefined;
 
+    const sortedTokens = tokens?.slice().sort(({ token: a }, { token: b }) => {
+        const isLess = isDeposit ? a.eth_name < b.eth_name : a.ccd_name < b.ccd_name;
+        return isLess ? -1 : 1;
+    });
+
     return (
         <MaxGapRow>
             {selected && selectedIconUrl && (
@@ -145,7 +150,7 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
                 </Text>
             </Button>
             <DropdownList open={open}>
-                {tokens?.map((tokenData) => {
+                {sortedTokens?.map((tokenData) => {
                     const {
                         token: { ccd_name, ccd_contract, eth_name, eth_address },
                         iconUrl,
