@@ -5,6 +5,8 @@ import useAxiosClient from "../store/axios-client";
 import useEthWallet from "@hooks/use-eth-wallet";
 import isDeposit from "src/helpers/checkTransaction";
 import { isDefined } from "src/helpers/basic";
+import useCCDContract from "src/contracts/use-ccd-contract";
+import { TokenMetadata } from "src/helpers/token-helpers";
 
 /**
  * Interval in ms for querying merkle proof
@@ -129,18 +131,39 @@ export const usePendingWithdrawals = () => {
     return { ...result, data };
 };
 
+export type TokenWithIcon = { token: Components.Schemas.TokenMapItem; iconUrl: string | undefined };
 export const useTokens = () => {
     const { getClient } = useAxiosClient();
+    const { tokenMetadataFor } = useCCDContract("", true); // Don't need an account for this..
 
-    return useQuery(
+    return useQuery<TokenWithIcon[] | undefined>(
         [CacheKeys.Tokens],
         async () => {
             const client = await getClient();
             if (!client) throw new Error("Client not initialized.");
-            const { data } = await client.list_tokens();
-            return data;
+
+            const { data: tokens } = await client.list_tokens();
+            const tokenPromises = tokens.map(async (token) => {
+                if (token.ccd_contract?.index === undefined || token.ccd_contract.subindex === undefined) {
+                    throw new Error("Expected token address to be defined");
+                }
+
+                let metadata: TokenMetadata | undefined;
+                try {
+                    metadata = await tokenMetadataFor(
+                        BigInt(token.ccd_contract.index),
+                        BigInt(token.ccd_contract.subindex)
+                    );
+                } catch {
+                    metadata = undefined;
+                }
+                const { url: iconUrl } = metadata?.thumbnail ?? metadata?.display ?? metadata?.artifact ?? {};
+                return { token, iconUrl };
+            });
+
+            return Promise.all(tokenPromises);
         },
-        { refetchOnWindowFocus: false }
+        { refetchOnWindowFocus: false, staleTime: Infinity }
     );
 };
 

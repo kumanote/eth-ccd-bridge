@@ -15,6 +15,12 @@ import { Components } from "src/api-query/__generated__/AxiosClient";
 import decodeOperatorOf from "src/helpers/decodeOperatorOf";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import { collapseRatio } from "src/helpers/ccd-node";
+import {
+    deserializeTokenMetadataReturnValue,
+    getMetadataParameter,
+    getTokenMetadata,
+    MetadataUrl,
+} from "src/helpers/token-helpers";
 
 type EstimateResponse = {
     /** exact amount of energy used for contract invocation. */
@@ -370,6 +376,35 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         return { exact: res.usedEnergy, conservative: getConservativeEstimate(res.usedEnergy) };
     };
 
+    const getTokenUrl = async (index: bigint, subindex: bigint): Promise<MetadataUrl> => {
+        const provider = await detectConcordiumProvider();
+        const client = provider.getJsonRpcClient();
+
+        const returnValue = await client.invokeContract({
+            contract: { index, subindex },
+            method: `${cis2Bridgeable}.tokenMetadata`,
+            parameter: getMetadataParameter([""]),
+        });
+
+        if (returnValue && returnValue.tag === "success" && returnValue.returnValue) {
+            return deserializeTokenMetadataReturnValue(returnValue.returnValue)[0];
+        } else {
+            // TODO: perhaps we need to make this error more precise
+            throw new Error("Token does not exist in this contract");
+        }
+    };
+
+    const tokenMetadataFor = async (index: bigint, subindex: bigint) => {
+        try {
+            const metadataUrl = await getTokenUrl(index, subindex);
+            const metadata = getTokenMetadata(metadataUrl);
+
+            return metadata;
+        } catch (e) {
+            throw new Error(`Failed to get metadata urls on index: ${index}`);
+        }
+    };
+
     return {
         approve,
         withdraw,
@@ -380,6 +415,7 @@ const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
         estimateWithdraw,
         estimateApprove,
         transactionFinalization,
+        tokenMetadataFor,
     };
 };
 
