@@ -60,9 +60,24 @@ type Props = {
      * Expects route of next page to be returned, or undefined if an error happened.
      */
     handleSubmit(): Promise<string | undefined>;
+    /**
+     * Status message to be shown on page. Can either be shown as an error, or plain information.
+     */
     status?: TransferOverviewStatus;
+    /**
+     * Title of the overview page
+     */
     title: string;
+    /**
+     * Estimated time required to complete flow in text.
+     */
     timeToComplete: string;
+    /**
+     * When true, will show a prompt when pressing cancel,
+     * warning the user that there is a pending signature request in the corresponding wallet.
+     */
+    pendingWalletSignature: boolean;
+    isDeposit?: boolean;
 };
 
 export const TransferOverview: FC<PropsWithChildren<Props>> = ({
@@ -70,6 +85,8 @@ export const TransferOverview: FC<PropsWithChildren<Props>> = ({
     status,
     title,
     timeToComplete,
+    pendingWalletSignature,
+    isDeposit = false,
     children,
 }) => {
     const [pendingSubmission, setPendingSubmission] = useState(false);
@@ -83,6 +100,18 @@ export const TransferOverview: FC<PropsWithChildren<Props>> = ({
         if (nextRoute) {
             push(nextRoute);
         }
+    };
+
+    const cancel = () => {
+        if (pendingWalletSignature) {
+            window.alert(
+                `There is a pending wallet signature in your ${
+                    isDeposit ? "Ethereum" : "Concordium"
+                } wallet, which can be safely rejected when cancelling this flow.`
+            );
+        }
+
+        back();
     };
 
     return (
@@ -119,7 +148,7 @@ export const TransferOverview: FC<PropsWithChildren<Props>> = ({
                     {status ? status.message : <>&nbsp;</>}
                 </Text>
                 <ButtonsContainer>
-                    <Button variant="secondary" onClick={back}>
+                    <Button variant="secondary" onClick={cancel}>
                         <div style={{ position: "relative" }}>
                             <Text fontSize="16" fontColor="Black" fontWeight="bold">
                                 Cancel
