@@ -43,88 +43,63 @@ enum ProcessingStatus {
     Processed = "Processed",
 }
 
-const isSubmittedTransaction = (
-    tx: Components.Schemas.WalletWithdrawTx | Components.Schemas.WalletDepositTx | SubmittedTransaction
-): tx is SubmittedTransaction => (tx as SubmittedTransaction).hash !== undefined;
-
-type DepositRowProps = {
-    tx: Components.Schemas.WalletDepositTx | SubmittedTransaction;
-    token: Components.Schemas.TokenMapItem;
+type HistoryRowProps = {
+    originChain: string;
+    destChain: string;
+    formattedAmount: string;
+    originLink?: JSX.Element;
+    destLink?: JSX.Element;
+    timestamp: number;
+    status: ProcessingStatus;
     onRowClick(): void;
 };
 
-const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
+const HistoryRow: FC<HistoryRowProps> = ({
+    originChain,
+    destChain,
+    formattedAmount,
+    originLink,
+    destLink,
+    timestamp,
+    status,
+    onRowClick,
+}) => {
     const { isMobile } = useContext(appContext);
 
-    const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
-    const { status, ethHash, ccdHash } = isSubmittedTransaction(tx)
-        ? {
-              status: ProcessingStatus.Submitted,
-              ccdHash: undefined,
-              ethHash: tx.hash,
-          }
-        : {
-              status: tx.status.includes("processed") ? ProcessingStatus.Processed : ProcessingStatus.Pending,
-              ccdHash: tx.tx_hash,
-              ethHash: tx.origin_tx_hash,
-          };
-
     return (
-        <TableRow key={ethHash} onClick={onRowClick}>
+        <TableRow onClick={onRowClick}>
             <TableData>
                 <Text fontSize="10" fontWeight="light">
-                    Ethereum
+                    {originChain}
                 </Text>
             </TableData>
             <TableData>
                 <Text fontSize="10" fontWeight="light">
-                    Concordium
+                    {destChain}
                 </Text>
             </TableData>
             <TableData>
                 <Text fontSize="10" fontWeight="light">
-                    {`${formattedAmount} ${token.eth_name}`}
+                    {formattedAmount}
                 </Text>
             </TableData>
             {!isMobile && (
                 <>
                     <TableData>
                         <Text fontSize="10" fontWeight="light">
-                            {ethHash ? (
-                                <a
-                                    href={ethTransactionUrl(ethHash)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={linkClick}
-                                >
-                                    {parseTxHash(ethHash)}
-                                </a>
-                            ) : (
-                                "Processing..."
-                            )}
+                            {originLink ?? "Processing..."}
                         </Text>
                     </TableData>
                     <TableData>
                         <Text fontSize="10" fontWeight="light">
-                            {ccdHash ? (
-                                <a
-                                    href={ccdTransactionUrl(ccdHash)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={linkClick}
-                                >
-                                    {parseTxHash(ccdHash)}
-                                </a>
-                            ) : (
-                                "Processing..."
-                            )}
+                            {destLink ?? "Processing..."}
                         </Text>
                     </TableData>
                 </>
             )}
             <TableData>
                 <Text fontSize="10" fontWeight="light">
-                    {moment(tx.timestamp * 1000).fromNow()}
+                    {moment(timestamp * 1000).fromNow()}
                 </Text>
             </TableData>
             <TableData>
@@ -140,6 +115,56 @@ const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
     );
 };
 
+const isSubmittedTransaction = (
+    tx: Components.Schemas.WalletWithdrawTx | Components.Schemas.WalletDepositTx | SubmittedTransaction
+): tx is SubmittedTransaction => (tx as SubmittedTransaction).hash !== undefined;
+
+type DepositRowProps = {
+    tx: Components.Schemas.WalletDepositTx | SubmittedTransaction;
+    token: Components.Schemas.TokenMapItem;
+    onRowClick(): void;
+};
+
+const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
+    const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
+    const { status, ethHash, ccdHash } = isSubmittedTransaction(tx)
+        ? {
+              status: ProcessingStatus.Submitted,
+              ccdHash: undefined,
+              ethHash: tx.hash,
+          }
+        : {
+              status: tx.status.includes("processed") ? ProcessingStatus.Processed : ProcessingStatus.Pending,
+              ccdHash: tx.tx_hash,
+              ethHash: tx.origin_tx_hash,
+          };
+
+    return (
+        <HistoryRow
+            originChain="Ethereum"
+            destChain="Concordium"
+            formattedAmount={`${formattedAmount} ${token.eth_name}`}
+            originLink={
+                ethHash ? (
+                    <a href={ethTransactionUrl(ethHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ethHash)}
+                    </a>
+                ) : undefined
+            }
+            destLink={
+                ccdHash ? (
+                    <a href={ccdTransactionUrl(ccdHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ccdHash)}
+                    </a>
+                ) : undefined
+            }
+            timestamp={tx.timestamp}
+            status={status}
+            onRowClick={onRowClick}
+        />
+    );
+};
+
 type WithdrawRowProps = {
     tx: Components.Schemas.WalletWithdrawTx | SubmittedTransaction;
     token: Components.Schemas.TokenMapItem;
@@ -147,7 +172,6 @@ type WithdrawRowProps = {
 };
 
 const WithdrawRow: FC<WithdrawRowProps> = ({ tx, token, onRowClick }) => {
-    const { isMobile } = useContext(appContext);
     const { transactions: approvedWithdrawals } = useApprovedWithdrawalsStore();
 
     const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
@@ -164,73 +188,28 @@ const WithdrawRow: FC<WithdrawRowProps> = ({ tx, token, onRowClick }) => {
           };
 
     return (
-        <TableRow key={ccdHash} onClick={onRowClick}>
-            <TableData>
-                <Text fontSize="10" fontWeight="light">
-                    Concordium
-                </Text>
-            </TableData>
-            <TableData>
-                <Text fontSize="10" fontWeight="light">
-                    Ethereum
-                </Text>
-            </TableData>
-            <TableData>
-                <Text fontSize="10" fontWeight="light">
-                    {`${formattedAmount} ${token.ccd_name}`}
-                </Text>
-            </TableData>
-            {!isMobile && (
-                <>
-                    <TableData>
-                        <Text fontSize="10" fontWeight="light">
-                            {ccdHash ? (
-                                <a
-                                    href={ccdTransactionUrl(ccdHash)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={linkClick}
-                                >
-                                    {parseTxHash(ccdHash)}
-                                </a>
-                            ) : (
-                                "Processing..."
-                            )}
-                        </Text>
-                    </TableData>
-                    <TableData>
-                        <Text fontSize="10" fontWeight="light" fontColor={ethHash ? "Black" : "Yellow"}>
-                            {ethHash ? (
-                                <a
-                                    href={ethTransactionUrl(ethHash)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={linkClick}
-                                >
-                                    {parseTxHash(ethHash)}
-                                </a>
-                            ) : (
-                                "Processing..."
-                            )}
-                        </Text>
-                    </TableData>
-                </>
-            )}
-            <TableData>
-                <Text fontSize="10" fontWeight="light">
-                    {moment(tx.timestamp * 1000).fromNow()}
-                </Text>
-            </TableData>
-            <TableData>
-                <Text
-                    fontSize="10"
-                    fontWeight="light"
-                    fontColor={status === ProcessingStatus.Processed ? "Green" : "Yellow"}
-                >
-                    {status}
-                </Text>
-            </TableData>
-        </TableRow>
+        <HistoryRow
+            originChain="Concordium"
+            destChain="Ethereum"
+            formattedAmount={`${formattedAmount} ${token.ccd_name}`}
+            originLink={
+                ccdHash ? (
+                    <a href={ccdTransactionUrl(ccdHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ccdHash)}
+                    </a>
+                ) : undefined
+            }
+            destLink={
+                ethHash ? (
+                    <a href={ethTransactionUrl(ethHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ethHash)}
+                    </a>
+                ) : undefined
+            }
+            timestamp={tx.timestamp}
+            status={status}
+            onRowClick={onRowClick}
+        />
     );
 };
 
