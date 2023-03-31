@@ -36,7 +36,13 @@ moment.updateLocale("en", {
     },
 });
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            refetchOnWindowFocus: false,
+        },
+    },
+});
 
 function MyApp({ Component, pageProps }: AppProps) {
     const isTablet = useMediaQuery("(max-width: 1050px)"); // res at which cornucopia logo might touch the modal
