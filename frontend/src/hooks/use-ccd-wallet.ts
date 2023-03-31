@@ -47,24 +47,27 @@ const isNetworkMatchOld = async () => {
 
 let hasInitialised = false;
 const useCCDWallet = () => {
-    const ccdProvider = useAsyncMemo(detectConcordiumProvider, noOp, []);
+    const provider = useAsyncMemo(detectConcordiumProvider, noOp, []);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const hasNewApi = (ccdProvider as any)?.getSelectedChain !== undefined;
+    const hasNewApi = (provider as any)?.getSelectedChain !== undefined;
     const { deleteWallet, setWallet, account, isActive } = useCCDWalletStore();
     const ccdContext = useMemo(() => ({ account, isActive }), [account, isActive]);
 
     const matchesExpectedNetwork = useCallback(async () => {
-        return (await isNetworkMatchNew()) ?? (await isNetworkMatchOld());
-    }, []);
+        if (hasNewApi) {
+            return (await isNetworkMatchNew()) ?? false;
+        }
+
+        return await isNetworkMatchOld();
+    }, [hasNewApi]);
 
     const refreshMostRecentlySelectedAccount = useCallback(async () => {
-        const provider = await detectConcordiumProvider();
-        const account = await provider.getMostRecentlySelectedAccount();
+        const account = await provider?.getMostRecentlySelectedAccount();
 
         if (account) {
             setWallet(account);
         }
-    }, [setWallet]);
+    }, [setWallet, provider]);
 
     const init = useCallback(async () => {
         if (ccdContext.isActive) {
@@ -83,8 +86,6 @@ const useCCDWallet = () => {
      * Throws if API not available
      */
     const connectCCD = useCallback(async () => {
-        const provider = await detectConcordiumProvider();
-
         let networkMatch: boolean | undefined = undefined;
         if (hasNewApi) {
             networkMatch = await isNetworkMatchNew();
@@ -97,7 +98,7 @@ const useCCDWallet = () => {
 
         let account: string | undefined;
         try {
-            account = await provider.connect();
+            account = await provider?.connect();
         } catch {
             // Connection request rejected in wallet
             deleteWallet();
@@ -112,14 +113,13 @@ const useCCDWallet = () => {
         if (account) {
             setWallet(account);
         }
-    }, [deleteWallet, setWallet, hasNewApi]);
+    }, [deleteWallet, setWallet, hasNewApi, provider]);
 
     useEffect(() => {
-        if (!hasInitialised) {
-            detectConcordiumProvider().then(init);
+        if (provider !== undefined && !hasInitialised) {
             hasInitialised = true;
         }
-    }, [init]);
+    }, [init, provider]);
 
     return {
         ccdContext,
