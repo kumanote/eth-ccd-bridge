@@ -64,7 +64,7 @@ export function deserializeTokenMetadataReturnValue(returnValue: string): Metada
 /**
  * Returns a buffer containing the parameters used for the CIS-2 view function .tokenMetadata, for the given token id.
  */
-export function getMetadataParameter(ids: string[]): Buffer {
+export function serializeMetadataParameter(ids: string[]): Buffer {
     const queries = Buffer.alloc(2);
     queries.writeInt16LE(ids.length, 0);
 
@@ -85,7 +85,7 @@ export function getMetadataParameter(ids: string[]): Buffer {
 export async function getTokenMetadata({ url, hash: checksumHash }: MetadataUrl): Promise<TokenMetadata> {
     const resp = await fetch(url);
     if (!resp.ok) {
-        throw new Error(`Something went wrong, status: ${resp.status}`);
+        throw new Error(`Error when trying to fetch metadata, status: ${resp.status}`);
     }
 
     const body = Buffer.from(await resp.arrayBuffer());
@@ -93,6 +93,5 @@ export async function getTokenMetadata({ url, hash: checksumHash }: MetadataUrl)
         throw new Error("Metadata does not match checksum provided with url");
     }
 
-    const metadata = JSON.parse(body.toString());
-    return metadata;
+    return JSON.parse(body.toString());
 }

@@ -3,7 +3,7 @@ import ccdNode from "@config/ccd-node";
 import contractNames from "@config/contractNames";
 import {
     deserializeTokenMetadataReturnValue,
-    getMetadataParameter,
+    serializeMetadataParameter,
     getTokenMetadata,
     MetadataUrl,
 } from "./token-helpers";
@@ -47,25 +47,21 @@ const getTokenUrl = async (index: bigint, subindex: bigint): Promise<MetadataUrl
     const returnValue = await client.invokeContract({
         contract: { index, subindex },
         method: `${contractNames.cis2Bridgeable}.tokenMetadata`,
-        parameter: getMetadataParameter([""]),
+        parameter: serializeMetadataParameter([""]),
     });
 
     if (returnValue && returnValue.tag === "success" && returnValue.returnValue) {
         return deserializeTokenMetadataReturnValue(returnValue.returnValue)[0];
     } else {
-        // TODO: perhaps we need to make this error more precise
-        throw new Error("Token does not exist in this contract");
+        throw new Error(`Token does not exist in contract at <${index}, ${subindex}>`);
     }
 };
 
 export const tokenMetadataFor = async (index: bigint, subindex: bigint) => {
+    const metadataUrl = await getTokenUrl(index, subindex);
     try {
-        const metadataUrl = await getTokenUrl(index, subindex);
-        const metadata = getTokenMetadata(metadataUrl);
-
-        return metadata;
+        return getTokenMetadata(metadataUrl);
     } catch (e) {
-        console.error(e);
-        throw new Error(`Failed to get metadata urls on index: ${index}`);
+        throw new Error(`Failed to get metadata for contract at <${index}, ${subindex}>`);
     }
 };
