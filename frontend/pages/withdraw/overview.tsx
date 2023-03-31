@@ -155,6 +155,7 @@ const WithdrawOverview: NextPage = () => {
     const [needsAllowance, setNeedsAllowance] = useState<boolean | undefined>();
     const ccdPrice = useAsyncMemo(async () => getPrice("CCD"), noOp, []) ?? 0;
     const microCcdPerEnergy = useAsyncMemo(getEnergyToMicroCcdRate, noOp, []);
+    const [pendingSignature, setPendingSignature] = useState(false);
 
     const {
         withdraw: ccdWithdraw,
@@ -204,8 +205,10 @@ const WithdrawOverview: NextPage = () => {
         try {
             const approvalFee = await estimateApprove(token);
 
+            setPendingSignature(true);
             setInfo("Awaiting allowance approval in Concordium wallet");
             const hash = await ccdApprove(token, approvalFee?.conservative);
+            setPendingSignature(false);
 
             setInfo("Waiting for transaction to finalize");
             const hasApproval = await transactionFinalization(hash);
@@ -214,7 +217,9 @@ const WithdrawOverview: NextPage = () => {
             return hasApproval;
         } catch {
             // Either the allowance approval was rejected, or a timeout happened while polling for allowance approval finalization
+            setPendingSignature(false);
             setError("Allowance appproval rejected");
+
             return false;
         }
     };
@@ -235,11 +240,14 @@ const WithdrawOverview: NextPage = () => {
         try {
             const withdrawFee = await estimateWithdraw(amount, token, context.account || "");
 
+            setPendingSignature(true);
             setInfo("Awaiting signature of withdrawal in Concordium wallet");
             hash = await ccdWithdraw(amount, token, context?.account || "", withdrawFee?.conservative);
             prefetch(routes.withdraw.tx(hash));
         } catch {
             setError("Transaction was rejected.");
+        } finally {
+            setPendingSignature(false);
         }
 
         if (hash === undefined) {
@@ -261,6 +269,7 @@ const WithdrawOverview: NextPage = () => {
             handleSubmit={onSubmit}
             timeToComplete={timeToComplete}
             status={status}
+            pendingWalletSignature={pendingSignature}
         >
             <ApprovalAllowanceLine
                 hasAllowance={needsAllowance === false}
