@@ -1,11 +1,10 @@
 import Text from "@components/atoms/text/text";
-import useMediaQuery from "@hooks/use-media-query";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import useEthWallet from "@hooks/use-eth-wallet";
 import moment from "moment";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { MouseEventHandler, useEffect, useState } from "react";
+import React, { FC, MouseEventHandler, useContext, useEffect, useState } from "react";
 import { useWalletTransactions } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
@@ -26,10 +25,192 @@ import {
     TableWrapper,
     TabsWrapper,
 } from "./History.style";
-import { ethers } from "ethers";
+import { appContext } from "src/root/app-context";
+import { toFractionalAmount } from "src/helpers/number";
+import {
+    SubmittedTransaction,
+    useSubmittedDepositsStore,
+    useSubmittedWithdrawalsStore,
+} from "src/store/submitted-transactions";
 
 const linkClick: MouseEventHandler = (e) => {
     e.stopPropagation();
+};
+
+enum ProcessingStatus {
+    Submitted = "Submitted",
+    Pending = "Pending",
+    Processed = "Processed",
+}
+
+type HistoryRowProps = {
+    originChain: string;
+    destChain: string;
+    formattedAmount: string;
+    originLink?: JSX.Element;
+    destLink?: JSX.Element;
+    timestamp: number;
+    status: ProcessingStatus;
+    onRowClick(): void;
+};
+
+const HistoryRow: FC<HistoryRowProps> = ({
+    originChain,
+    destChain,
+    formattedAmount,
+    originLink,
+    destLink,
+    timestamp,
+    status,
+    onRowClick,
+}) => {
+    const { isMobile } = useContext(appContext);
+
+    return (
+        <TableRow onClick={onRowClick}>
+            <TableData>
+                <Text fontSize="10" fontWeight="light">
+                    {originChain}
+                </Text>
+            </TableData>
+            <TableData>
+                <Text fontSize="10" fontWeight="light">
+                    {destChain}
+                </Text>
+            </TableData>
+            <TableData>
+                <Text fontSize="10" fontWeight="light">
+                    {formattedAmount}
+                </Text>
+            </TableData>
+            {!isMobile && (
+                <>
+                    <TableData>
+                        <Text fontSize="10" fontWeight="light">
+                            {originLink ?? "Processing..."}
+                        </Text>
+                    </TableData>
+                    <TableData>
+                        <Text fontSize="10" fontWeight="light">
+                            {destLink ?? "Processing..."}
+                        </Text>
+                    </TableData>
+                </>
+            )}
+            <TableData>
+                <Text fontSize="10" fontWeight="light">
+                    {moment(timestamp * 1000).fromNow()}
+                </Text>
+            </TableData>
+            <TableData>
+                <Text
+                    fontSize="10"
+                    fontWeight="light"
+                    fontColor={status === ProcessingStatus.Processed ? "Green" : "Yellow"}
+                >
+                    {status}
+                </Text>
+            </TableData>
+        </TableRow>
+    );
+};
+
+const isSubmittedTransaction = (
+    tx: Components.Schemas.WalletWithdrawTx | Components.Schemas.WalletDepositTx | SubmittedTransaction
+): tx is SubmittedTransaction => (tx as SubmittedTransaction).hash !== undefined;
+
+type DepositRowProps = {
+    tx: Components.Schemas.WalletDepositTx | SubmittedTransaction;
+    token: Components.Schemas.TokenMapItem;
+    onRowClick(): void;
+};
+
+const DepositRow: FC<DepositRowProps> = ({ tx, token, onRowClick }) => {
+    const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
+    const { status, ethHash, ccdHash } = isSubmittedTransaction(tx)
+        ? {
+              status: ProcessingStatus.Submitted,
+              ccdHash: undefined,
+              ethHash: tx.hash,
+          }
+        : {
+              status: tx.status.includes("processed") ? ProcessingStatus.Processed : ProcessingStatus.Pending,
+              ccdHash: tx.tx_hash,
+              ethHash: tx.origin_tx_hash,
+          };
+
+    return (
+        <HistoryRow
+            originChain="Ethereum"
+            destChain="Concordium"
+            formattedAmount={`${formattedAmount} ${token.eth_name}`}
+            originLink={
+                ethHash ? (
+                    <a href={ethTransactionUrl(ethHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ethHash)}
+                    </a>
+                ) : undefined
+            }
+            destLink={
+                ccdHash ? (
+                    <a href={ccdTransactionUrl(ccdHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ccdHash)}
+                    </a>
+                ) : undefined
+            }
+            timestamp={tx.timestamp}
+            status={status}
+            onRowClick={onRowClick}
+        />
+    );
+};
+
+type WithdrawRowProps = {
+    tx: Components.Schemas.WalletWithdrawTx | SubmittedTransaction;
+    token: Components.Schemas.TokenMapItem;
+    onRowClick(): void;
+};
+
+const WithdrawRow: FC<WithdrawRowProps> = ({ tx, token, onRowClick }) => {
+    const { transactions: approvedWithdrawals } = useApprovedWithdrawalsStore();
+
+    const formattedAmount = toFractionalAmount(tx.amount, token.decimals);
+    const { status, ethHash, ccdHash } = isSubmittedTransaction(tx)
+        ? {
+              status: ProcessingStatus.Submitted,
+              ethHash: undefined,
+              ccdHash: tx.hash,
+          }
+        : {
+              status: tx.status.includes("processed") ? ProcessingStatus.Processed : ProcessingStatus.Pending,
+              ethHash: tx.tx_hash ?? approvedWithdrawals[tx.origin_tx_hash ?? ""],
+              ccdHash: tx.origin_tx_hash,
+          };
+
+    return (
+        <HistoryRow
+            originChain="Concordium"
+            destChain="Ethereum"
+            formattedAmount={`${formattedAmount} ${token.ccd_name}`}
+            originLink={
+                ccdHash ? (
+                    <a href={ccdTransactionUrl(ccdHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ccdHash)}
+                    </a>
+                ) : undefined
+            }
+            destLink={
+                ethHash ? (
+                    <a href={ethTransactionUrl(ethHash)} target="_blank" rel="noreferrer" onClick={linkClick}>
+                        {parseTxHash(ethHash)}
+                    </a>
+                ) : undefined
+            }
+            timestamp={tx.timestamp}
+            status={status}
+            onRowClick={onRowClick}
+        />
+    );
 };
 
 type Props = {
@@ -40,28 +221,13 @@ const History = ({ depositSelected }: Props) => {
     const { context } = useEthWallet();
     const { replace } = useRouter();
     const { data: history, isLoading } = useWalletTransactions();
-    const isMobile = useMediaQuery("(max-width: 540px)");
+    const { isMobile } = useContext(appContext);
     const { push } = useRouter();
-    const { transactions: approvedWithdrawals } = useApprovedWithdrawalsStore();
 
     const [headers, setHeaders] = useState(["From", "To", "Amount", "ETH Trans.", "CCD Trans.", "Time", "Status"]);
     const getTransactionToken = useGetTransactionToken();
-
-    const goToProgress = (transaction: Components.Schemas.WalletTx) => {
-        const txHash = isDeposit(transaction)
-            ? transaction.Deposit.origin_tx_hash
-            : transaction.Withdraw.origin_tx_hash;
-
-        if (!txHash) {
-            return;
-        }
-
-        const route = isDeposit(transaction) ? routes.deposit.tx(txHash) : routes.withdraw.tx(txHash);
-        push(route);
-    };
-
-    const getWithdrawEthHash = (withdrawTx: Components.Schemas.WalletWithdrawTx): string | undefined =>
-        withdrawTx.tx_hash ?? approvedWithdrawals[withdrawTx.origin_tx_hash ?? ""];
+    const { transactions: submittedDeposits } = useSubmittedDepositsStore();
+    const { transactions: submittedWithdrawals } = useSubmittedWithdrawalsStore();
 
     useEffect(() => {
         if (isMobile) {
@@ -78,10 +244,10 @@ const History = ({ depositSelected }: Props) => {
     useEffect(() => {
         // NextJS router is only available on the client, so we use `useEffect` to defer running this until the first client side render.
         if (!context.account) {
-            replace(routes.deposit.path);
+            replace(depositSelected ? routes.deposit.path : routes.withdraw.path);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [depositSelected]);
 
     if (!history) {
         return (
@@ -90,6 +256,13 @@ const History = ({ depositSelected }: Props) => {
             </ContentWrapper>
         );
     }
+
+    const submittedTransactions = (depositSelected ? submittedDeposits : submittedWithdrawals).filter(
+        (st) =>
+            !history
+                .map((ht) => (isDeposit(ht) ? ht.Deposit.origin_tx_hash : ht.Withdraw.origin_tx_hash))
+                .some((hash) => hash === st.hash)
+    );
 
     return (
         <ContentWrapper>
@@ -126,176 +299,62 @@ const History = ({ depositSelected }: Props) => {
                                 </TableRow>
                             </thead>
                             <tbody>
-                                {history.map((tx) => {
-                                    const tokenReponse = getTransactionToken(tx);
+                                {submittedTransactions.map((st) =>
+                                    depositSelected ? (
+                                        <DepositRow
+                                            key={st.hash}
+                                            tx={st}
+                                            token={st.token}
+                                            onRowClick={() => push(routes.deposit.tx(st.hash))}
+                                        />
+                                    ) : (
+                                        <WithdrawRow
+                                            key={st.hash}
+                                            tx={st}
+                                            token={st.token}
+                                            onRowClick={() => push(routes.withdraw.tx(st.hash))}
+                                        />
+                                    )
+                                )}
+                                {history
+                                    .slice()
+                                    .sort((a, b) => {
+                                        const timeA = isDeposit(a) ? a.Deposit.timestamp : a.Withdraw.timestamp;
+                                        const timeB = isDeposit(b) ? b.Deposit.timestamp : b.Withdraw.timestamp;
 
-                                    if (tokenReponse.status !== "success" || tokenReponse.token === undefined) {
-                                        return null; // TODO: handle this properly
-                                    }
+                                        return timeB - timeA; // Most recent transactions shown first
+                                    })
+                                    .map((tx) => {
+                                        const tokenResponse = getTransactionToken(tx);
 
-                                    if (isDeposit(tx) && depositSelected) {
-                                        const processed = tx.Deposit.status.includes("processed");
-                                        const formattedAmount = ethers.utils.formatUnits(
-                                            tx.Deposit.amount,
-                                            tokenReponse.token.decimals
-                                        );
+                                        if (tokenResponse.status !== "success" || tokenResponse.token === undefined) {
+                                            return null;
+                                        }
 
-                                        return (
-                                            <TableRow key={tx.Deposit.origin_tx_hash} onClick={() => goToProgress(tx)}>
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        Ethereum
-                                                    </Text>
-                                                </TableData>
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        Concordium
-                                                    </Text>
-                                                </TableData>
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        {`${formattedAmount} ${tokenReponse.token.eth_name}`}
-                                                    </Text>
-                                                </TableData>
-                                                {!isMobile && (
-                                                    <>
-                                                        <TableData>
-                                                            <Text fontSize="10" fontWeight="light">
-                                                                {tx.Deposit.origin_tx_hash ? (
-                                                                    <a
-                                                                        href={ethTransactionUrl(
-                                                                            tx.Deposit.origin_tx_hash
-                                                                        )}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        onClick={linkClick}
-                                                                    >
-                                                                        {parseTxHash(tx.Deposit.origin_tx_hash)}
-                                                                    </a>
-                                                                ) : (
-                                                                    "Processing..."
-                                                                )}
-                                                            </Text>
-                                                        </TableData>
-                                                        <TableData>
-                                                            <Text fontSize="10" fontWeight="light">
-                                                                {tx.Deposit.tx_hash ? (
-                                                                    <a
-                                                                        href={ccdTransactionUrl(tx.Deposit.tx_hash)}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        onClick={linkClick}
-                                                                    >
-                                                                        {parseTxHash(tx.Deposit.tx_hash)}
-                                                                    </a>
-                                                                ) : (
-                                                                    "Processing..."
-                                                                )}
-                                                            </Text>
-                                                        </TableData>
-                                                    </>
-                                                )}
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        {moment(tx.Deposit.timestamp * 1000).fromNow()}
-                                                    </Text>
-                                                </TableData>
-                                                <TableData>
-                                                    <Text
-                                                        fontSize="10"
-                                                        fontWeight="light"
-                                                        fontColor={processed ? "Green" : "Yellow"}
-                                                    >
-                                                        {processed ? "Processed" : "Pending"}
-                                                    </Text>
-                                                </TableData>
-                                            </TableRow>
-                                        );
-                                    } else if (!isDeposit(tx) && !depositSelected) {
-                                        const processed = tx.Withdraw.status.includes("processed");
-                                        const formattedAmount = ethers.utils.formatUnits(
-                                            tx.Withdraw.amount,
-                                            tokenReponse.token.decimals
-                                        );
-                                        const ethHash = getWithdrawEthHash(tx.Withdraw);
-
-                                        return (
-                                            <TableRow key={tx.Withdraw.origin_tx_hash} onClick={() => goToProgress(tx)}>
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        Concordium
-                                                    </Text>
-                                                </TableData>
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        Ethereum
-                                                    </Text>
-                                                </TableData>
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        {`${formattedAmount} ${tokenReponse.token.ccd_name}`}
-                                                    </Text>
-                                                </TableData>
-                                                {!isMobile && (
-                                                    <>
-                                                        <TableData>
-                                                            <Text fontSize="10" fontWeight="light">
-                                                                {tx.Withdraw.origin_tx_hash ? (
-                                                                    <a
-                                                                        href={ccdTransactionUrl(
-                                                                            tx.Withdraw.origin_tx_hash
-                                                                        )}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        onClick={linkClick}
-                                                                    >
-                                                                        {parseTxHash(tx.Withdraw.origin_tx_hash)}
-                                                                    </a>
-                                                                ) : (
-                                                                    "Processing..."
-                                                                )}
-                                                            </Text>
-                                                        </TableData>
-                                                        <TableData>
-                                                            <Text
-                                                                fontSize="10"
-                                                                fontWeight="light"
-                                                                fontColor={ethHash ? "Black" : "Yellow"}
-                                                            >
-                                                                {ethHash ? (
-                                                                    <a
-                                                                        href={ethTransactionUrl(ethHash)}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        onClick={linkClick}
-                                                                    >
-                                                                        {parseTxHash(ethHash)}
-                                                                    </a>
-                                                                ) : (
-                                                                    "Processing..."
-                                                                )}
-                                                            </Text>
-                                                        </TableData>
-                                                    </>
-                                                )}
-                                                <TableData>
-                                                    <Text fontSize="10" fontWeight="light">
-                                                        {moment(tx.Withdraw.timestamp * 1000).fromNow()}
-                                                    </Text>
-                                                </TableData>
-                                                <TableData>
-                                                    <Text
-                                                        fontSize="10"
-                                                        fontWeight="light"
-                                                        fontColor={processed ? "Green" : "Yellow"}
-                                                    >
-                                                        {processed ? "Processed" : "Pending"}
-                                                    </Text>
-                                                </TableData>
-                                            </TableRow>
-                                        );
-                                    }
-                                })}
+                                        if (isDeposit(tx) && depositSelected) {
+                                            return (
+                                                <DepositRow
+                                                    key={tx.Deposit.origin_tx_hash}
+                                                    tx={tx.Deposit}
+                                                    token={tokenResponse.token}
+                                                    onRowClick={() =>
+                                                        push(routes.deposit.tx(tx.Deposit.origin_tx_hash ?? ""))
+                                                    }
+                                                />
+                                            );
+                                        } else if (!isDeposit(tx) && !depositSelected) {
+                                            return (
+                                                <WithdrawRow
+                                                    key={tx.Withdraw.origin_tx_hash}
+                                                    tx={tx.Withdraw}
+                                                    token={tokenResponse.token}
+                                                    onRowClick={() =>
+                                                        push(routes.withdraw.tx(tx.Withdraw.origin_tx_hash ?? ""))
+                                                    }
+                                                />
+                                            );
+                                        }
+                                    })}
                             </tbody>
                         </HistoryTable>
                     </TableWrapper>

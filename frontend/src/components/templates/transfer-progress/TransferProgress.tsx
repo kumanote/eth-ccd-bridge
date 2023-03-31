@@ -24,7 +24,7 @@ import { QueryRouter } from "src/types/config";
 import isDeposit from "src/helpers/checkTransaction";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import { useWalletTransactions } from "src/api-query/queries";
-import { ethers } from "ethers";
+import { toFractionalAmount } from "src/helpers/number";
 
 type Status = {
     message: string;
@@ -121,7 +121,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
             return undefined;
         }
 
-        return ethers.utils.formatUnits(amount, token.decimals);
+        return toFractionalAmount(amount, token.decimals);
     }, [amount, token]);
 
     const setError = (message: string) => setStatus({ isError: true, message });
@@ -134,7 +134,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
 
             await props.onRequestApproval(setError, setInfo);
         } else {
-            push({ pathname: routes.deposit.path, query: { reset: true } });
+            push({ pathname: isWithdraw ? routes.withdraw.path : routes.deposit.path, query: { reset: true } });
             clearFlowStore();
         }
     };

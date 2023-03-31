@@ -16,6 +16,7 @@ import { noOp } from "src/helpers/basic";
 import { getPrice } from "src/helpers/price-usd";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { renderGasFeeEstimate } from "src/helpers/fee";
+import { useSubmittedDepositsStore } from "src/store/submitted-transactions";
 
 const LINE_DETAILS_FALLBACK = "...";
 
@@ -123,6 +124,7 @@ const DepositOverview: NextPage = () => {
     const { prefetch } = useRouter();
     const { status, setInfo, setError } = useTransferOverviewStatusState();
     const { replace } = useRouter();
+    const { add: addSubmitted } = useSubmittedDepositsStore();
     const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
     const isErc20 = token?.eth_address !== addresses.eth;
     const erc20PredicateAddress = useAsyncMemo(async () => (isErc20 ? typeToVault() : undefined), noOp, [token]);
@@ -196,6 +198,7 @@ const DepositOverview: NextPage = () => {
 
             setInfo("Waiting for transaction to finalize");
             await tx.wait(1); // wait for confirmed transaction
+            addSubmitted(tx.hash.replace("0x", ""), amount, token);
 
             return routes.deposit.tx(tx.hash);
         } catch (error) {

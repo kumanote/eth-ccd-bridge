@@ -11,7 +11,7 @@ import { useRouter } from "next/router";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTokens } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { routes } from "src/constants/routes";
+import { BridgeDirection, routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import useGenerateContract from "src/contracts/use-generate-contract";
 import { noOp } from "src/helpers/basic";
@@ -44,6 +44,7 @@ import {
     SwapLink,
 } from "./Transfer.style";
 import { ethers } from "ethers";
+import { toFractionalAmount } from "src/helpers/number";
 
 interface ChainType {
     id: number;
@@ -159,14 +160,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 throw new Error("Token expected to be available");
             }
 
-            const formatted = ethers.utils.formatUnits(amount, token.decimals);
-            const [whole, fraction] = formatted.split(".");
-
-            if (fraction === "0") {
-                return whole;
-            }
-
-            return formatted;
+            return toFractionalAmount(amount, token.decimals);
         },
         [token]
     );
@@ -374,7 +368,11 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 </Button>
             </StyledContainer>
             {context?.account && (
-                <Link href={routes.history()} passHref legacyBehavior>
+                <Link
+                    href={routes.history(isDeposit ? BridgeDirection.Deposit : BridgeDirection.Withdraw)}
+                    passHref
+                    legacyBehavior
+                >
                     <LinkWrapper>
                         <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
                             Transaction History
