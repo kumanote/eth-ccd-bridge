@@ -123,7 +123,7 @@ export const StyledButtonShine = styled.img`
 
 export const Dropdown = styled.div`
     position: relative;
-    margin-left: 10px;
+    padding-left: 10px;
     cursor: pointer;
 `;
 

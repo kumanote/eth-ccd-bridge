@@ -143,7 +143,11 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
                     width="23.13"
                 />
             )}
-            <Text fontWeight="light" onClick={toggle} style={{ marginLeft: selectedIconUrl ? 7 : undefined }}>
+            <Text
+                fontWeight="light"
+                onClick={toggle}
+                style={{ paddingLeft: selectedIconUrl ? 7 : undefined, cursor: "pointer" }}
+            >
                 {selected ? (isDeposit ? selected.eth_name : selected.ccd_name) : "Select Token"}
             </Text>
             <Dropdown onClick={toggle}>
