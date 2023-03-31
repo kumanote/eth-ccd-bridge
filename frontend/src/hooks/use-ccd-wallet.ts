@@ -17,7 +17,6 @@ const isNetworkMatchNew = async () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const selectedChain = await (provider as any).getSelectedChain();
-    console.log(selectedChain);
     return selectedChain === network.ccd.genesisHash;
 };
 
