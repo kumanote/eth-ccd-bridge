@@ -206,7 +206,8 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const connectCcdHandleNetwork = async () => {
         try {
             await connectCCD();
-        } catch {
+        } catch (e) {
+            console.log(e);
             if (network.ccd.genesisHash === CCD_MAINNET_GENESIS) {
                 window.alert('Please connect to the "Concordium Mainnet" network in your Concordium wallet');
             } else if (network.ccd.genesisHash === CCD_TESTNET_GENESIS) {

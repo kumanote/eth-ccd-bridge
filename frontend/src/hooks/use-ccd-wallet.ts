@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo } from "react";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
 import network from "@config/network";
+import { useAsyncMemo } from "./utils";
+import { noOp } from "src/helpers/basic";
 
 /**
- * Returns undefined if API not available
+ * Returns undefined if `provider.getSelectedChain returns undefined`.
+ * Throws if API is unavailable
  */
 const isNetworkMatchNew = async () => {
     const provider = await detectConcordiumProvider();
@@ -12,11 +15,16 @@ const isNetworkMatchNew = async () => {
     // TODO: remove any cast when concordium browser wallet version 1 has been released.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((provider as any).getSelectedChain === undefined) {
-        return undefined;
+        throw new Error("New API not available");
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const selectedChain = await (provider as any).getSelectedChain();
+
+    if (selectedChain === undefined) {
+        return undefined;
+    }
+
     return selectedChain === network.ccd.genesisHash;
 };
 
@@ -39,6 +47,9 @@ const isNetworkMatchOld = async () => {
 
 let hasInitialised = false;
 const useCCDWallet = () => {
+    const ccdProvider = useAsyncMemo(detectConcordiumProvider, noOp, []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hasNewApi = (ccdProvider as any)?.getSelectedChain !== undefined;
     const { deleteWallet, setWallet, account, isActive } = useCCDWalletStore();
     const ccdContext = useMemo(() => ({ account, isActive }), [account, isActive]);
 
@@ -74,7 +85,11 @@ const useCCDWallet = () => {
     const connectCCD = useCallback(async () => {
         const provider = await detectConcordiumProvider();
 
-        const networkMatch = await isNetworkMatchNew();
+        let networkMatch: boolean | undefined = undefined;
+        if (hasNewApi) {
+            networkMatch = await isNetworkMatchNew();
+        }
+
         if (networkMatch === false) {
             // New API found, wrong network in wallet
             throw new Error("Wrong network in concordium wallet");
@@ -89,7 +104,7 @@ const useCCDWallet = () => {
             return;
         }
 
-        // New API not found, use fallback network match
+        // New API not found or couldn't be used, use fallback network match
         if (networkMatch === undefined && !(await isNetworkMatchOld())) {
             throw new Error("Genesis block for expected network not found");
         }
@@ -97,7 +112,7 @@ const useCCDWallet = () => {
         if (account) {
             setWallet(account);
         }
-    }, [deleteWallet, setWallet]);
+    }, [deleteWallet, setWallet, hasNewApi]);
 
     useEffect(() => {
         if (!hasInitialised) {
