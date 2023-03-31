@@ -9,13 +9,13 @@ import { tokenMetadataFor } from "src/helpers/ccd-node";
 import { TokenMetadata } from "src/helpers/token-helpers";
 
 /**
- * Interval in ms for querying merkle proof
- */
-const MERKLE_UPDATE_INTERVAL = 60000;
-/**
  * Interval in ms for querying in general
  */
-const QUERY_UPDATE_INTERVAL = 10000;
+const QUERY_UPDATE_INTERVAL = 60000;
+/**
+ * Interval in ms for querying in individual transaction status
+ */
+const WATCH_TRANSACTION_INTERVAL = 15000;
 
 type WatchWithdrawParams = Paths.WatchWithdrawTx.PathParameters;
 type WatchWithdrawOptions = UseQueryOptions<
@@ -39,12 +39,12 @@ export const useWatchWithdraw = (params?: WatchWithdrawParams, options?: WatchWi
         {
             ...options,
             refetchInterval: (data, query) => {
-                if (data?.concordium_event_id !== undefined) {
+                if (data?.concordium_event_id !== null && data?.concordium_event_id !== undefined) {
                     return false;
                 }
 
                 if (options?.refetchInterval === undefined) {
-                    return QUERY_UPDATE_INTERVAL;
+                    return WATCH_TRANSACTION_INTERVAL;
                 }
 
                 return typeof options?.refetchInterval === "function"
@@ -77,12 +77,12 @@ export const useWatchDeposit = (params?: WatchDepositParams, options?: WatchDepo
         {
             ...options,
             refetchInterval: (data, query) => {
-                if (data?.concordium_tx_hash !== undefined) {
+                if (data?.concordium_tx_hash) {
                     return false;
                 }
 
                 if (options?.refetchInterval === undefined) {
-                    return QUERY_UPDATE_INTERVAL;
+                    return WATCH_TRANSACTION_INTERVAL;
                 }
 
                 return typeof options?.refetchInterval === "function"
@@ -93,7 +93,7 @@ export const useWatchDeposit = (params?: WatchDepositParams, options?: WatchDepo
     );
 };
 
-export const useWalletTransactions = () => {
+export const useWalletTransactions = (refetch = false) => {
     const { context } = useEthWallet();
     const { getClient } = useAxiosClient();
 
@@ -111,12 +111,12 @@ export const useWalletTransactions = () => {
             const { data } = await client.wallet_txs({ wallet });
             return data;
         },
-        { refetchInterval: QUERY_UPDATE_INTERVAL }
+        { refetchInterval: refetch && QUERY_UPDATE_INTERVAL, enabled: refetch }
     );
 };
 
 export const usePendingWithdrawals = () => {
-    const result = useWalletTransactions();
+    const result = useWalletTransactions(true);
 
     const data = result.data
         ?.map((tx) => {
@@ -162,7 +162,7 @@ export const useTokens = () => {
 
             return Promise.all(tokenPromises);
         },
-        { refetchOnWindowFocus: false, staleTime: Infinity }
+        { staleTime: Infinity }
     );
 };
 
@@ -187,10 +187,10 @@ export const useEthMerkleProof = (params: Partial<MerkleProofParams>, enabled = 
             enabled:
                 params.tx_hash !== undefined && params.event_id !== undefined && params.event_id !== null && enabled,
             refetchInterval: (data) => {
-                if (data?.proof !== undefined) {
+                if (data?.proof) {
                     return false;
                 }
-                return MERKLE_UPDATE_INTERVAL;
+                return QUERY_UPDATE_INTERVAL;
             },
         }
     );
@@ -209,7 +209,7 @@ export const useNextMerkleRoot = () => {
             return data;
         },
         {
-            refetchInterval: MERKLE_UPDATE_INTERVAL,
+            refetchInterval: QUERY_UPDATE_INTERVAL,
         }
     );
 };
