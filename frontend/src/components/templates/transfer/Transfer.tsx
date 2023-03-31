@@ -169,7 +169,9 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
                                     : `${ccd_name + ccd_contract?.index + ccd_contract?.subindex}`
                             }
                         >
-                            <Image
+                            {/* Disabling this, as we cannot ensure the src of the icon, which this specific version of nextJS requires*/}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
                                 src={iconUrl ?? fallbackIconUrl}
                                 alt={`${isDeposit ? eth_name : ccd_name} icon`}
                                 height="23.13"
