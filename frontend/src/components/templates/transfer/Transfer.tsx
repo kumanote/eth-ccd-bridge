@@ -35,6 +35,7 @@ import {
     CoinPicker,
     CoinSelect,
     Dropdown,
+    DropdownButton,
     DropdownList,
     FirstRow,
     LinkWrapper,
@@ -135,24 +136,22 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
 
     return (
         <MaxGapRow>
-            {selected && selectedIconUrl && (
-                <img
-                    src={selectedIconUrl}
-                    alt={`${isDeposit ? selected.eth_name : selected.ccd_name} icon`}
-                    height="23.13"
-                    width="23.13"
-                />
-            )}
-            <Text
-                fontWeight="light"
-                onClick={toggle}
-                style={{ paddingLeft: selectedIconUrl ? 7 : undefined, cursor: "pointer" }}
-            >
-                {selected ? (isDeposit ? selected.eth_name : selected.ccd_name) : "Select Token"}
-            </Text>
-            <Dropdown onClick={toggle}>
-                <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
-            </Dropdown>
+            <DropdownButton onClick={toggle}>
+                {selected && selectedIconUrl && (
+                    <img
+                        src={selectedIconUrl}
+                        alt={`${isDeposit ? selected.eth_name : selected.ccd_name} icon`}
+                        height="23.13"
+                        width="23.13"
+                    />
+                )}
+                <Text fontWeight="light" style={{ paddingLeft: selectedIconUrl ? 7 : undefined }}>
+                    {selected ? (isDeposit ? selected.eth_name : selected.ccd_name) : "Select Token"}
+                </Text>
+                <Dropdown>
+                    <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
+                </Dropdown>
+            </DropdownButton>
             <Button variant="max" onClick={() => onMax(selectedTokenBalance ?? "")}>
                 <Text fontSize="10" fontWeight="light">
                     Max
