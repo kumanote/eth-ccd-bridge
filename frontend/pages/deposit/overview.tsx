@@ -16,6 +16,7 @@ import { noOp } from "src/helpers/basic";
 import { getPrice } from "src/helpers/price-usd";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { renderGasFeeEstimate } from "src/helpers/fee";
+import { useSubmittedDepositsStore } from "src/store/submitted-transactions";
 
 const LINE_DETAILS_FALLBACK = "...";
 
@@ -123,9 +124,11 @@ const DepositOverview: NextPage = () => {
     const { prefetch } = useRouter();
     const { status, setInfo, setError } = useTransferOverviewStatusState();
     const { replace } = useRouter();
+    const { add: addSubmitted } = useSubmittedDepositsStore();
     const ethPrice = useAsyncMemo(async () => getPrice("ETH"), noOp, []) ?? 0;
     const isErc20 = token?.eth_address !== addresses.eth;
     const erc20PredicateAddress = useAsyncMemo(async () => (isErc20 ? typeToVault() : undefined), noOp, [token]);
+    const [pendingSignature, setPendingSignature] = useState(false);
 
     useEffect(() => {
         if (!isErc20) {
@@ -148,8 +151,10 @@ const DepositOverview: NextPage = () => {
         }
 
         try {
+            setPendingSignature(true);
             setInfo("Requesting allowance from Ethereum wallet.");
             const tx = await checkAllowance(erc20PredicateAddress);
+            setPendingSignature(false);
 
             setInfo("Waiting for transaction to finalize");
             await tx.wait(1);
@@ -159,6 +164,8 @@ const DepositOverview: NextPage = () => {
         } catch {
             // TODO: log actual error
             setError("Allowance request rejected");
+            setPendingSignature(false);
+
             return false;
         }
     };
@@ -177,6 +184,7 @@ const DepositOverview: NextPage = () => {
         }
 
         try {
+            setPendingSignature(true);
             setInfo("Awaiting signature of deposit in Ethereum wallet");
             let tx: ContractTransaction;
             if (token.eth_address === addresses.eth) {
@@ -184,14 +192,17 @@ const DepositOverview: NextPage = () => {
             } else {
                 tx = await depositFor(amount, token); //deposit
             }
+            setPendingSignature(false);
 
             prefetch(routes.deposit.tx(tx.hash));
 
             setInfo("Waiting for transaction to finalize");
             await tx.wait(1); // wait for confirmed transaction
+            addSubmitted(tx.hash.replace("0x", ""), amount, token);
 
             return routes.deposit.tx(tx.hash);
         } catch (error) {
+            setPendingSignature(false);
             // TODO: log actual error
             if (error.message.includes(errors.ACTION_REJECTED)) {
                 setError("Transaction was rejected.");
@@ -207,6 +218,8 @@ const DepositOverview: NextPage = () => {
             handleSubmit={onSubmit}
             timeToComplete="Deposit should take up to 5 minutes to complete."
             status={status}
+            pendingWalletSignature={pendingSignature}
+            isDeposit
         >
             {isErc20 && (
                 <>

@@ -32,7 +32,7 @@ const WithdrawTransactionStatus: NextPage = () => {
 
     useEffect(() => {
         if (tx === undefined && isReady) {
-            replace(routes.deposit.path);
+            replace(routes.withdraw.path);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
