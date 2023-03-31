@@ -1,3 +1,7 @@
+{
+    /* eslint-disable @next/next/no-img-element */
+    /* Disabling this, as we cannot ensure the src of the icon, which this specific version of nextJS requires*/
+}
 import Button from "@components/atoms/button/Button";
 import Input from "@components/atoms/input/input";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
@@ -132,7 +136,7 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
     return (
         <MaxGapRow>
             {selected && selectedIconUrl && (
-                <Image
+                <img
                     src={selectedIconUrl}
                     alt={`${isDeposit ? selected.eth_name : selected.ccd_name} icon`}
                     height="23.13"
@@ -169,8 +173,6 @@ const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, 
                                     : `${ccd_name + ccd_contract?.index + ccd_contract?.subindex}`
                             }
                         >
-                            {/* Disabling this, as we cannot ensure the src of the icon, which this specific version of nextJS requires*/}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={iconUrl ?? fallbackIconUrl}
                                 alt={`${isDeposit ? eth_name : ccd_name} icon`}
