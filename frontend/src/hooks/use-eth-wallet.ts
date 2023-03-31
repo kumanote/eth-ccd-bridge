@@ -1,34 +1,41 @@
 import network from "@config/network";
 import { ethers } from "ethers";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useWeb3Context } from "web3-react";
+import detectEthereumProvider from "@metamask/detect-provider";
+import { useAsyncMemo } from "./utils";
+import { noOp } from "src/helpers/basic";
 
 const CHAIN_ID = Number(network.eth.id);
 
-// local storage wording:
-// Cornucopia_${chainName}_state
-
+let hasInitialised = false;
 const useEthWallet = () => {
     const context = useWeb3Context();
+    const provider = useAsyncMemo(detectEthereumProvider, noOp, []);
 
-    const connect = async () => {
-        if (!context.active) {
-            context.unsetConnector();
+    const connect = useCallback(async () => {
+        if (context.networkId !== CHAIN_ID) {
+            await changeChain(`0x${CHAIN_ID.toString(16)}`);
         }
-        context.setConnector("MetaMask");
-        localStorage["CCP_ETH_connected"] = true;
-    };
 
-    const disconnect = async () => {
+        if (!context.active) {
+            try {
+                await context.setConnector("MetaMask", { suppressAndThrowErrors: true });
+            } catch (e) {
+                context.unsetConnector();
+            }
+        }
+    }, [context]);
+
+    const disconnect = useCallback(async () => {
         context.unsetConnector();
         delete localStorage["CCP_ETH_connected"];
-    };
+    }, [context]);
 
     const getNativeBalance = async () => {
         if (!context.account) throw new Error("You must be signed in with wallet");
 
         const balance = await context.library?.getBalance(context.account);
-
         if (!balance) return;
 
         return ethers.utils.formatEther(balance);
@@ -41,21 +48,27 @@ const useEthWallet = () => {
         });
     };
 
-    // ASK CHAIN CHANGE IF CHAIN IS WRONG
-    useEffect(() => {
-        if (context.networkId !== CHAIN_ID) {
-            changeChain(`0x${CHAIN_ID.toString(16)}`);
+    const init = useCallback(async () => {
+        if (context.active) {
+            return;
         }
-    }, [context.networkId]);
 
-    // CONNECTING TO ACCOUNT
+        const accounts = await window.ethereum?.request?.({ method: "eth_accounts" });
+        if (accounts?.length) {
+            await context.setConnector("MetaMask");
+        }
+    }, [context]);
+
     useEffect(() => {
-        if (!context.active && !context.error) {
-            // loading
-        } else if (context.error) {
-            //error
-        } else {
-            // success
+        if (provider !== undefined && !hasInitialised) {
+            init();
+            hasInitialised = true;
+        }
+    }, [provider, init]);
+
+    useEffect(() => {
+        if (context.active && !context.error) {
+            localStorage["CCP_ETH_connected"] = true;
         }
     }, [context]);
 

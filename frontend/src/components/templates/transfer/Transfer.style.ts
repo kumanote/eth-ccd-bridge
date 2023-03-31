@@ -176,6 +176,12 @@ export const LinkWrapper = styled.a`
     user-select: none;
     text-decoration: underline;
 
+    &[hidden] {
+        visibility: hidden;
+        position: relative;
+        left: -9999px;
+    }
+
     @media only screen and (max-width: 1050px) {
         position: relative;
         width: fit-content;

@@ -49,6 +49,8 @@ import {
     SwapLink,
 } from "./Transfer.style";
 import { ethers } from "ethers";
+import network from "@config/network";
+import { CCD_MAINNET_GENESIS, CCD_TESTNET_GENESIS } from "src/constants/network";
 import { toFractionalAmount } from "src/helpers/number";
 
 interface ChainType {
@@ -56,7 +58,6 @@ interface ChainType {
     name: string;
     icon: string;
     account?: string | null;
-    disconnect: (() => void) | null;
     connect: (() => void) | null;
 }
 
@@ -208,8 +209,8 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         replace,
         pathname,
     } = useRouter() as QueryRouter<TransferRouteQuery>;
-    const { context, connect, disconnect } = useEthWallet();
-    const { ccdContext, connectCCD, disconnectCCD } = useCCDWallet();
+    const { context, connect } = useEthWallet();
+    const { ccdContext, connectCCD } = useCCDWallet();
     const { push } = useRouter();
     const { isTablet } = useContext(appContext);
     const { token, amount = 0n, setToken, setAmount, clear: clearTransactionFlow } = useTransactionFlowStore();
@@ -286,6 +287,21 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         return 1 / 10 ** token.decimals;
     }, [token?.decimals]);
 
+    const connectCcdHandleNetwork = async () => {
+        try {
+            await connectCCD();
+        } catch (e) {
+            console.log(e);
+            if (network.ccd.genesisHash === CCD_MAINNET_GENESIS) {
+                window.alert('Please connect to the "Concordium Mainnet" network in your Concordium wallet');
+            } else if (network.ccd.genesisHash === CCD_TESTNET_GENESIS) {
+                window.alert('Please connect to the "Concordium Testnet" network in your Concordium wallet');
+            } else {
+                window.alert("Please connect to the correct network in your Concordium wallet");
+            }
+        }
+    };
+
     const chains: ChainType[] = [
         {
             id: 1,
@@ -293,15 +309,13 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             account: context.account,
             icon: EthereumIcon.src,
             connect,
-            disconnect,
         },
         {
             id: 2,
             name: "Concordium",
             icon: ConcordiumIcon.src,
             account: ccdContext.account,
-            connect: connectCCD,
-            disconnect: disconnectCCD,
+            connect: connectCcdHandleNetwork,
         },
     ];
 
@@ -412,19 +426,17 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                     </div>
                 </Button>
             </StyledContainer>
-            {context?.account && (
-                <Link
-                    href={routes.history(isDeposit ? BridgeDirection.Deposit : BridgeDirection.Withdraw)}
-                    passHref
-                    legacyBehavior
-                >
-                    <LinkWrapper>
-                        <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
-                            Transaction History
-                        </Text>
-                    </LinkWrapper>
-                </Link>
-            )}
+            <Link
+                href={routes.history(isDeposit ? BridgeDirection.Deposit : BridgeDirection.Withdraw)}
+                passHref
+                legacyBehavior
+            >
+                <LinkWrapper hidden={!context.account}>
+                    <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
+                        Transaction History
+                    </Text>
+                </LinkWrapper>
+            </Link>
         </PageWrapper>
     );
 };

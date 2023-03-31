@@ -32,7 +32,7 @@ const stripHexId = (hexString: string) => hexString.replace("0x", "");
 /** Polling interval for CCD transactions in MS */
 const POLLING_INTEVAL = 5000;
 
-const useCCDContract = (ccdAccount: string | null, enabled: boolean) => {
+const useCCDContract = (ccdAccount: string | undefined, enabled: boolean) => {
     const bridgeManagerContract = {
         index: BigInt(addresses.bridgeManager.index),
         subindex: BigInt(addresses.bridgeManager.subindex),

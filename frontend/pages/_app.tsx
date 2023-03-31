@@ -2,6 +2,7 @@ import Layout from "@components/organisms/layout/Layout";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import connectors from "@config/connectors";
 import network from "@config/network";
+import useCCDWallet from "@hooks/use-ccd-wallet";
 import useMediaQuery from "@hooks/use-media-query";
 import moment from "moment";
 import type { AppProps } from "next/app";
@@ -44,6 +45,32 @@ const queryClient = new QueryClient({
     },
 });
 
+function UseConcordiumEvents() {
+    const { refreshMostRecentlySelectedAccount } = useCCDWallet();
+    const { setWallet, deleteWallet } = useCCDWalletStore();
+
+    // Sets up event handlers once, globally.
+    useEffect(() => {
+        detectConcordiumProvider().then((p) => {
+            p.on("accountChanged", setWallet);
+            p.on("accountDisconnected", () => {
+                deleteWallet();
+            });
+            p.on("chainChanged", (c) => {
+                // There is a bug in the browser wallet not properly triggering this
+                // if no account in the wallet is connected to the dapp for the network selected.
+                // As such, this is unreliable for now.
+                if (c === network.ccd.genesisHash) {
+                    refreshMostRecentlySelectedAccount();
+                } else {
+                    deleteWallet();
+                }
+            });
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+}
+
 function MyApp({ Component, pageProps }: AppProps) {
     const isTablet = useMediaQuery("(max-width: 1050px)"); // res at which cornucopia logo might touch the modal
     const isMobile = useMediaQuery("(max-width: 540px)"); // res at which the design looks a little weird
@@ -51,34 +78,13 @@ function MyApp({ Component, pageProps }: AppProps) {
         asPath,
         query: { tx },
     } = useRouter() as QueryRouter<{ tx?: string }>;
-    const { setCCDWallet, deleteCCDWallet } = useCCDWalletStore();
 
-    useEffect(() => {
-        detectConcordiumProvider()
-            .then((p) => {
-                p.on("accountChanged", setCCDWallet);
-                p.on("accountDisconnected", deleteCCDWallet);
-                p.on("chainChanged", (c) => {
-                    if (c !== network.ccd.genesisHash) {
-                        deleteCCDWallet();
-                    }
-                });
-
-                return p.getMostRecentlySelectedAccount();
-            })
-            .then((a) => {
-                if (a !== undefined) {
-                    setCCDWallet(a);
-                }
-            });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    UseConcordiumEvents();
 
     /**
      * Shows whether user is on withdraw progress page, in which case we should NOT watch for pending withdrawals
      */
     const isWithdrawProgressRoute = useMemo(() => tx !== undefined && asPath === routes.withdraw.tx(tx), [asPath, tx]);
-
     const appContextValue: AppContext = useMemo(() => ({ isTablet, isMobile }), [isTablet, isMobile]);
 
     return (

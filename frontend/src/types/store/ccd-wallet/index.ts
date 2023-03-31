@@ -1,13 +1,11 @@
 interface CCDWalletState {
-    ccdContext: {
-        account: string | null;
-        isActive: boolean;
-    };
+    account: string | undefined;
+    isActive: boolean;
 }
 
 interface CCDWalletActions {
-    setCCDWallet: (ccdWallet: string) => void;
-    deleteCCDWallet: () => void;
+    setWallet: (ccdWallet: string) => void;
+    deleteWallet: () => void;
 }
 
 export type CCDWalletStore = CCDWalletState & CCDWalletActions;

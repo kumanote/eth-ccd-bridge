@@ -24,6 +24,7 @@ import { QueryRouter } from "src/types/config";
 import isDeposit from "src/helpers/checkTransaction";
 import { useGetTransactionToken } from "@hooks/use-transaction-token";
 import { useWalletTransactions } from "src/api-query/queries";
+import useEthWallet from "@hooks/use-eth-wallet";
 import { toFractionalAmount } from "src/helpers/number";
 
 type Status = {
@@ -114,6 +115,7 @@ export const TransferProgress: React.FC<Props> = (props) => {
         amount = transactionDetails?.amount,
         clear: clearFlowStore,
     } = useTransactionFlowStore();
+    const { context, connect: connectEth } = useEthWallet();
 
     const step = useMemo(() => transferStepMap[transferStatus ?? "missing"], [transferStatus]);
     const decimalAmount = useMemo(() => {
@@ -131,6 +133,10 @@ export const TransferProgress: React.FC<Props> = (props) => {
     const continueHandler = async () => {
         if (props.isWithdraw && props.canWithdraw) {
             setStatus(undefined);
+
+            if (!context.active) {
+                await connectEth();
+            }
 
             await props.onRequestApproval(setError, setInfo);
         } else {
@@ -266,13 +272,23 @@ export const TransferProgress: React.FC<Props> = (props) => {
                         </Text>
                     </InfoContainer>
                     <StyledButtonContainer>
-                        <Button variant="primary" onClick={continueHandler} disabled={disableContinue}>
-                            <div style={{ position: "relative" }}>
-                                <Text fontSize="16" fontColor={"Black"} fontWeight="bold">
-                                    {props.isWithdraw && props.canWithdraw && step === 1 ? "Approve" : "Continue"}
-                                </Text>
-                            </div>
-                        </Button>
+                        {props.isWithdraw && props.canWithdraw ? (
+                            <Button variant="primary" onClick={continueHandler}>
+                                <div style={{ position: "relative" }}>
+                                    <Text fontSize="16" fontColor={"Black"} fontWeight="bold">
+                                        Approve
+                                    </Text>
+                                </div>
+                            </Button>
+                        ) : (
+                            <Button variant="primary" onClick={continueHandler} disabled={disableContinue}>
+                                <div style={{ position: "relative" }}>
+                                    <Text fontSize="16" fontColor={"Black"} fontWeight="bold">
+                                        Continue
+                                    </Text>
+                                </div>
+                            </Button>
+                        )}
                     </StyledButtonContainer>
                 </Content>
             </StyledContainer>
