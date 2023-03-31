@@ -34,6 +34,16 @@ export const SecondRow = styled.div`
     padding: 13px 22px;
 `;
 
+export const DropdownButton = styled.button`
+    position: relative;
+    display: inline-flex;
+    justify-content: space-between;
+    align-items: center;
+    border: none;
+    background: none;
+    padding: 0;
+`;
+
 export const MaxGapRow = styled.div<{ input?: boolean }>`
     position: relative;
     display: flex;
@@ -123,7 +133,7 @@ export const StyledButtonShine = styled.img`
 
 export const Dropdown = styled.div`
     position: relative;
-    margin-left: 10px;
+    padding-left: 10px;
     cursor: pointer;
 `;
 

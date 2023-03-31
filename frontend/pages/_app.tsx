@@ -37,7 +37,13 @@ moment.updateLocale("en", {
     },
 });
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            refetchOnWindowFocus: false,
+        },
+    },
+});
 
 function UseConcordiumEvents() {
     const { refreshMostRecentlySelectedAccount } = useCCDWallet();
