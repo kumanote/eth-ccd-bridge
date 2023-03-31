@@ -104,11 +104,15 @@ export const TransferOverview: FC<PropsWithChildren<Props>> = ({
 
     const cancel = () => {
         if (pendingWalletSignature) {
-            window.alert(
+            const confirmed = window.confirm(
                 `There is a pending wallet signature in your ${
                     isDeposit ? "Ethereum" : "Concordium"
                 } wallet, which can be safely rejected when cancelling this flow.`
             );
+
+            if (!confirmed) {
+                return;
+            }
         }
 
         back();
