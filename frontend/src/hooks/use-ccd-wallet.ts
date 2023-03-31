@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { detectConcordiumProvider } from "@concordium/browser-wallet-api-helpers";
 import useCCDWalletStore from "src/store/ccd-wallet/ccdWalletStore";
 import network from "@config/network";
@@ -37,15 +37,10 @@ const isNetworkMatchOld = async () => {
     }
 };
 
-// local storage wording:
-// Cornucopia_${chainName}_state
-
+let hasInitialised = false;
 const useCCDWallet = () => {
-    const ccdContext = useCCDWalletStore((state) => ({
-        account: state.account,
-        isActive: state.isActive,
-    }));
-    const { deleteWallet, setWallet } = useCCDWalletStore();
+    const { deleteWallet, setWallet, account, isActive } = useCCDWalletStore();
+    const ccdContext = useMemo(() => ({ account, isActive }), [account, isActive]);
 
     const matchesExpectedNetwork = useCallback(async () => {
         return (await isNetworkMatchNew()) ?? (await isNetworkMatchOld());
@@ -105,7 +100,10 @@ const useCCDWallet = () => {
     }, [deleteWallet, setWallet]);
 
     useEffect(() => {
-        detectConcordiumProvider().then(init);
+        if (!hasInitialised) {
+            detectConcordiumProvider().then(init);
+            hasInitialised = true;
+        }
     }, [init]);
 
     return {

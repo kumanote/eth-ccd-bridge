@@ -8,9 +8,7 @@ import { noOp } from "src/helpers/basic";
 
 const CHAIN_ID = Number(network.eth.id);
 
-// local storage wording:
-// Cornucopia_${chainName}_state
-
+let hasInitialised = false;
 const useEthWallet = () => {
     const context = useWeb3Context();
     const provider = useAsyncMemo(detectEthereumProvider, noOp, []);
@@ -62,8 +60,9 @@ const useEthWallet = () => {
     }, [context]);
 
     useEffect(() => {
-        if (provider !== undefined) {
+        if (provider !== undefined && !hasInitialised) {
             init();
+            hasInitialised = true;
         }
     }, [provider, init]);
 
