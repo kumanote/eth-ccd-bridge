@@ -1,4 +1,4 @@
-## Unreleased
+## 0.1.1
 
 ### Added
 - Environment variables for configuring access to a node's grpc interface. This is a temporary requirement, as the functionality this is needed for will be exposed by the concordium browser wallet at a later point in time.
