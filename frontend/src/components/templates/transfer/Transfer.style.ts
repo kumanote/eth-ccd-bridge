@@ -23,6 +23,7 @@ export const FirstRow = styled.div`
 `;
 
 export const SecondRow = styled.div`
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100px;

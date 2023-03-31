@@ -11,7 +11,7 @@ import { useRouter } from "next/router";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTokens } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
-import { routes } from "src/constants/routes";
+import { BridgeDirection, routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";
 import useGenerateContract from "src/contracts/use-generate-contract";
 import { noOp } from "src/helpers/basic";
@@ -46,6 +46,7 @@ import {
 import { ethers } from "ethers";
 import network from "@config/network";
 import { CCD_MAINNET_GENESIS, CCD_TESTNET_GENESIS } from "src/constants/network";
+import { toFractionalAmount } from "src/helpers/number";
 
 interface ChainType {
     id: number;
@@ -160,14 +161,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                 throw new Error("Token expected to be available");
             }
 
-            const formatted = ethers.utils.formatUnits(amount, token.decimals);
-            const [whole, fraction] = formatted.split(".");
-
-            if (fraction === "0") {
-                return whole;
-            }
-
-            return formatted;
+            return toFractionalAmount(amount, token.decimals);
         },
         [token]
     );
@@ -240,7 +234,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         },
     ];
 
-    const isValidAmount = useMemo(() => {
+    const inputValidation = useMemo(() => {
         if (token === undefined || tokenBalance === undefined) {
             return true;
         }
@@ -249,14 +243,15 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
             const nAmount = toTokenIntegerAmount(inputAmount) ?? 0n;
 
             if (nAmount <= 0n) {
-                return false;
+                return "Value has to be above 0";
             }
 
-            return nAmount <= tokenBalance;
+            return nAmount <= tokenBalance || "Insufficient funds on account";
         } catch {
-            return false;
+            return "Invalid amount";
         }
     }, [inputAmount, tokenBalance, token, toTokenIntegerAmount]);
+    const showValidationError = inputValidation !== true && submitted;
 
     useEffect(() => {
         if (reset && isReady) {
@@ -282,7 +277,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
     const submitHandler = useCallback(() => {
         setSubmitted(true);
 
-        if (!isValidAmount || token === undefined) {
+        if (inputValidation !== true || token === undefined) {
             // Abort.
             return;
         }
@@ -294,7 +289,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
 
         setAmount(tokenAmount);
         push({ pathname: nextRoute });
-    }, [isValidAmount, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
+    }, [inputValidation, token, toTokenIntegerAmount, inputAmount, setAmount, push, nextRoute]);
 
     return (
         <PageWrapper>
@@ -362,7 +357,7 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             min={minTransferValue}
                             max={decimalTokenBalance}
                             step={minTransferValue}
-                            valid={isValidAmount || !submitted}
+                            valid={!showValidationError}
                         />
                         {isLoggedIn && token && decimalTokenBalance && (
                             <Text style={{ alignSelf: "flex-end" }} fontColor="Balance" fontSize="10">
@@ -370,6 +365,11 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                             </Text>
                         )}
                     </MaxGapRow>
+                    {showValidationError && (
+                        <Text fontSize="11" fontColor="Red" style={{ position: "absolute", bottom: "-20px" }}>
+                            {inputValidation}
+                        </Text>
+                    )}
                 </SecondRow>
                 <Button variant="primary" disabled={transferButtonDisabled} onClick={submitHandler}>
                     <div style={{ position: "relative" }}>
@@ -380,7 +380,11 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                     </div>
                 </Button>
             </StyledContainer>
-            <Link href={routes.history()} passHref legacyBehavior>
+            <Link
+                href={routes.history(isDeposit ? BridgeDirection.Deposit : BridgeDirection.Withdraw)}
+                passHref
+                legacyBehavior
+            >
                 <LinkWrapper hidden={!context.account}>
                     <Text fontSize="12" fontFamily="Roboto" fontColor="Brown">
                         Transaction History

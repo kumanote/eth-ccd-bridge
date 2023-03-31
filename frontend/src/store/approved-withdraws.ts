@@ -19,6 +19,6 @@ export const useApprovedWithdrawalsStore = create(
                 set({ transactions: ts });
             },
         }),
-        { name: "eth-ccd-bridge" }
+        { name: "eth-ccd-bridge.approved-withdrawals" }
     )
 );
