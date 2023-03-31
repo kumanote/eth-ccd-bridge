@@ -1,3 +1,7 @@
+{
+    /* eslint-disable @next/next/no-img-element */
+    /* Disabling this, as we cannot ensure the src of the icon, which this specific version of nextJS requires*/
+}
 import Button from "@components/atoms/button/Button";
 import Input from "@components/atoms/input/input";
 import PageWrapper from "@components/atoms/page-wrapper/PageWrapper";
@@ -8,8 +12,8 @@ import { useAsyncMemo } from "@hooks/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useTokens } from "src/api-query/queries";
+import { FC, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { TokenWithIcon, useTokens } from "src/api-query/queries";
 import { Components } from "src/api-query/__generated__/AxiosClient";
 import { BridgeDirection, routes } from "src/constants/routes";
 import useCCDContract from "src/contracts/use-ccd-contract";
@@ -31,6 +35,7 @@ import {
     CoinPicker,
     CoinSelect,
     Dropdown,
+    DropdownButton,
     DropdownList,
     FirstRow,
     LinkWrapper,
@@ -106,6 +111,86 @@ const ChainBox: React.FC<ChainBoxProps> = ({ chain, text }) => {
     );
 };
 
+type SelectTokenProps = {
+    isDeposit: boolean;
+    tokens: TokenWithIcon[] | undefined;
+    onSelect(token: Components.Schemas.TokenMapItem): void;
+    onMax(decimalAmount: string): void;
+    selected: Components.Schemas.TokenMapItem | undefined;
+    /** As a fractional value */
+    selectedTokenBalance: string | undefined;
+};
+
+const SelectToken: FC<SelectTokenProps> = ({ tokens, onSelect, onMax, selected, isDeposit, selectedTokenBalance }) => {
+    const [open, setOpen] = useState(false);
+    const toggle = () => setOpen((o) => !o);
+    const fallbackIconUrl: string = isDeposit ? EthereumIcon.src : ConcordiumIcon.src;
+    const selectedIconUrl = selected
+        ? tokens?.find(({ token }) => token.eth_address === selected?.eth_address)?.iconUrl ?? fallbackIconUrl
+        : undefined;
+
+    const sortedTokens = tokens?.slice().sort(({ token: a }, { token: b }) => {
+        const isLess = isDeposit ? a.eth_name < b.eth_name : a.ccd_name < b.ccd_name;
+        return isLess ? -1 : 1;
+    });
+
+    return (
+        <MaxGapRow>
+            <DropdownButton onClick={toggle}>
+                {selected && selectedIconUrl && (
+                    <img
+                        src={selectedIconUrl}
+                        alt={`${isDeposit ? selected.eth_name : selected.ccd_name} icon`}
+                        height="23.13"
+                        width="23.13"
+                    />
+                )}
+                <Text fontWeight="light" style={{ paddingLeft: selectedIconUrl ? 7 : undefined }}>
+                    {selected ? (isDeposit ? selected.eth_name : selected.ccd_name) : "Select Token"}
+                </Text>
+                <Dropdown>
+                    <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
+                </Dropdown>
+            </DropdownButton>
+            <Button variant="max" onClick={() => onMax(selectedTokenBalance ?? "")}>
+                <Text fontSize="10" fontWeight="light">
+                    Max
+                </Text>
+            </Button>
+            <DropdownList open={open}>
+                {sortedTokens?.map((tokenData) => {
+                    const {
+                        token: { ccd_name, ccd_contract, eth_name, eth_address },
+                        iconUrl,
+                    } = tokenData;
+
+                    return (
+                        <Coin
+                            onClick={() => {
+                                onSelect(tokenData.token);
+                                setOpen(false);
+                            }}
+                            key={
+                                isDeposit
+                                    ? `${eth_name + eth_address}`
+                                    : `${ccd_name + ccd_contract?.index + ccd_contract?.subindex}`
+                            }
+                        >
+                            <img
+                                src={iconUrl ?? fallbackIconUrl}
+                                alt={`${isDeposit ? eth_name : ccd_name} icon`}
+                                height="23.13"
+                                width="23.13"
+                            />
+                            <StyledCoinText fontWeight="light">{isDeposit ? eth_name : ccd_name}</StyledCoinText>
+                        </Coin>
+                    );
+                })}
+            </DropdownList>
+        </MaxGapRow>
+    );
+};
+
 type TransferRouteQuery = {
     reset?: boolean;
 };
@@ -131,7 +216,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
 
     // Keeps track of whether "continue" has been pressed. Used to not show validation error message prematurely.
     const [submitted, setSubmitted] = useState(false);
-    const [dropdown, setDropdown] = useState(false);
 
     // state dependent hooks
     const { getBalance: getEthTokenBalance } = useGenerateContract(
@@ -252,15 +336,6 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
         prefetch(routes.history());
     }, [prefetch]);
 
-    const dropdownHandler = () => {
-        setDropdown((prev) => !prev);
-    };
-
-    const selectTokenHandler = (token: Components.Schemas.TokenMapItem) => {
-        setToken(token);
-        setDropdown(false);
-    };
-
     const submitHandler = useCallback(() => {
         setSubmitted(true);
 
@@ -298,44 +373,14 @@ const Transfer: React.FC<Props> = ({ isDeposit = false }) => {
                     </Link>
                 </FirstRow>
                 <SecondRow>
-                    <MaxGapRow>
-                        <Text fontWeight="light" onClick={dropdownHandler}>
-                            {token ? (isDeposit ? token?.eth_name : token?.ccd_name) : "Select Token"}
-                        </Text>
-                        <Dropdown onClick={dropdownHandler}>
-                            <Image src={ArrowDownIcon.src} alt="dropdown icon" height="12" width="12" />
-                        </Dropdown>
-                        <Button variant="max" onClick={() => setInputAmount(decimalTokenBalance ?? "")}>
-                            <Text fontSize="10" fontWeight="light">
-                                Max
-                            </Text>
-                        </Button>
-                        <DropdownList open={dropdown}>
-                            {tokens?.map((token) => {
-                                const { ccd_name, ccd_contract, eth_name, eth_address } = token;
-                                return (
-                                    <Coin
-                                        onClick={() => selectTokenHandler(token)}
-                                        key={
-                                            isDeposit
-                                                ? `${eth_name + eth_address}`
-                                                : `${ccd_name + ccd_contract?.index + ccd_contract?.subindex}`
-                                        }
-                                    >
-                                        <Image
-                                            src={EthereumIcon.src}
-                                            alt={`${token} icon`}
-                                            height="23.13"
-                                            width="23.13"
-                                        />
-                                        <StyledCoinText fontWeight="light">
-                                            {isDeposit ? eth_name : ccd_name}
-                                        </StyledCoinText>
-                                    </Coin>
-                                );
-                            })}
-                        </DropdownList>
-                    </MaxGapRow>
+                    <SelectToken
+                        tokens={tokens}
+                        selected={token}
+                        isDeposit={isDeposit}
+                        onSelect={setToken}
+                        onMax={setInputAmount}
+                        selectedTokenBalance={decimalTokenBalance}
+                    />
                     <MaxGapRow input>
                         <Input
                             value={inputAmount}
