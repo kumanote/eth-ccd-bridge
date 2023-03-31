@@ -5,7 +5,7 @@ import useAxiosClient from "../store/axios-client";
 import useEthWallet from "@hooks/use-eth-wallet";
 import isDeposit from "src/helpers/checkTransaction";
 import { isDefined } from "src/helpers/basic";
-import useCCDContract from "src/contracts/use-ccd-contract";
+import { tokenMetadataFor } from "src/helpers/ccd-node";
 import { TokenMetadata } from "src/helpers/token-helpers";
 
 /**
@@ -134,7 +134,6 @@ export const usePendingWithdrawals = () => {
 export type TokenWithIcon = { token: Components.Schemas.TokenMapItem; iconUrl: string | undefined };
 export const useTokens = () => {
     const { getClient } = useAxiosClient();
-    const { tokenMetadataFor } = useCCDContract("", true); // Don't need an account for this..
 
     return useQuery<TokenWithIcon[] | undefined>(
         [CacheKeys.Tokens],
