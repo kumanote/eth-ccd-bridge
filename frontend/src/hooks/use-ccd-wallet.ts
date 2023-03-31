@@ -117,6 +117,7 @@ const useCCDWallet = () => {
 
     useEffect(() => {
         if (provider !== undefined && !hasInitialised) {
+            init();
             hasInitialised = true;
         }
     }, [init, provider]);
